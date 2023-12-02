@@ -50,27 +50,28 @@ func compileCondition(cond rule.Condition) ([]bytecode.Instruction, error) {
 
 func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
-
-	// Placeholder for jump instructions for short-circuiting
 	var jumpPlaceholders []int
 
-	for _, cond := range conditions {
+	for i, cond := range conditions {
 		compiled, err := compileCondition(cond)
 		if err != nil {
 			return nil, err
 		}
 		instructions = append(instructions, compiled...)
 
-		// Add a jump instruction to skip remaining conditions if this one is true
-		jumpPlaceholder := len(instructions)
-		jumpPlaceholders = append(jumpPlaceholders, jumpPlaceholder)
-		instructions = append(instructions, bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}}) // Placeholder operand
+		// Add a jump instruction after each condition except the last one
+		if i < len(conditions)-1 {
+			jumpPlaceholder := len(instructions)
+			jumpPlaceholders = append(jumpPlaceholders, jumpPlaceholder)
+			// Append placeholder jump, actual destination set later
+			instructions = append(instructions, bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}})
+		}
 	}
 
-	// Set the correct jump destinations
-	endOfConditions := len(instructions)
+	// Correctly set jump destinations
+	endOfAnyBlock := len(instructions) + 1 // Adjusted to account for the jump instruction itself
 	for _, placeholder := range jumpPlaceholders {
-		instructions[placeholder].Operands[0] = endOfConditions
+		instructions[placeholder].Operands[0] = endOfAnyBlock
 	}
 
 	return instructions, nil
@@ -90,7 +91,13 @@ func compileNestedCondition(cond rule.Condition) ([]bytecode.Instruction, error)
 	}
 
 	// Recursively compile 'Any' conditions
-	// Similar logic for 'Any' conditions
+	if len(cond.Any) > 0 {
+		anyInstr, err := compileAnyConditions(cond.Any)
+		if err != nil {
+			return nil, err
+		}
+		instructions = append(instructions, anyInstr...)
+	}
 
 	return instructions, err
 }
