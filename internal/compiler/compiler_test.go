@@ -152,8 +152,59 @@ func TestCompileNestedConditions(t *testing.T) {
 		// First 'Any' condition
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{50}},
-		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{7}}, // Jump past second 'Any' condition
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{6}}, // Jump past second 'Any' condition
 		// Second 'Any' condition
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
+	}
+
+	instructions, err := CompileRule(r)
+	if err != nil {
+		t.Fatalf("CompileRule failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(instructions, expected) {
+		t.Errorf("Expected %v, got %v", expected, instructions)
+	}
+}
+
+// TestCompileComplexRule tests compiling a rule with a mix of 'All', 'Any', and nested conditions.
+func TestCompileComplexRule(t *testing.T) {
+	r := rule.Rule{
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{
+					Fact:     "temperature",
+					Operator: "greaterThan",
+					Value:    30,
+				},
+				{
+					Any: []rule.Condition{
+						{
+							Fact:     "humidity",
+							Operator: "lessThan",
+							Value:    50,
+						},
+						{
+							Fact:     "windSpeed",
+							Operator: "greaterThan",
+							Value:    20,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Expected bytecode includes a mix of instructions for 'All', 'Any', and nested conditions
+	expected := []bytecode.Instruction{
+		// Instructions for first condition in 'All'
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
+		// Instructions for 'Any' block
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
+		{Opcode: bytecode.OpLessThan, Operands: []interface{}{50}},
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{6}}, // Jump to end of 'Any' block (corrected destination)
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
 	}

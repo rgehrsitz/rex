@@ -59,19 +59,19 @@ func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, 
 		}
 		instructions = append(instructions, compiled...)
 
-		// Add a jump instruction after each condition except the last one
+		// For all but the last condition, add a jump instruction
 		if i < len(conditions)-1 {
 			jumpPlaceholder := len(instructions)
 			jumpPlaceholders = append(jumpPlaceholders, jumpPlaceholder)
-			// Append placeholder jump, actual destination set later
 			instructions = append(instructions, bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}})
 		}
 	}
 
 	// Correctly set jump destinations
-	endOfAnyBlock := len(instructions) + 1 // Adjusted to account for the jump instruction itself
+	endOfAnyBlock := len(instructions)
 	for _, placeholder := range jumpPlaceholders {
-		instructions[placeholder].Operands[0] = endOfAnyBlock
+		// Adjusting the destination to account for the position of the jump instruction itself
+		instructions[placeholder].Operands[0] = endOfAnyBlock + 1
 	}
 
 	return instructions, nil
