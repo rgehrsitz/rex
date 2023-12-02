@@ -38,9 +38,23 @@ func ExecuteBytecode(instructions []bytecode.Instruction, sensorData map[string]
 				}
 			}
 
-			// Add other opcodes as needed
+		case bytecode.OpTriggerEvent:
+			// Logic to handle the event triggering
+			// This could involve calling a function to process the event
+			eventType := instr.Operands[0].(string)
+			customProperty := instr.Operands[1]
+			handleEvent(eventType, customProperty)
 		}
+
+		// Add other opcodes as needed
+
 	}
 
 	return conditionMet, nil
+}
+
+// handleEvent processes the event triggered by the rule
+func handleEvent(eventType string, customProperty interface{}) {
+	// Implementation depends on how your system handles events
+	// This could involve logging, notifications, etc.
 }

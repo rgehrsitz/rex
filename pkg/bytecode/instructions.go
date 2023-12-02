@@ -15,6 +15,7 @@ const (
 	OpJumpIfFalse
 	OpContains
 	OpNotContains
+	OpTriggerEvent
 	// Add any other opcodes as needed
 )
 

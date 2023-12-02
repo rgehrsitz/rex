@@ -219,10 +219,33 @@ func TestCompileComplexRule(t *testing.T) {
 	}
 }
 
-// Additional test cases
-// - TestCompileEmptyConditions: Test a rule with no conditions.
-// - TestCompileInvalidCondition: Test error handling for an invalid condition (e.g., unsupported operator).
-// - TestCompileComplexRule: Test a rule with a mix of 'All', 'Any', and nested conditions.
-// - TestCompileRuleWithEvents: If your rules include events, test compiling rules that trigger events.
+func TestCompileRuleWithEvents(t *testing.T) {
+	r := rule.Rule{
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{Fact: "temperature", Operator: "greaterThan", Value: 30},
+			},
+		},
+		Event: rule.Event{
+			EventType:      "Alert",
+			CustomProperty: "Temperature too high",
+		},
+	}
 
-// ... Implement these test cases
+	// Define expected bytecode, assuming specific opcodes for event handling
+	expected := []bytecode.Instruction{
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
+		// Assuming an Opcode for triggering an event, with event details as operands
+		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"Alert", "Temperature too high"}},
+	}
+
+	instructions, err := CompileRule(r)
+	if err != nil {
+		t.Fatalf("CompileRule failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(instructions, expected) {
+		t.Errorf("Expected %v, got %v", expected, instructions)
+	}
+}

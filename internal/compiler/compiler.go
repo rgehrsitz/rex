@@ -27,6 +27,15 @@ func CompileRule(r rule.Rule) ([]bytecode.Instruction, error) {
 		instructions = append(instructions, anyInstructions...)
 	}
 
+	// Compile event
+	if r.Event.EventType != "" {
+		eventInstruction := bytecode.Instruction{
+			Opcode:   bytecode.OpTriggerEvent,
+			Operands: []interface{}{r.Event.EventType, r.Event.CustomProperty},
+		}
+		instructions = append(instructions, eventInstruction)
+	}
+
 	return instructions, nil
 }
 
