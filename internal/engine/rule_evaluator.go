@@ -1,5 +1,3 @@
-// rex/internal/engine/rule_evaluator.go
-
 package engine
 
 import (
@@ -117,20 +115,32 @@ func toFloat64(value interface{}) (float64, bool) {
 }
 
 // EvaluateRuleWithStore evaluates a rule using data from the specified store.
-func EvaluateRuleWithStore(r rule.Rule, s store.Store) error {
-	// Example: Evaluate a rule that requires additional data from Redis
-	for _, condition := range r.Conditions.All {
-		if data, err := s.GetValue(condition.Fact); err == nil {
-			// Evaluate condition with fetched data
-			// Use your existing rule evaluation logic here
-			fmt.Println(data)
-		} else {
-			return err // Handle error appropriately
+// It fetches additional sensor data as needed based on the rule's conditions.
+func EvaluateRuleWithStore(r rule.Rule, triggeringSensor string, triggeringValue interface{}, s store.Store) error {
+	// Prepare sensor data map with the triggering sensor value
+	sensorData := map[string]interface{}{triggeringSensor: triggeringValue}
+
+	// Identify and fetch additional required sensor values
+	for _, condition := range append(r.Conditions.All, r.Conditions.Any...) {
+		if condition.Fact != triggeringSensor {
+			data, err := s.GetValue(condition.Fact)
+			if err != nil {
+				return fmt.Errorf("error fetching data for fact %s: %w", condition.Fact, err)
+			}
+			sensorData[condition.Fact] = data
 		}
 	}
 
-	// Implement similar logic for 'Any' conditions and nested conditions
-	// Implement event triggering if the rule conditions are met
+	// Evaluate the rule with the fetched sensor data
+	satisfied, err := evaluateConditions(r.Conditions, sensorData)
+	if err != nil {
+		return fmt.Errorf("error evaluating conditions: %w", err)
+	}
+
+	if satisfied {
+		// TODO: Implement event triggering if the rule conditions are met
+		fmt.Println("Rule satisfied, triggering event")
+	}
 
 	return nil
 }

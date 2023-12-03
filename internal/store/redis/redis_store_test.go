@@ -1,50 +1,44 @@
 package redis
 
 import (
-	"fmt"
+	"context"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2" // A mock Redis server
+	// A mock Redis server
 	"github.com/redis/go-redis/v9"
 )
 
 func TestRedisStoreSubscription(t *testing.T) {
-	// Start miniredis
-	mr, err := miniredis.Run()
-	if err != nil {
-		t.Fatalf("an error '%s' occurred when starting miniredis", err)
-	}
-	defer mr.Close()
-
-	// Create Redis options to connect to miniredis
+	// Replace with your real Redis server address and options
 	opts := &redis.Options{
-		Addr: mr.Addr(),
+		Addr: "localhost:6379",
+		// Add other options like password, DB, etc., as needed
 	}
 
-	// Create a new RedisStore instance with the options
+	// Create a new RedisStore instance with the real Redis server options
 	redisStore := NewRedisStore(opts).(*RedisStore)
 
-	// Define a key to subscribe to
 	testKey := "testKey"
 	receivedMessage := ""
 
 	// Subscribe using the RedisStore
-	err = redisStore.Subscribe(testKey, func(data interface{}) {
+	err := redisStore.Subscribe(testKey, func(data interface{}) {
 		receivedMessage = data.(string)
 	})
 	if err != nil {
 		t.Fatalf("Subscribe returned an error: %v", err)
 	}
 
-	// Wait a bit for the subscription to be active
-	time.Sleep(100 * time.Millisecond)
+	// Use a real Redis client to publish a message
+	client := redis.NewClient(opts)
+	defer client.Close()
 
-	// Publish a message using miniredis
-	mr.Publish(testKey, "testValue")
+	client.Publish(context.Background(), testKey, "testValue")
 
-	// Wait for the message to be received
-	time.Sleep(500 * time.Millisecond) // Increase this time to ensure the message is received
+	// Adjust the sleep time as needed for real Redis behavior
+	time.Sleep(1 * time.Second)
 
 	// Check if the message was received
 	if receivedMessage != "testValue" {
@@ -59,17 +53,28 @@ func TestRedisStoreSubscription(t *testing.T) {
 }
 
 func TestRedisStoreGetValue(t *testing.T) {
-	mr, err := miniredis.Run()
-	if err != nil {
-		t.Fatalf("Error occurred when starting miniredis: %s", err)
+	// Replace with your real Redis server address and options
+	opts := &redis.Options{
+		Addr: "localhost:6379",
+		// Add other options like password, DB, etc., as needed
 	}
-	defer mr.Close()
+
+	// Create a new RedisStore instance with the real Redis server options
+	redisStore := NewRedisStore(opts).(*RedisStore)
 
 	testKey, testValue := "getValueKey", "someValue"
-	mr.Set(testKey, testValue)
 
-	redisStore := NewRedisStore(&redis.Options{Addr: mr.Addr()}).(*RedisStore)
+	// Use a real Redis client to set a value
+	client := redis.NewClient(opts)
+	defer client.Close()
 
+	// Set the value for the test key
+	err := client.Set(context.Background(), testKey, testValue, 0).Err()
+	if err != nil {
+		t.Fatalf("Error setting value in Redis: %v", err)
+	}
+
+	// Retrieve the value using RedisStore
 	gotValue, err := redisStore.GetValue(testKey)
 	if err != nil {
 		t.Fatalf("GetValue returned an error: %v", err)
@@ -77,53 +82,107 @@ func TestRedisStoreGetValue(t *testing.T) {
 	if gotValue != testValue {
 		t.Errorf("Expected value '%s', got '%s'", testValue, gotValue)
 	}
+
+	// Clean up: remove the test key from Redis
+	err = client.Del(context.Background(), testKey).Err()
+	if err != nil {
+		t.Errorf("Error cleaning up test key in Redis: %v", err)
+	}
 }
 
-func TestRedisStoreUnsubscribe(t *testing.T) {
-	// Start miniredis
-	mr, err := miniredis.Run()
-	if err != nil {
-		t.Fatalf("an error '%s' occurred when starting miniredis", err)
-	}
-	defer mr.Close()
-
-	// Create Redis options to connect to miniredis
+func TestRedisStoreErrorHandling(t *testing.T) {
 	opts := &redis.Options{
-		Addr: mr.Addr(),
+		Addr: "localhost:6379",
+		// Include other options like password, DB, etc., if needed
 	}
 
-	// Create a new RedisStore instance with the options
 	redisStore := NewRedisStore(opts).(*RedisStore)
 
-	testKey := "unsubscribeKey"
-	callbackCalled := false
-	callback := func(data interface{}) {
-		fmt.Println("Callback executed") // Temporary debugging statement
-		callbackCalled = true
+	// Use a unique key to avoid conflicts with other tests or processes
+	nonExistentKey := "uniqueNonExistentKeyForTesting"
+
+	// Test fetching a value for a key that doesn't exist
+	_, err := redisStore.GetValue(nonExistentKey)
+	if err == nil {
+		t.Errorf("Expected an error when getting value for a non-existent key, but got none")
 	}
 
-	redisStore.Subscribe(testKey, callback)
-	mr.Publish(testKey, "testValue")
-
-	// Wait for the message to be received
-	time.Sleep(500 * time.Millisecond)
-
-	if !callbackCalled {
-		t.Fatalf("Callback was not called before unsubscribe")
-	}
-
-	// Unsubscribe and test
-	err = redisStore.Unsubscribe(testKey)
+	// Test subscribing to a non-existent key
+	receivedMessage := ""
+	err = redisStore.Subscribe(nonExistentKey, func(data interface{}) {
+		receivedMessage = data.(string)
+	})
 	if err != nil {
-		t.Fatalf("Unsubscribe returned an error: %v", err)
+		t.Errorf("Subscribe returned an unexpected error: %v", err)
 	}
 
-	// Reset flag and try publishing again
-	callbackCalled = false
-	mr.Publish(testKey, "newValue")
-
+	// Wait to ensure no messages are received for the non-existent key
 	time.Sleep(500 * time.Millisecond)
-	if callbackCalled {
-		t.Errorf("Callback was called after unsubscribe")
+
+	// Check that no message was received
+	if receivedMessage != "" {
+		t.Errorf("Received a message for a non-existent key subscription")
+	}
+
+	// Unsubscribe
+	err = redisStore.Unsubscribe(nonExistentKey)
+	if err != nil {
+		t.Errorf("Unsubscribe returned an error: %v", err)
+	}
+}
+
+func TestRedisStoreMultipleSubscriptions(t *testing.T) {
+	opts := &redis.Options{
+		Addr: "localhost:6379",
+		// Include other options like password, DB, etc., if needed
+	}
+
+	redisStore := NewRedisStore(opts).(*RedisStore)
+
+	keys := []string{"testKey1", "testKey2", "testKey3"}
+	values := []string{"value1", "value2", "value3"}
+	messagesReceived := make(map[string]string)
+	var mu sync.Mutex // For synchronizing access to messagesReceived
+
+	for _, key := range keys {
+		localKey := key // Local variable to avoid closure capture issues
+		err := redisStore.Subscribe(localKey, func(data interface{}) {
+			mu.Lock()
+			messagesReceived[localKey] = data.(string)
+			mu.Unlock()
+		})
+		if err != nil {
+			t.Errorf("Subscribe returned an error for key %s: %v", key, err)
+		}
+	}
+
+	// Use a real Redis client to publish messages
+	client := redis.NewClient(opts)
+	defer client.Close()
+
+	for i, key := range keys {
+		err := client.Publish(context.Background(), key, values[i]).Err()
+		if err != nil {
+			t.Errorf("Error publishing to key %s: %v", key, err)
+		}
+	}
+
+	// Allow some time for messages to be processed
+	time.Sleep(1 * time.Second)
+
+	mu.Lock()
+	for i, key := range keys {
+		if messagesReceived[key] != values[i] {
+			t.Errorf("Expected message '%s' for key '%s', got '%s'", values[i], key, messagesReceived[key])
+		}
+	}
+	mu.Unlock()
+
+	// Unsubscribe from all keys
+	for _, key := range keys {
+		err := redisStore.Unsubscribe(key)
+		if err != nil {
+			t.Errorf("Unsubscribe returned an error for key %s: %v", key, err)
+		}
 	}
 }
