@@ -24,4 +24,21 @@ func main() {
 
 		// Store or use bytecode...
 	}
+
+	// Create a new Redis store instance
+	/* 	redisStore := redis.NewRedisStore(&redis.Options{
+	   		Addr:     "localhost:6379", // Production Redis server address
+	   		Password: "",               // Password, if any
+	   		DB:       0,                // DB number
+	   	})
+
+	   	// Define a sample rule (adjust as per your rule format)
+	   	sampleRule := rule.Rule{
+	   		// Rule definition here
+	   	}
+
+	   	// Evaluate the rule with Redis store
+	   	if err := engine.EvaluateRuleWithStore(sampleRule, redisStore); err != nil {
+	   		// Handle error
+	   	} */
 }
