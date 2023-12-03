@@ -19,8 +19,10 @@ func (m *MockStore) GetValue(key string) (interface{}, error) {
 	return value, nil
 }
 
-func (m *MockStore) SetValue(key string, value interface{}) {
+// Updated SetValue method to return an error
+func (m *MockStore) SetValue(key string, value interface{}) error {
 	m.data[key] = value
+	return nil // Assuming setting a value in the mock store always succeeds
 }
 
 // Subscribe matches the signature expected by the store.Store interface.

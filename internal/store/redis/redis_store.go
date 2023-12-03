@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 	"rgehrsitz/rex/internal/store"
 	"sync"
 
@@ -66,4 +67,16 @@ func (r *RedisStore) Unsubscribe(key string) error {
 	}
 
 	return nil
+}
+
+func (r *RedisStore) SetValue(key string, value interface{}) error {
+	ctx := context.Background()
+	// Assuming value is a string or can be converted to a string.
+	// You might need to handle different types or marshal to a string.
+	valStr, ok := value.(string)
+	if !ok {
+		// Handle error or convert value to string as needed
+		return fmt.Errorf("value for key %s is not a string", key)
+	}
+	return r.client.Set(ctx, key, valStr, 0).Err() // 0 means no expiration
 }
