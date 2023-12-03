@@ -12,8 +12,8 @@ import (
 func TestEvaluateRuleWithStore(t *testing.T) {
 	// Create a mock store
 	mockStore := mock.NewMockStore()
-	mockStore.Set("SensorY", 15)
-	mockStore.Set("SensorZ", 20)
+	mockStore.SetValue("SensorY", 15)
+	mockStore.SetValue("SensorZ", 20)
 
 	// Define a rule
 	testRule := rule.Rule{

@@ -1,5 +1,3 @@
-// rex/pkg/rule/rule.go
-
 package rule
 
 type Rule struct {
@@ -14,6 +12,13 @@ type Event struct {
 	CustomProperty interface{}   `json:"customProperty"`
 	Facts          []string      `json:"facts,omitempty"`
 	Values         []interface{} `json:"values,omitempty"`
+	Action         Action        `json:"action,omitempty"` // Added action field
+}
+
+type Action struct {
+	Type   string      `json:"type"`   // "updateStore" or "sendMessage"
+	Target string      `json:"target"` // Key for store update or address for message
+	Value  interface{} `json:"value"`  // Value for store update or message content
 }
 
 type Conditions struct {

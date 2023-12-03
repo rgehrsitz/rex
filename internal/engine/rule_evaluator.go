@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"net"
 	"reflect"
 	"rgehrsitz/rex/internal/store"
 	"rgehrsitz/rex/pkg/rule"
@@ -117,17 +118,17 @@ func toFloat64(value interface{}) (float64, bool) {
 // EvaluateRuleWithStore evaluates a rule using data from the specified store.
 // It fetches additional sensor data as needed based on the rule's conditions.
 func EvaluateRuleWithStore(r rule.Rule, triggeringSensor string, triggeringValue interface{}, s store.Store) error {
-	// Prepare sensor data map with the triggering sensor value
 	sensorData := map[string]interface{}{triggeringSensor: triggeringValue}
+	sensorsToFetch := uniqueSensors(r)
 
-	// Identify and fetch additional required sensor values
-	for _, condition := range append(r.Conditions.All, r.Conditions.Any...) {
-		if condition.Fact != triggeringSensor {
-			data, err := s.GetValue(condition.Fact)
+	// Fetch additional required sensor values
+	for sensor := range sensorsToFetch {
+		if sensor != triggeringSensor {
+			data, err := s.GetValue(sensor)
 			if err != nil {
-				return fmt.Errorf("error fetching data for fact %s: %w", condition.Fact, err)
+				return fmt.Errorf("error fetching data for sensor %s: %w", sensor, err)
 			}
-			sensorData[condition.Fact] = data
+			sensorData[sensor] = data
 		}
 	}
 
@@ -138,9 +139,43 @@ func EvaluateRuleWithStore(r rule.Rule, triggeringSensor string, triggeringValue
 	}
 
 	if satisfied {
-		// TODO: Implement event triggering if the rule conditions are met
-		fmt.Println("Rule satisfied, triggering event")
+		switch r.Event.Action.Type {
+		case "updateStore":
+			if err := s.SetValue(r.Event.Action.Target, r.Event.Action.Value); err != nil {
+				return fmt.Errorf("error updating store: %w", err)
+			}
+		case "sendMessage":
+			message, ok := r.Event.Action.Value.(string)
+			if !ok {
+				return fmt.Errorf("error: action value is not a string")
+			}
+			if err := sendMessage(r.Event.Action.Target, message); err != nil {
+				return fmt.Errorf("error sending message: %w", err)
+			}
+		default:
+			fmt.Println("No action or unknown action type")
+		}
 	}
 
 	return nil
+}
+
+// uniqueSensors returns a set of unique sensor names that need to be fetched.
+func uniqueSensors(r rule.Rule) map[string]struct{} {
+	sensors := make(map[string]struct{})
+	for _, cond := range append(r.Conditions.All, r.Conditions.Any...) {
+		sensors[cond.Fact] = struct{}{}
+	}
+	return sensors
+}
+
+func sendMessage(address, message string) error {
+	conn, err := net.Dial("udp", address)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	_, err = conn.Write([]byte(message))
+	return err
 }

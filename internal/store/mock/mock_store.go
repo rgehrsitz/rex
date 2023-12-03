@@ -19,7 +19,7 @@ func (m *MockStore) GetValue(key string) (interface{}, error) {
 	return value, nil
 }
 
-func (m *MockStore) Set(key string, value interface{}) {
+func (m *MockStore) SetValue(key string, value interface{}) {
 	m.data[key] = value
 }
 

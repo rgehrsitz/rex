@@ -11,6 +11,8 @@ type Store interface {
 	// Unsubscribe removes the subscription for changes to a specific key.
 	Unsubscribe(key string) error
 
+	SetValue(key string, value interface{}) error
+
 	// ... Add any other necessary methods for your use case
 }
 
