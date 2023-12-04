@@ -6,6 +6,11 @@ import (
 	"rgehrsitz/rex/pkg/rule"
 )
 
+type CompiledRule struct {
+	Instructions []bytecode.Instruction
+	Dependencies []string // Names of dependent rules
+}
+
 func CompileRule(r rule.Rule) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
 
@@ -170,4 +175,69 @@ func compileContainsCondition(cond rule.Condition) ([]bytecode.Instruction, erro
 
 	instructions = append(instructions, bytecode.Instruction{Opcode: opcode, Operands: []interface{}{cond.Fact, cond.Value}})
 	return instructions, nil
+}
+
+func CompileRulesWithDependencies(rules []rule.Rule) ([]CompiledRule, error) {
+	compiledRules := make([]CompiledRule, len(rules))
+
+	// Compile all rules
+	for i, r := range rules {
+		instructions, err := CompileRule(r)
+		if err != nil {
+			return nil, err
+		}
+		compiledRules[i] = CompiledRule{
+			Instructions: instructions,
+			Dependencies: []string{}, // Initialize with empty slice
+		}
+	}
+
+	// Analyze dependencies
+	for i, r := range rules {
+		writesFacts := getWritesFacts(r)
+		for j, otherRule := range rules {
+			if i != j && isDependent(writesFacts, otherRule) {
+				compiledRules[i].Dependencies = append(compiledRules[i].Dependencies, otherRule.Name)
+			}
+		}
+	}
+
+	return compiledRules, nil
+}
+
+func isDependent(writesFacts []string, r rule.Rule) bool {
+	readsFacts := getReadsFacts(r)
+	for _, wf := range writesFacts {
+		for _, rf := range readsFacts {
+			if wf == rf {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func getWritesFacts(r rule.Rule) []string {
+	var writes []string
+	if r.Event.Action.Type == "updateStore" {
+		writes = append(writes, r.Event.Action.Target)
+	}
+	return writes
+}
+
+func getReadsFacts(r rule.Rule) []string {
+	return getFactsFromConditions(r.Conditions)
+}
+
+func getFactsFromConditions(conditions rule.Conditions) []string {
+	var facts []string
+	for _, cond := range conditions.All {
+		facts = append(facts, cond.Fact)
+		facts = append(facts, getFactsFromConditions(rule.Conditions{All: cond.All, Any: cond.Any})...)
+	}
+	for _, cond := range conditions.Any {
+		facts = append(facts, cond.Fact)
+		facts = append(facts, getFactsFromConditions(rule.Conditions{All: cond.All, Any: cond.Any})...)
+	}
+	return facts
 }
