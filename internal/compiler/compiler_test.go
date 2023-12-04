@@ -249,3 +249,73 @@ func TestCompileRuleWithEvents(t *testing.T) {
 		t.Errorf("Expected %v, got %v", expected, instructions)
 	}
 }
+
+// TestCompileRulesWithDependencies tests the compilation of rules with dependency analysis
+func TestCompileRulesWithDependencies(t *testing.T) {
+	// Define a set of sample rules
+	rules := []rule.Rule{
+		{
+			Name: "Rule1",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "temperature", Operator: "greaterThan", Value: 30},
+				},
+			},
+			Event: rule.Event{
+				ActionType: "updateStore",
+				Action: rule.Action{
+					Type:   "updateStore",
+					Target: "alertLevel",
+					Value:  "high",
+				},
+			},
+		},
+		{
+			Name: "Rule2",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "alertLevel", Operator: "equal", Value: "high"},
+				},
+			},
+			Event: rule.Event{
+				ActionType: "sendMessage",
+				Action: rule.Action{
+					Type:   "sendMessage",
+					Target: "admin@example.com",
+					Value:  "Alert level high",
+				},
+			},
+		},
+		// Add more rules if needed for testing
+	}
+
+	// Expected output
+	expected := []CompiledRule{
+		{
+			Instructions: []bytecode.Instruction{ /* ... expected bytecode instructions for Rule1 ... */ },
+			Dependencies: []string{"Rule2"}, // Rule2 is dependent on Rule1
+		},
+		{
+			Instructions: []bytecode.Instruction{ /* ... expected bytecode instructions for Rule2 ... */ },
+			Dependencies: []string{}, // Rule2 has no dependencies
+		},
+		// Add more expected compiled rules if needed
+	}
+
+	// Perform the compilation
+	compiledRules, err := CompileRulesWithDependencies(rules)
+	if err != nil {
+		t.Fatalf("CompileRulesWithDependencies returned an error: %v", err)
+	}
+
+	// Compare the result with the expected output
+	if !reflect.DeepEqual(compiledRules, expected) {
+		t.Errorf("CompileRulesWithDependencies = %v, want %v", compiledRules, expected)
+	}
+}
+
+// Additional tests for getWritesFacts, getReadsFacts, isDependent, etc.
+
+// TestGetWritesFacts tests the extraction of facts written by a rule
+
+// Similar tests for getReadsFacts and isDependent
