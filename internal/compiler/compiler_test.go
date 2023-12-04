@@ -262,7 +262,7 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 				},
 			},
 			Event: rule.Event{
-				ActionType: "updateStore",
+				EventType: "TemperatureHigh",
 				Action: rule.Action{
 					Type:   "updateStore",
 					Target: "alertLevel",
@@ -278,7 +278,7 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 				},
 			},
 			Event: rule.Event{
-				ActionType: "sendMessage",
+				EventType: "SendAlert",
 				Action: rule.Action{
 					Type:   "sendMessage",
 					Target: "admin@example.com",
@@ -289,14 +289,26 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 		// Add more rules if needed for testing
 	}
 
+	expectedInstructionsRule1 := []bytecode.Instruction{
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
+		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"TemperatureHigh", nil}},
+	}
+
+	expectedInstructionsRule2 := []bytecode.Instruction{
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"alertLevel"}},
+		{Opcode: bytecode.OpEqual, Operands: []interface{}{"high"}},
+		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"SendAlert", nil}},
+	}
+
 	// Expected output
 	expected := []CompiledRule{
 		{
-			Instructions: []bytecode.Instruction{ /* ... expected bytecode instructions for Rule1 ... */ },
+			Instructions: expectedInstructionsRule1,
 			Dependencies: []string{"Rule2"}, // Rule2 is dependent on Rule1
 		},
 		{
-			Instructions: []bytecode.Instruction{ /* ... expected bytecode instructions for Rule2 ... */ },
+			Instructions: expectedInstructionsRule2,
 			Dependencies: []string{}, // Rule2 has no dependencies
 		},
 		// Add more expected compiled rules if needed
@@ -315,7 +327,62 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 }
 
 // Additional tests for getWritesFacts, getReadsFacts, isDependent, etc.
+func TestGetWritesFacts(t *testing.T) {
+	r := rule.Rule{
+		Event: rule.Event{
+			Action: rule.Action{
+				Type:   "updateStore",
+				Target: "alertLevel",
+			},
+		},
+	}
 
-// TestGetWritesFacts tests the extraction of facts written by a rule
+	expected := []string{"alertLevel"}
+	writesFacts := getWritesFacts(r)
 
-// Similar tests for getReadsFacts and isDependent
+	if !reflect.DeepEqual(writesFacts, expected) {
+		t.Errorf("getWritesFacts = %v, want %v", writesFacts, expected)
+	}
+}
+
+func TestGetReadsFacts(t *testing.T) {
+	r := rule.Rule{
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{Fact: "temperature"},
+				{Fact: "humidity"},
+			},
+		},
+	}
+
+	expected := []string{"temperature", "humidity"}
+	readsFacts := getReadsFacts(r)
+
+	if !reflect.DeepEqual(readsFacts, expected) {
+		t.Errorf("getReadsFacts = %v, want %v", readsFacts, expected)
+	}
+}
+
+func TestIsDependent(t *testing.T) {
+	rule1 := rule.Rule{
+		Event: rule.Event{
+			Action: rule.Action{
+				Type:   "updateStore",
+				Target: "alertLevel",
+			},
+		},
+	}
+
+	rule2 := rule.Rule{
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{Fact: "alertLevel"},
+			},
+		},
+	}
+
+	writesFacts := getWritesFacts(rule1)
+	if !isDependent(writesFacts, rule2) {
+		t.Errorf("Expected rule2 to be dependent on rule1")
+	}
+}
