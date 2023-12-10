@@ -1,0 +1,19 @@
+[
+  {
+    "name": "TemperatureAlert",
+    "priority": 1,
+    "conditions": {
+      "all": [
+        {
+          "fact": "temperature",
+          "operator": "greaterThan",
+          "value": 30
+        }
+      ]
+    },
+    "event": {
+      "eventType": "HighTemperature",
+      "customProperty": "Temperature is above 30 degrees."
+    }
+  }
+]

@@ -9,8 +9,13 @@ import (
 )
 
 func main() {
+	rules := compileRules("../../data/basic_ruleset.json")
+	runREX(rules)
+}
+
+func compileRules(filename string) []compiler.CompiledRule {
 	// Read the JSON file
-	data, err := os.ReadFile("ruleset.json")
+	data, err := os.ReadFile(filename)
 	if err != nil {
 		log.Fatalf("Error reading ruleset file: %v", err)
 	}
@@ -27,5 +32,9 @@ func main() {
 		log.Fatalf("Error compiling rules: %v", err)
 	}
 
-	// TODO: Pass compiledRules to the rules engine and start it
+	return compiledRules
+}
+
+func runREX(rules []compiler.CompiledRule) {
+	// TODO: Create a new instance of the rules engine, pass it the compiled rules, and start it
 }
