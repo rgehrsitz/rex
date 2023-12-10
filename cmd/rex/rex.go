@@ -1,44 +1,31 @@
 package main
 
 import (
+	"encoding/json"
 	"log"
-	"rgehrsitz/rex/internal/engine"
+	"os"
+	"rgehrsitz/rex/internal/compiler"
+	"rgehrsitz/rex/pkg/rule"
 )
 
 func main() {
-	// Example usage
-	ruleFilePath := "../../data/rules.json"
-	rules, err := engine.LoadRulesFromFile(ruleFilePath)
+	// Read the JSON file
+	data, err := os.ReadFile("ruleset.json")
 	if err != nil {
-		log.Fatalf("Failed to read or parse rules: %v", err)
+		log.Fatalf("Error reading ruleset file: %v", err)
 	}
 
-	log.Printf("Successfully read and parsed %d rules", len(rules))
-	// Enhanced AddRule or a similar compiler function
-	for _, rule := range rules {
-		//	bytecode, err := compiler.CompileRule(rule)
-		if err != nil {
-			log.Printf("Failed to compile rule %s: %v", rule.Name, err)
-			continue
-		}
-
-		// Store or use bytecode...
+	// Parse the JSON data into rules
+	var rules []rule.Rule
+	if err := json.Unmarshal(data, &rules); err != nil {
+		log.Fatalf("Error parsing JSON ruleset: %v", err)
 	}
 
-	// Create a new Redis store instance
-	/* 	redisStore := redis.NewRedisStore(&redis.Options{
-	   		Addr:     "localhost:6379", // Production Redis server address
-	   		Password: "",               // Password, if any
-	   		DB:       0,                // DB number
-	   	})
+	// Compile the rules
+	compiledRules, err := compiler.CompileRulesWithDependencies(rules)
+	if err != nil {
+		log.Fatalf("Error compiling rules: %v", err)
+	}
 
-	   	// Define a sample rule (adjust as per your rule format)
-	   	sampleRule := rule.Rule{
-	   		// Rule definition here
-	   	}
-
-	   	// Evaluate the rule with Redis store
-	   	if err := engine.EvaluateRuleWithStore(sampleRule, redisStore); err != nil {
-	   		// Handle error
-	   	} */
+	// TODO: Pass compiledRules to the rules engine and start it
 }
