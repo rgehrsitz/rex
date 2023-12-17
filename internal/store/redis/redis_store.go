@@ -6,7 +6,7 @@ import (
 	"rgehrsitz/rex/internal/store"
 	"sync"
 
-	"github.com/redis/go-redis/v9" // Assuming use of go-redis package
+	"github.com/redis/go-redis/v9"
 )
 
 type RedisStore struct {

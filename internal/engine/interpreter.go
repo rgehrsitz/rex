@@ -1,12 +1,14 @@
 package engine
 
 import (
+	"log"
+	"rgehrsitz/rex/internal/store"
 	"rgehrsitz/rex/pkg/bytecode"
 	"strings"
 )
 
 // ExecuteBytecode executes a sequence of bytecode instructions.
-func ExecuteBytecode(instructions []bytecode.Instruction, sensorData map[string]interface{}) (bool, error) {
+func ExecuteBytecode(instructions []bytecode.Instruction, sensorData map[string]interface{}, store store.Store) (bool, error) {
 	var lastLoadedFactValue interface{}
 	var conditionMet bool
 
@@ -43,7 +45,7 @@ func ExecuteBytecode(instructions []bytecode.Instruction, sensorData map[string]
 			// This could involve calling a function to process the event
 			eventType := instr.Operands[0].(string)
 			customProperty := instr.Operands[1]
-			handleEvent(eventType, customProperty)
+			handleEvent(eventType, customProperty, store)
 		}
 
 		// Add other opcodes as needed
@@ -54,7 +56,26 @@ func ExecuteBytecode(instructions []bytecode.Instruction, sensorData map[string]
 }
 
 // handleEvent processes the event triggered by the rule
-func handleEvent(eventType string, customProperty interface{}) {
-	// Implementation depends on how your system handles events
-	// This could involve logging, notifications, etc.
+func handleEvent(eventType string, customProperty interface{}, store store.Store) {
+	// Example: Log the event
+	log.Printf("Event Triggered: %s, Property: %v\n", eventType, customProperty)
+
+	// Implement additional logic based on eventType
+	// Example: Update a value in the key/value store
+	if eventType == "updateSensor" {
+		if sensorID, ok := customProperty.(string); ok {
+			// Update sensor value logic
+			newValue := calculateNewSensorValue(sensorID)
+			store.SetValue(sensorID, newValue)
+		}
+	}
+
+	// Add other event types and their handling logic here
+}
+
+// Placeholder function for calculating a new sensor value
+// Replace this with actual logic
+func calculateNewSensorValue(sensorID string) interface{} {
+	// Example logic
+	return "new value"
 }
