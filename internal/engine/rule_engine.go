@@ -7,9 +7,9 @@ import (
 	"net"
 	"os"
 	"reflect"
+	"rgehrsitz/rex/internal/bytecode"
+	"rgehrsitz/rex/internal/rule"
 	"rgehrsitz/rex/internal/store"
-	"rgehrsitz/rex/pkg/bytecode"
-	"rgehrsitz/rex/pkg/rule"
 	"strconv"
 	"strings"
 )

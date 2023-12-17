@@ -2,8 +2,8 @@ package engine
 
 import (
 	"fmt"
-	"rgehrsitz/rex/pkg/bytecode"
-	"rgehrsitz/rex/pkg/rule"
+	"rgehrsitz/rex/internal/bytecode"
+	"rgehrsitz/rex/internal/rule"
 )
 
 type CompiledRule struct {

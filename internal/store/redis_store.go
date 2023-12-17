@@ -1,9 +1,8 @@
-package redis
+package store
 
 import (
 	"context"
 	"fmt"
-	"rgehrsitz/rex/internal/store"
 	"sync"
 
 	"github.com/redis/go-redis/v9"
@@ -16,7 +15,7 @@ type RedisStore struct {
 }
 
 // NewRedisStore now accepts *redis.Options as a parameter.
-func NewRedisStore(opts *redis.Options) store.Store {
+func NewRedisStore(opts *redis.Options) Store {
 	rdb := redis.NewClient(opts)
 	return &RedisStore{
 		client:   rdb,

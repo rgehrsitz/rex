@@ -2,8 +2,8 @@ package engine
 
 import (
 	"reflect"
-	"rgehrsitz/rex/pkg/bytecode"
-	"rgehrsitz/rex/pkg/rule"
+	"rgehrsitz/rex/internal/bytecode"
+	"rgehrsitz/rex/internal/rule"
 	"testing"
 )
 
