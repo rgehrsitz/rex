@@ -179,8 +179,9 @@ func compileContainsCondition(cond rule.Condition) ([]bytecode.Instruction, erro
 
 func CompileRulesWithDependencies(rules []rule.Rule) ([]CompiledRule, error) {
 	compiledRules := make([]CompiledRule, len(rules))
+	writeFactMap := make(map[string][]string) // Map of facts to rules that write them
 
-	// Compile all rules
+	// Compile rules and track write facts
 	for i, r := range rules {
 		instructions, err := CompileRule(r)
 		if err != nil {
@@ -188,16 +189,25 @@ func CompileRulesWithDependencies(rules []rule.Rule) ([]CompiledRule, error) {
 		}
 		compiledRules[i] = CompiledRule{
 			Instructions: instructions,
-			Dependencies: []string{}, // Initialize with empty slice
+			Dependencies: []string{},
+		}
+		writeFacts := getWriteFacts(r.Event)
+		for _, fact := range writeFacts {
+			writeFactMap[fact] = append(writeFactMap[fact], r.Name)
 		}
 	}
 
-	// Analyze dependencies
+	// Determine dependencies based on read facts and write facts
 	for i, r := range rules {
-		writesFacts := getWritesFacts(r)
-		for j, otherRule := range rules {
-			if i != j && isDependent(writesFacts, otherRule) {
-				compiledRules[i].Dependencies = append(compiledRules[i].Dependencies, otherRule.Name)
+		readFacts := getReadFacts(r.Conditions.All)
+		readFacts = append(readFacts, getReadFacts(r.Conditions.Any)...)
+		for _, fact := range readFacts {
+			if dependentRules, exists := writeFactMap[fact]; exists {
+				for _, depRule := range dependentRules {
+					if depRule != r.Name {
+						compiledRules[i].Dependencies = append(compiledRules[i].Dependencies, depRule)
+					}
+				}
 			}
 		}
 	}
@@ -205,41 +215,22 @@ func CompileRulesWithDependencies(rules []rule.Rule) ([]CompiledRule, error) {
 	return compiledRules, nil
 }
 
-func isDependent(writesFacts []string, r rule.Rule) bool {
-	readsFacts := getReadsFacts(r)
-	for _, wf := range writesFacts {
-		for _, rf := range readsFacts {
-			if wf == rf {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func getWritesFacts(r rule.Rule) []string {
-	var writes []string
-	if r.Event.Action.Type == "updateStore" {
-		writes = append(writes, r.Event.Action.Target)
-	}
-	return writes
-}
-
-func getReadsFacts(r rule.Rule) []string {
-	return getFactsFromConditions(r.Conditions)
-}
-
-func getFactsFromConditions(conditions rule.Conditions) []string {
+func getReadFacts(conditions []rule.Condition) []string {
 	var facts []string
-	for _, cond := range conditions.All {
+	for _, cond := range conditions {
 		facts = append(facts, cond.Fact)
-		facts = append(facts, getFactsFromConditions(rule.Conditions{All: cond.All, Any: cond.Any})...)
-	}
-	for _, cond := range conditions.Any {
-		facts = append(facts, cond.Fact)
-		facts = append(facts, getFactsFromConditions(rule.Conditions{All: cond.All, Any: cond.Any})...)
+		facts = append(facts, getReadFacts(cond.All)...)
+		facts = append(facts, getReadFacts(cond.Any)...)
 	}
 	return facts
+}
+
+func getWriteFacts(event rule.Event) []string {
+	// Assuming the event action type 'updateStore' changes a fact
+	if event.Action.Type == "updateStore" {
+		return []string{event.Action.Target}
+	}
+	return nil
 }
 
 func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
