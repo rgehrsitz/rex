@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -256,9 +255,10 @@ func ExecuteBytecode(instructions []bytecode.Instruction, sensorData map[string]
 			conditionMet, err = handleOpContains(instr, lastLoadedFactValue)
 		case bytecode.OpNotContains:
 			conditionMet, err = handleOpNotContains(instr, lastLoadedFactValue)
-		case bytecode.OpTriggerEvent:
-			err = handleOpTriggerEvent(instr, store)
-			// Add other opcodes as needed
+		case bytecode.OpUpdateStore:
+			err = handleOpUpdateStore(instr, store)
+		case bytecode.OpSendMessage:
+			err = handleOpSendMessage(instr)
 		}
 
 		if err != nil {
@@ -299,19 +299,28 @@ func handleOpNotContains(instr bytecode.Instruction, lastLoadedFactValue interfa
 	return false, fmt.Errorf("invalid operands for OpNotContains")
 }
 
-func handleOpTriggerEvent(instr bytecode.Instruction, store store.Store) error {
-	eventType := instr.Operands[0].(string)
-	customProperty := instr.Operands[1]
-	handleEvent(eventType, customProperty, store)
-	return nil
+func handleOpUpdateStore(instr bytecode.Instruction, store store.Store) error {
+	if len(instr.Operands) != 2 {
+		return fmt.Errorf("invalid number of operands for OpUpdateStore")
+	}
+	target, ok := instr.Operands[0].(string)
+	if !ok {
+		return fmt.Errorf("invalid target operand for OpUpdateStore")
+	}
+	value := instr.Operands[1] // Value is already interface{}
+	return store.SetValue(target, value)
 }
 
-// handleEvent processes the event triggered by the rule
-func handleEvent(eventType string, customProperty interface{}, store store.Store) error {
-	if handler, exists := EventHandlers[eventType]; exists {
-		return handler(customProperty, store)
+func handleOpSendMessage(instr bytecode.Instruction) error {
+	if len(instr.Operands) != 2 {
+		return fmt.Errorf("invalid number of operands for OpSendMessage")
 	}
-	return errors.New("unknown event type: " + eventType)
+	address, ok1 := instr.Operands[0].(string)
+	message, ok2 := instr.Operands[1].(string)
+	if !ok1 || !ok2 {
+		return fmt.Errorf("invalid operands for OpSendMessage")
+	}
+	return sendMessage(address, message)
 }
 
 // handleUpdateSensorEvent handles the "updateSensor" event type

@@ -5,10 +5,16 @@ import (
 	"log"
 	"os"
 	"rgehrsitz/rex/internal/compiler"
-	"rgehrsitz/rex/pkg/rule"
+	"rgehrsitz/rex/internal/rule"
+	"rgehrsitz/rex/api"
 )
 
 func main() {
+
+    // Start the REST API server
+    api.StartServer("8080")
+
+
 	store := NewKeyValueStore("your_redis_config")
 
 	// Compile rules (assuming a function for this)

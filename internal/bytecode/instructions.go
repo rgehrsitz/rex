@@ -16,11 +16,15 @@ const (
 	OpContains
 	OpNotContains
 	OpTriggerEvent
-	// Add any other opcodes as needed
+
+	// New opcodes for actions
+	OpUpdateStore // Opcode for updating a value in the store
+	OpSendMessage // Opcode for sending a message
+
 )
 
 // Instruction represents a single bytecode instruction.
 type Instruction struct {
 	Opcode   Opcode
-	Operands []interface{}
+	Operands []interface{} // Operands can include facts, values, targets, etc.
 }

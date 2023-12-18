@@ -1,4 +1,4 @@
-package engine
+package compiler
 
 import (
 	"fmt"
@@ -32,13 +32,13 @@ func CompileRule(r rule.Rule) ([]bytecode.Instruction, error) {
 		instructions = append(instructions, anyInstructions...)
 	}
 
-	// Compile event
-	if r.Event.EventType != "" {
-		eventInstruction := bytecode.Instruction{
-			Opcode:   bytecode.OpTriggerEvent,
-			Operands: []interface{}{r.Event.EventType, r.Event.CustomProperty},
+	// Compile action
+	if r.Event.Action.Type != "" {
+		actionInstructions, err := compileAction(r.Event.Action)
+		if err != nil {
+			return nil, err
 		}
-		instructions = append(instructions, eventInstruction)
+		instructions = append(instructions, actionInstructions...)
 	}
 
 	return instructions, nil
@@ -240,4 +240,31 @@ func getFactsFromConditions(conditions rule.Conditions) []string {
 		facts = append(facts, getFactsFromConditions(rule.Conditions{All: cond.All, Any: cond.Any})...)
 	}
 	return facts
+}
+
+func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
+	var instructions []bytecode.Instruction
+
+	switch action.Type {
+	case "updateStore":
+		// Compile update store action into bytecode
+		updateInstruction := bytecode.Instruction{
+			Opcode:   bytecode.OpUpdateStore,
+			Operands: []interface{}{action.Target, action.Value},
+		}
+		instructions = append(instructions, updateInstruction)
+
+	case "sendMessage":
+		// Compile send message action into bytecode
+		messageInstruction := bytecode.Instruction{
+			Opcode:   bytecode.OpSendMessage,
+			Operands: []interface{}{action.Target, action.Value},
+		}
+		instructions = append(instructions, messageInstruction)
+
+	default:
+		return nil, fmt.Errorf("unsupported action type: %s", action.Type)
+	}
+
+	return instructions, nil
 }
