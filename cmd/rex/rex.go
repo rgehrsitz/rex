@@ -2,18 +2,21 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"rgehrsitz/rex/api"
+	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/compiler"
 	"rgehrsitz/rex/internal/rule"
-	"rgehrsitz/rex/api"
+	"rgehrsitz/rex/internal/store"
 )
 
 func main() {
 
-    // Start the REST API server
-    api.StartServer("8080")
-
+	// Start the REST API server
+	api.StartServer("8080")
 
 	store := NewKeyValueStore("your_redis_config")
 
@@ -58,44 +61,43 @@ func runREX(rules []compiler.CompiledRule) {
 	// TODO: Create a new instance of the rules engine, pass it the compiled rules, and start it
 }
 
-
 func SubscribeToSensorUpdates(store store.Store, compiledRules []bytecode.Instruction) {
-    // Define the list of sensor keys you want to subscribe to
-    sensorKeys := []string{"sensor1", "sensor2", ...}
+	// Define the list of sensor keys you want to subscribe to
+	sensorKeys := []string{"sensor1", "sensor2", "sensor3"}
 
-    for _, key := range sensorKeys {
-        err := store.Subscribe(key, func(data interface{}) {
-            // Convert or assert data to the required format
-            sensorData := data.(map[string]interface{})
+	for _, key := range sensorKeys {
+		err := store.Subscribe(key, func(data interface{}) {
+			// Convert or assert data to the required format
+			sensorData := data.(map[string]interface{})
 
-            // Execute the rules against this sensor data
-            ExecuteBytecode(compiledRules, sensorData, store)
-        })
+			// Execute the rules against this sensor data
+			ExecuteBytecode(compiledRules, sensorData, store)
+		})
 
-        if err != nil {
-            // Handle subscription error
-            log.Printf("Error subscribing to %s: %v", key, err)
-        }
-    }
+		if err != nil {
+			// Handle subscription error
+			log.Printf("Error subscribing to %s: %v", key, err)
+		}
+	}
 }
 
 func SetupRESTInterface(store store.Store, compiledRules []bytecode.Instruction) {
-    http.HandleFunc("/updateSensorData", func(w http.ResponseWriter, r *http.Request) {
-        // Parse the incoming data
-        var sensorData map[string]interface{}
-        err := json.NewDecoder(r.Body).Decode(&sensorData)
-        if err != nil {
-            // Handle error
-            http.Error(w, err.Error(), http.StatusBadRequest)
-            return
-        }
+	http.HandleFunc("/updateSensorData", func(w http.ResponseWriter, r *http.Request) {
+		// Parse the incoming data
+		var sensorData map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&sensorData)
+		if err != nil {
+			// Handle error
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
-        // Execute the rules against this sensor data
-        ExecuteBytecode(compiledRules, sensorData, store)
+		// Execute the rules against this sensor data
+		ExecuteBytecode(compiledRules, sensorData, store)
 
-        // Respond to the API call
-        fmt.Fprintf(w, "Processed sensor data")
-    })
+		// Respond to the API call
+		fmt.Fprintf(w, "Processed sensor data")
+	})
 
-    log.Fatal(http.ListenAndServe(":8080", nil))
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
