@@ -11,6 +11,8 @@ import (
 	"rgehrsitz/rex/internal/compiler"
 	"rgehrsitz/rex/internal/rule"
 	"rgehrsitz/rex/internal/store"
+
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -18,10 +20,15 @@ func main() {
 	// Start the REST API server
 	api.StartServer("8080")
 
-	store := NewKeyValueStore("your_redis_config")
+	// Initialize the Redis store
+	redisOpts := &redis.Options{
+		Addr: "localhost:6379",
+		// ... other Redis options as needed ...
+	}
+	store := store.NewRedisStore(redisOpts)
 
 	// Compile rules (assuming a function for this)
-	compiledRules := CompileRules("path_to_rules.json")
+	compiledRules := compileRules("path_to_rules.json")
 
 	// Subscribe to sensor updates
 	SubscribeToSensorUpdates(store, compiledRules)
@@ -31,8 +38,7 @@ func main() {
 
 	// Other application initialization...
 
-	rules := compileRules("../../data/basic_ruleset.json")
-	runREX(rules)
+	runREX(compiledRules)
 }
 
 func compileRules(filename string) []compiler.CompiledRule {
@@ -61,14 +67,17 @@ func runREX(rules []compiler.CompiledRule) {
 	// TODO: Create a new instance of the rules engine, pass it the compiled rules, and start it
 }
 
-func SubscribeToSensorUpdates(store store.Store, compiledRules []bytecode.Instruction) {
-	// Define the list of sensor keys you want to subscribe to
-	sensorKeys := []string{"sensor1", "sensor2", "sensor3"}
+func SubscribeToSensorUpdates(store store.Store, compiledRules []compiler.CompiledRule) {
+	sensorKeys := extractSensorKeys(compiledRules)
 
 	for _, key := range sensorKeys {
 		err := store.Subscribe(key, func(data interface{}) {
 			// Convert or assert data to the required format
-			sensorData := data.(map[string]interface{})
+			sensorData, ok := data.(map[string]interface{})
+			if !ok {
+				log.Printf("Error: received data is not in expected format for key %s", key)
+				return
+			}
 
 			// Execute the rules against this sensor data
 			ExecuteBytecode(compiledRules, sensorData, store)
@@ -79,6 +88,26 @@ func SubscribeToSensorUpdates(store store.Store, compiledRules []bytecode.Instru
 			log.Printf("Error subscribing to %s: %v", key, err)
 		}
 	}
+}
+
+// Extract sensor keys from the compiled rules
+func extractSensorKeys(compiledRules []compiler.CompiledRule) []string {
+	var keys []string
+	keySet := make(map[string]bool)
+
+	for _, rule := range compiledRules {
+		for _, instr := range rule.Instructions {
+			if instr.Opcode == bytecode.OpLoadFact { // Assuming this opcode loads a sensor fact
+				key := instr.Operands[0].(string)
+				if _, exists := keySet[key]; !exists {
+					keys = append(keys, key)
+					keySet[key] = true
+				}
+			}
+		}
+	}
+
+	return keys
 }
 
 func SetupRESTInterface(store store.Store, compiledRules []bytecode.Instruction) {
