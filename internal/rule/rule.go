@@ -12,7 +12,7 @@ type Event struct {
 	CustomProperty interface{}   `json:"customProperty"`
 	Facts          []string      `json:"facts,omitempty"`
 	Values         []interface{} `json:"values,omitempty"`
-	Action         Action        `json:"action,omitempty"` // Added action field
+	Actions        []Action      `json:"actions,omitempty"`
 }
 
 type Action struct {

@@ -263,10 +263,12 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 			},
 			Event: rule.Event{
 				EventType: "TemperatureHigh",
-				Action: rule.Action{
-					Type:   "updateStore",
-					Target: "alertLevel",
-					Value:  "high",
+				Actions: []rule.Action{ // Now a slice of actions
+					{
+						Type:   "updateStore",
+						Target: "alertLevel",
+						Value:  "high",
+					},
 				},
 			},
 		},
@@ -279,10 +281,12 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 			},
 			Event: rule.Event{
 				EventType: "SendAlert",
-				Action: rule.Action{
-					Type:   "sendMessage",
-					Target: "admin@example.com",
-					Value:  "Alert level high",
+				Actions: []rule.Action{ // Now a slice of actions
+					{
+						Type:   "sendMessage",
+						Target: "admin@example.com",
+						Value:  "Alert level high",
+					},
 				},
 			},
 		},
@@ -292,12 +296,14 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 	expectedInstructionsRule1 := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
+		{Opcode: bytecode.OpUpdateStore, Operands: []interface{}{"alertLevel", "high"}},
 		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"TemperatureHigh", nil}},
 	}
 
 	expectedInstructionsRule2 := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"alertLevel"}},
 		{Opcode: bytecode.OpEqual, Operands: []interface{}{"high"}},
+		{Opcode: bytecode.OpSendMessage, Operands: []interface{}{"admin@example.com", "Alert level high"}},
 		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"SendAlert", nil}},
 	}
 
@@ -305,11 +311,11 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 	expected := []CompiledRule{
 		{
 			Instructions: expectedInstructionsRule1,
-			Dependencies: []string{"Rule2"}, // Rule2 is dependent on Rule1
+			Dependencies: []string{}, // Rule1 has no dependencies
 		},
 		{
 			Instructions: expectedInstructionsRule2,
-			Dependencies: []string{}, // Rule2 has no dependencies
+			Dependencies: []string{"Rule1"}, // Rule2 is dependent on Rule1
 		},
 		// Add more expected compiled rules if needed
 	}
@@ -326,3 +332,84 @@ func TestCompileRulesWithDependencies(t *testing.T) {
 	}
 }
 
+func TestCompileComplexNestedConditions(t *testing.T) {
+	r := rule.Rule{
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{
+					Any: []rule.Condition{
+						{Fact: "humidity", Operator: "lessThan", Value: 50},
+						{
+							All: []rule.Condition{
+								{Fact: "windSpeed", Operator: "greaterThan", Value: 20},
+								{Fact: "temperature", Operator: "lessThan", Value: 25},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Define the correct expected bytecode for the complex nested conditions
+	expected := []bytecode.Instruction{
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
+		{Opcode: bytecode.OpLessThan, Operands: []interface{}{50}},
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{8}}, // Assuming jump logic for 'Any'
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
+		{Opcode: bytecode.OpLessThan, Operands: []interface{}{25}},
+	}
+
+	instructions, err := CompileRule(r)
+	if err != nil {
+		t.Fatalf("CompileRule failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(instructions, expected) {
+		t.Errorf("Expected %v, got %v", expected, instructions)
+	}
+}
+
+func TestCompileRuleWithMultipleActions(t *testing.T) {
+	r := rule.Rule{
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{Fact: "temperature", Operator: "greaterThan", Value: 30},
+			},
+		},
+		Event: rule.Event{
+			EventType: "HighTemperature",
+			Actions: []rule.Action{
+				{
+					Type:   "updateStore",
+					Target: "alertLevel",
+					Value:  "high",
+				},
+				{
+					Type:   "sendMessage",
+					Target: "admin@example.com",
+					Value:  "Temperature exceeded 30 degrees",
+				},
+			},
+		},
+	}
+
+	expected := []bytecode.Instruction{
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
+		{Opcode: bytecode.OpUpdateStore, Operands: []interface{}{"alertLevel", "high"}},
+		{Opcode: bytecode.OpSendMessage, Operands: []interface{}{"admin@example.com", "Temperature exceeded 30 degrees"}},
+		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"HighTemperature", nil}},
+	}
+
+	instructions, err := CompileRule(r)
+	if err != nil {
+		t.Fatalf("CompileRule failed: %v", err)
+	}
+
+	if !reflect.DeepEqual(instructions, expected) {
+		t.Errorf("Expected %v, got %v", expected, instructions)
+	}
+}

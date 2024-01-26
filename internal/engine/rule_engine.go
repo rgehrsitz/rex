@@ -82,21 +82,23 @@ func fetchSensorData(s store.Store, sensors map[string]struct{}, sensorData map[
 
 // handleRuleEvent handles the actions based on the rule's event.
 func handleRuleEvent(event rule.Event, s store.Store) error {
-	switch event.Action.Type {
-	case "updateStore":
-		if err := s.SetValue(event.Action.Target, event.Action.Value); err != nil {
-			return fmt.Errorf("error updating store: %w", err)
+	for _, action := range event.Actions {
+		switch action.Type {
+		case "updateStore":
+			if err := s.SetValue(action.Target, action.Value); err != nil {
+				return fmt.Errorf("error updating store: %w", err)
+			}
+		case "sendMessage":
+			message, ok := action.Value.(string)
+			if !ok {
+				return fmt.Errorf("error: action value is not a string")
+			}
+			if err := sendMessage(action.Target, message); err != nil {
+				return fmt.Errorf("error sending message: %w", err)
+			}
+		default:
+			fmt.Println("No action or unknown action type")
 		}
-	case "sendMessage":
-		message, ok := event.Action.Value.(string)
-		if !ok {
-			return fmt.Errorf("error: action value is not a string")
-		}
-		if err := sendMessage(event.Action.Target, message); err != nil {
-			return fmt.Errorf("error sending message: %w", err)
-		}
-	default:
-		fmt.Println("No action or unknown action type")
 	}
 	return nil
 }

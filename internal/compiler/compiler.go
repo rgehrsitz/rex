@@ -32,13 +32,25 @@ func CompileRule(r rule.Rule) ([]bytecode.Instruction, error) {
 		instructions = append(instructions, anyInstructions...)
 	}
 
-	// Compile action
-	if r.Event.Action.Type != "" {
-		actionInstructions, err := compileAction(r.Event.Action)
-		if err != nil {
-			return nil, err
+	// Compile actions (now handling a slice of actions)
+	for _, action := range r.Event.Actions {
+		if action.Type != "" {
+			actionInstructions, err := compileAction(action)
+			if err != nil {
+				return nil, err
+			}
+			instructions = append(instructions, actionInstructions...)
 		}
-		instructions = append(instructions, actionInstructions...)
+	}
+
+	// After compiling conditions and actions
+	if r.Event.EventType != "" {
+		// Compile event trigger
+		eventTriggerInstruction := bytecode.Instruction{
+			Opcode:   bytecode.OpTriggerEvent,
+			Operands: []interface{}{r.Event.EventType, r.Event.CustomProperty},
+		}
+		instructions = append(instructions, eventTriggerInstruction)
 	}
 
 	return instructions, nil
@@ -226,11 +238,18 @@ func getReadFacts(conditions []rule.Condition) []string {
 }
 
 func getWriteFacts(event rule.Event) []string {
-	// Assuming the event action type 'updateStore' changes a fact
-	if event.Action.Type == "updateStore" {
-		return []string{event.Action.Target}
+	var writeFacts []string
+
+	// Iterate over all actions in the event
+	for _, action := range event.Actions {
+		// Check if the action type is 'updateStore', which changes a fact
+		if action.Type == "updateStore" {
+			// Add the target of the action to the list of written facts
+			writeFacts = append(writeFacts, action.Target)
+		}
 	}
-	return nil
+
+	return writeFacts
 }
 
 func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
