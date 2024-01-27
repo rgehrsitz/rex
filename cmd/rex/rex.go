@@ -4,11 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
-	"rgehrsitz/rex/api"
-	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/compiler"
+	"rgehrsitz/rex/internal/engine"
 	"rgehrsitz/rex/internal/rule"
 	"rgehrsitz/rex/internal/store"
 
@@ -16,29 +14,29 @@ import (
 )
 
 func main() {
-
-	// Start the REST API server
-	api.StartServer("8080")
-
-	// Initialize the Redis store
-	redisOpts := &redis.Options{
-		Addr: "localhost:6379",
-		// ... other Redis options as needed ...
+	// Load compiled rules from a file
+	rulesFilePath := "path_to_compiled_rules.json" // Replace with the actual path
+	rules, err := engine.LoadRulesFromFile(rulesFilePath)
+	if err != nil {
+		fmt.Printf("Error loading rules: %v\n", err)
+		os.Exit(1)
 	}
-	store := store.NewRedisStore(redisOpts)
 
-	// Compile rules (assuming a function for this)
-	compiledRules := compileRules("path_to_rules.json")
+	// Initialize Redis store
+	redisOptions := &redis.Options{
+		Addr: "localhost:6379", // Replace with actual Redis server address
+		// Other options as needed
+	}
+	redisStore := store.NewRedisStore(redisOptions)
+
+	// Initialize the rules engine with the loaded rules
+	rulesEngine := engine.NewRulesEngine(rules, redisStore)
 
 	// Subscribe to sensor updates
-	SubscribeToSensorUpdates(store, compiledRules)
+	subscribeToSensorUpdates(redisStore, rulesEngine)
 
-	// Setup REST interface
-	SetupRESTInterface(store, compiledRules)
-
-	// Other application initialization...
-
-	runREX(compiledRules)
+	// The application remains running to process incoming sensor data
+	select {} // Prevents the application from exiting
 }
 
 func compileRules(filename string) []compiler.CompiledRule {
@@ -67,66 +65,60 @@ func runREX(rules []compiler.CompiledRule) {
 	// TODO: Create a new instance of the rules engine, pass it the compiled rules, and start it
 }
 
-func SubscribeToSensorUpdates(store store.Store, compiledRules []compiler.CompiledRule) {
-	sensorKeys := extractSensorKeys(compiledRules)
+func subscribeToSensorUpdates(redisStore store.Store, rulesEngine *engine.RulesEngine) {
+	// Assuming the RulesEngine has a method to extract the necessary sensor keys
+	sensorKeys := rulesEngine.ExtractSensorKeys()
 
+	// Subscribe to each sensor key
 	for _, key := range sensorKeys {
-		err := store.Subscribe(key, func(data interface{}) {
-			// Convert or assert data to the required format
-			sensorData, ok := data.(map[string]interface{})
-			if !ok {
-				log.Printf("Error: received data is not in expected format for key %s", key)
-				return
-			}
-
-			// Execute the rules against this sensor data
-			ExecuteBytecode(compiledRules, sensorData, store)
+		err := redisStore.Subscribe(key, func(data interface{}) {
+			// Process the incoming sensor data with the rules engine
+			rulesEngine.ProcessSensorData(key, data)
 		})
 
 		if err != nil {
-			// Handle subscription error
 			log.Printf("Error subscribing to %s: %v", key, err)
 		}
 	}
 }
 
 // Extract sensor keys from the compiled rules
-func extractSensorKeys(compiledRules []compiler.CompiledRule) []string {
-	var keys []string
-	keySet := make(map[string]bool)
+// func extractSensorKeys(compiledRules []compiler.CompiledRule) []string {
+// 	var keys []string
+// 	keySet := make(map[string]bool)
 
-	for _, rule := range compiledRules {
-		for _, instr := range rule.Instructions {
-			if instr.Opcode == bytecode.OpLoadFact { // Assuming this opcode loads a sensor fact
-				key := instr.Operands[0].(string)
-				if _, exists := keySet[key]; !exists {
-					keys = append(keys, key)
-					keySet[key] = true
-				}
-			}
-		}
-	}
+// 	for _, rule := range compiledRules {
+// 		for _, instr := range rule.Instructions {
+// 			if instr.Opcode == bytecode.OpLoadFact { // Assuming this opcode loads a sensor fact
+// 				key := instr.Operands[0].(string)
+// 				if _, exists := keySet[key]; !exists {
+// 					keys = append(keys, key)
+// 					keySet[key] = true
+// 				}
+// 			}
+// 		}
+// 	}
 
-	return keys
-}
+// 	return keys
+// }
 
-func SetupRESTInterface(store store.Store, compiledRules []bytecode.Instruction) {
-	http.HandleFunc("/updateSensorData", func(w http.ResponseWriter, r *http.Request) {
-		// Parse the incoming data
-		var sensorData map[string]interface{}
-		err := json.NewDecoder(r.Body).Decode(&sensorData)
-		if err != nil {
-			// Handle error
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
+// func SetupRESTInterface(store store.Store, compiledRules []bytecode.Instruction) {
+// 	http.HandleFunc("/updateSensorData", func(w http.ResponseWriter, r *http.Request) {
+// 		// Parse the incoming data
+// 		var sensorData map[string]interface{}
+// 		err := json.NewDecoder(r.Body).Decode(&sensorData)
+// 		if err != nil {
+// 			// Handle error
+// 			http.Error(w, err.Error(), http.StatusBadRequest)
+// 			return
+// 		}
 
-		// Execute the rules against this sensor data
-		ExecuteBytecode(compiledRules, sensorData, store)
+// 		// Execute the rules against this sensor data
+// 		ExecuteBytecode(compiledRules, sensorData, store)
 
-		// Respond to the API call
-		fmt.Fprintf(w, "Processed sensor data")
-	})
+// 		// Respond to the API call
+// 		fmt.Fprintf(w, "Processed sensor data")
+// 	})
 
-	log.Fatal(http.ListenAndServe(":8080", nil))
-}
+// 	log.Fatal(http.ListenAndServe(":8080", nil))
+// }

@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"os"
 	"reflect"
@@ -20,6 +21,67 @@ type EventHandlerFunc func(customProperty interface{}, store store.Store) error
 var EventHandlers = map[string]EventHandlerFunc{
 	"updateSensor": handleUpdateSensorEvent,
 	// Add other event types and their handlers here
+}
+
+// RulesEngine represents the rules engine instance.
+type RulesEngine struct {
+	CompiledRules []rule.Rule
+	Store         store.Store
+}
+
+// NewRulesEngine creates and returns a new instance of the RulesEngine.
+func NewRulesEngine(compiledRules []rule.Rule, store store.Store) *RulesEngine {
+	return &RulesEngine{
+		CompiledRules: compiledRules,
+		Store:         store,
+	}
+}
+
+// ProcessSensorData processes the incoming sensor data against the loaded rules.
+func (re *RulesEngine) ProcessSensorData(sensorKey string, data interface{}) {
+	// Convert data to a suitable format if necessary
+	//sensorData := map[string]interface{}{sensorKey: data}
+
+	for _, rule := range re.CompiledRules {
+		// Evaluate the rule against the sensor data
+		// This might involve checking if the sensorKey is relevant for the rule,
+		// and if so, applying the rule logic to the data.
+		// For example:
+		satisfied, err := EvaluateRuleWithStore(rule, sensorKey, data, re.Store)
+		if err != nil {
+			// Handle error
+			log.Printf("Error evaluating rule: %v", err)
+			continue
+		}
+
+		if satisfied {
+			// Handle the actions defined in the rule's event
+			for _, action := range rule.Event.Actions {
+				switch action.Type {
+				case "updateStore":
+					// Assuming action.Target is the key and action.Value is the value for the store
+					if err := re.Store.SetValue(action.Target, action.Value); err != nil {
+						log.Printf("Error updating store for key %s: %v", action.Target, err)
+					}
+
+				case "sendMessage":
+					// Assuming action.Target is the address and action.Value is the message content
+					if value, ok := action.Value.(string); ok {
+						if err := sendMessage(action.Target, value); err != nil {
+							log.Printf("Error sending message to %s: %v", action.Target, err)
+						}
+					} else {
+						log.Printf("Error: action.Value is not a string")
+					}
+
+				// Add cases for other action types as needed
+
+				default:
+					log.Printf("Unknown action type: %s", action.Type)
+				}
+			}
+		}
+	}
 }
 
 func LoadRulesFromFile(filePath string) ([]rule.Rule, error) {
@@ -42,28 +104,30 @@ func EvaluateRule(r rule.Rule, sensorData map[string]interface{}) (bool, error) 
 
 // EvaluateRuleWithStore evaluates a rule using data from the specified store.
 // It fetches additional sensor data as needed based on the rule's conditions.
-func EvaluateRuleWithStore(r rule.Rule, triggeringSensor string, triggeringValue interface{}, s store.Store) error {
+func EvaluateRuleWithStore(r rule.Rule, triggeringSensor string, triggeringValue interface{}, s store.Store) (bool, error) {
 	sensorData := map[string]interface{}{triggeringSensor: triggeringValue}
 	sensorsToFetch := uniqueSensors(r)
 
 	// Fetch additional required sensor values
 	err := fetchSensorData(s, sensorsToFetch, sensorData)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	// Evaluate the rule with the fetched sensor data
 	satisfied, evalErr := evaluateConditions(r.Conditions, sensorData)
 	if evalErr != nil {
-		return fmt.Errorf("error evaluating conditions: %w", evalErr)
+		return false, fmt.Errorf("error evaluating conditions: %w", evalErr)
 	}
 
 	if satisfied {
 		// Handle actions based on the rule's event
-		return handleRuleEvent(r.Event, s)
+		// You might want to perform some action here if the rule is satisfied.
+		// For now, we return true and no error.
+		return true, nil
 	}
 
-	return nil
+	return false, nil
 }
 
 // fetchSensorData fetches and updates sensor data for given sensors from the store.
@@ -81,27 +145,27 @@ func fetchSensorData(s store.Store, sensors map[string]struct{}, sensorData map[
 }
 
 // handleRuleEvent handles the actions based on the rule's event.
-func handleRuleEvent(event rule.Event, s store.Store) error {
-	for _, action := range event.Actions {
-		switch action.Type {
-		case "updateStore":
-			if err := s.SetValue(action.Target, action.Value); err != nil {
-				return fmt.Errorf("error updating store: %w", err)
-			}
-		case "sendMessage":
-			message, ok := action.Value.(string)
-			if !ok {
-				return fmt.Errorf("error: action value is not a string")
-			}
-			if err := sendMessage(action.Target, message); err != nil {
-				return fmt.Errorf("error sending message: %w", err)
-			}
-		default:
-			fmt.Println("No action or unknown action type")
-		}
-	}
-	return nil
-}
+// func handleRuleEvent(event rule.Event, s store.Store) error {
+// 	for _, action := range event.Actions {
+// 		switch action.Type {
+// 		case "updateStore":
+// 			if err := s.SetValue(action.Target, action.Value); err != nil {
+// 				return fmt.Errorf("error updating store: %w", err)
+// 			}
+// 		case "sendMessage":
+// 			message, ok := action.Value.(string)
+// 			if !ok {
+// 				return fmt.Errorf("error: action value is not a string")
+// 			}
+// 			if err := sendMessage(action.Target, message); err != nil {
+// 				return fmt.Errorf("error sending message: %w", err)
+// 			}
+// 		default:
+// 			fmt.Println("No action or unknown action type")
+// 		}
+// 	}
+// 	return nil
+// }
 
 // evaluateConditions evaluates a set of conditions (All and Any) against sensor data.
 func evaluateConditions(conditions rule.Conditions, sensorData map[string]interface{}) (bool, error) {
@@ -371,4 +435,30 @@ func uniqueSensors(r rule.Rule) map[string]struct{} {
 	}
 
 	return sensors
+}
+
+// ExtractSensorKeys returns a slice of unique sensor keys required by the rules
+func (re *RulesEngine) ExtractSensorKeys() []string {
+	keyMap := make(map[string]struct{})
+	for _, r := range re.CompiledRules {
+		extractKeysFromConditions(r.Conditions.All, keyMap)
+		extractKeysFromConditions(r.Conditions.Any, keyMap)
+	}
+
+	var keys []string
+	for key := range keyMap {
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+// extractKeysFromConditions extracts sensor keys from a slice of Condition and adds them to the provided map.
+func extractKeysFromConditions(conditions []rule.Condition, keyMap map[string]struct{}) {
+	for _, cond := range conditions {
+		if cond.Fact != "" {
+			keyMap[cond.Fact] = struct{}{}
+		}
+		extractKeysFromConditions(cond.All, keyMap)
+		extractKeysFromConditions(cond.Any, keyMap)
+	}
 }
