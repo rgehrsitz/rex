@@ -1,10 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"reflect"
 	"rgehrsitz/rex/internal/rule"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // TestReadAndParseRules tests the readAndParseRules function
@@ -92,7 +95,7 @@ func TestReadAndParseRules(t *testing.T) {
 				t.Fatalf("Failed to write to temp file: %s", err)
 			}
 
-			rules, err := readAndParseRules(tempFilePath)
+			rules, _, err := ReadAndParseRules(tempFilePath)
 			if tc.expectErr {
 				if err == nil {
 					t.Errorf("Expected an error, but got nil")
@@ -171,5 +174,100 @@ func TestReadAndParseRules(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCompileRuleWithCircularDependencies(t *testing.T) {
+	// Define two rules that reference each other, creating a potential circular dependency
+	rule1 := rule.Rule{
+		Name: "Rule1",
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{
+					Fact:     "Fact1",
+					Operator: "equal",
+					Value:    true,
+				},
+			},
+		},
+		Event: rule.Event{
+			Actions: []rule.Action{
+				{
+					Type:   "updateStore",
+					Target: "Fact2", // Rule1 writes to Fact2, which is read by Rule2
+					Value:  "newValue",
+				},
+			},
+		},
+	}
+
+	rule2 := rule.Rule{
+		Name: "Rule2",
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{
+					Fact:     "Fact2", // Rule2 reads Fact2, which is written by Rule1
+					Operator: "equal",
+					Value:    "newValue",
+				},
+			},
+		},
+		Event: rule.Event{
+			Actions: []rule.Action{
+				{
+					Type:   "updateStore",
+					Target: "Fact1", // Rule2 writes to Fact1, which is read by Rule1
+					Value:  "newValue",
+				},
+			},
+		},
+	}
+
+	testRules := []rule.Rule{rule1, rule2}
+
+	// Marshal the rule data into JSON
+	jsonData, err := json.Marshal(testRules)
+	if err != nil {
+		t.Fatalf("Failed to marshal rules: %v", err)
+	}
+
+	// Create a temporary file to write the JSON data
+	tempFile, err := os.CreateTemp("", "rules*.json")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name()) // Clean up the file after the test
+
+	// Write the JSON data to the temp file
+	_, err = tempFile.Write(jsonData)
+	if err != nil {
+		t.Fatalf("Failed to write to temp file: %v", err)
+	}
+	tempFile.Close() // Close the file after writing
+
+	// Now use the temp file path in the ReadAndParseRules function
+	rules, rulesMap, err := ReadAndParseRules(tempFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to read rules: %v", err)
+	}
+
+	compiledRules, err := CompileRules(rules)
+	if err != nil {
+		t.Fatalf("Failed to compile rules: %v", err)
+	}
+
+	// Check for circular dependencies
+	for _, compiledRule := range compiledRules {
+		originalRuleName := rulesMap[compiledRule.UUID]
+		for _, dependencyUUIDStr := range compiledRule.Dependencies {
+			dependencyUUID, err := uuid.Parse(dependencyUUIDStr)
+			if err != nil {
+				t.Errorf("Failed to parse UUID: %s", dependencyUUIDStr)
+				continue
+			}
+			if rulesMap[dependencyUUID] == originalRuleName {
+				t.Errorf("Circular dependency detected in rule: %s", originalRuleName)
+			}
+		}
 	}
 }

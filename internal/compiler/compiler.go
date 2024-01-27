@@ -5,9 +5,12 @@ import (
 	"net"
 	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/rule"
+
+	"github.com/google/uuid"
 )
 
 type CompiledRule struct {
+	UUID         uuid.UUID // Add UUID field
 	Instructions []bytecode.Instruction
 	Dependencies []string // Names of dependent rules
 }

@@ -1,6 +1,9 @@
 package rule
 
+import "github.com/google/uuid"
+
 type Rule struct {
+	UUID       uuid.UUID  `json:"-"`
 	Name       string     `json:"name"`
 	Priority   int        `json:"priority"`
 	Conditions Conditions `json:"conditions"`
