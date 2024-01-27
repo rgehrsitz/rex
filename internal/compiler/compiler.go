@@ -2,6 +2,7 @@ package compiler
 
 import (
 	"fmt"
+	"net"
 	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/rule"
 )
@@ -142,7 +143,7 @@ func compileComparisonCondition(cond rule.Condition) ([]bytecode.Instruction, er
 	// Prepare value operand based on type
 	var valueOperand interface{}
 	switch v := cond.Value.(type) {
-	case int, float64, string:
+	case int, float64, string, bool:
 		valueOperand = v
 	default:
 		return nil, fmt.Errorf("unsupported value type: %T", v)
@@ -257,6 +258,10 @@ func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
 
 	switch action.Type {
 	case "updateStore":
+		// Add validation for the target of the action
+		if !isValidStoreKey(action.Target) {
+			return nil, fmt.Errorf("invalid store key: %s", action.Target)
+		}
 		// Compile update store action into bytecode
 		updateInstruction := bytecode.Instruction{
 			Opcode:   bytecode.OpUpdateStore,
@@ -265,6 +270,10 @@ func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
 		instructions = append(instructions, updateInstruction)
 
 	case "sendMessage":
+		// Add validation for the target of the action
+		if !isValidAddress(action.Target) {
+			return nil, fmt.Errorf("invalid address: %s", action.Target)
+		}
 		// Compile send message action into bytecode
 		messageInstruction := bytecode.Instruction{
 			Opcode:   bytecode.OpSendMessage,
@@ -277,4 +286,42 @@ func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
 	}
 
 	return instructions, nil
+}
+
+func isValidStoreKey(key string) bool {
+	// Check if the key is non-empty
+	if key == "" {
+		return false
+	}
+
+	// Optionally, add more specific checks here, like length or character set
+	// Example: Check if the key length is within a specific range
+	if len(key) < 3 || len(key) > 100 {
+		return false
+	}
+
+	// Example: Check for allowed characters (alphanumeric and underscores)
+	for _, ch := range key {
+		if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '_') {
+			return false
+		}
+	}
+
+	return true
+}
+
+func isValidAddress(address string) bool {
+	// Check if the address is a valid IP address
+	if net.ParseIP(address) != nil {
+		return true
+	}
+
+	// Optionally, add more specific checks here, like checking for valid DNS names, ports, etc.
+	// Example: Check if it's a valid host:port pair
+	host, _, err := net.SplitHostPort(address)
+	if err == nil && net.ParseIP(host) != nil {
+		return true
+	}
+
+	return false
 }

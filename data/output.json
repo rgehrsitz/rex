@@ -1,0 +1,1 @@
+[{"Instructions":[{"Opcode":0,"Operands":["temperature"]},{"Opcode":3,"Operands":[30]},{"Opcode":11,"Operands":["HighTemperature","Temperature is above 30 degrees."]}],"Dependencies":[]}]
