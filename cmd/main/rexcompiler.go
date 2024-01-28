@@ -7,8 +7,6 @@ import (
 	"os"
 	"rgehrsitz/rex/internal/compiler"
 	"rgehrsitz/rex/internal/rule"
-
-	"github.com/google/uuid"
 )
 
 type Rule rule.Rule
@@ -27,7 +25,7 @@ func main() {
 	}
 
 	// Read and parse the rules file
-	rules, _, err := ReadAndParseRules(*rulesFilePath)
+	rules, err := ReadAndParseRules(*rulesFilePath)
 	if err != nil {
 		fmt.Printf("Error reading or parsing rules file: %s\\n", err)
 		os.Exit(1)
@@ -54,44 +52,56 @@ func main() {
 	}
 }
 
-func ReadAndParseRules(filePath string) ([]Rule, map[uuid.UUID]string, error) {
+// ReadAndParseRules reads and parses the rules from a JSON file.
+// It returns a slice of rules and a map of UUIDs to rule names for debugging.
+func ReadAndParseRules(filePath string) ([]rule.Rule, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read rules file '%s': %w", filePath, err)
+		return nil, fmt.Errorf("failed to read rules file '%s': %w", filePath, err)
 	}
 
-	var rules []Rule
+	var rules []rule.Rule
 	err = json.Unmarshal(data, &rules)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse JSON in file '%s': %w", filePath, err)
+		return nil, fmt.Errorf("failed to parse JSON in file '%s': %w", filePath, err)
 	}
 
-	rulesMap := make(map[uuid.UUID]string)
-	for _, r := range rules {
-		r.UUID = uuid.New() // Assign a new UUID
-		rulesMap[r.UUID] = r.Name
-	}
-
-	return rules, rulesMap, nil
+	return rules, nil
 }
 
-// compileRules compiles the provided Rex rules into a set of compiled rules with
-// executable instructions that can be interpreted at runtime. It iterates through
-// each rule, calls the compiler to generate instructions, and builds up the
-// compiled rule set. Any compilation errors are returned.
-func CompileRules(rules []Rule) ([]compiler.CompiledRule, error) {
+// CompileRules compiles the provided rules into a set of compiled rules.
+func CompileRules(rules []rule.Rule) ([]compiler.CompiledRule, error) {
+	usedNames := make(map[string]struct{})
 	var compiled []compiler.CompiledRule
-	for i, r := range rules {
-		originalRule := rule.Rule(r)
-		instructions, err := compiler.CompileRule(originalRule)
-		if err != nil {
-			return nil, fmt.Errorf("error compiling rule %d ('%s'): %w", i+1, originalRule.Name, err)
+	dependencyGraph := compiler.NewDependencyGraph()
+
+	// Ensure unique rule names
+	for _, r := range rules {
+		if _, exists := usedNames[r.Name]; exists {
+			return nil, fmt.Errorf("duplicate rule name detected: '%s'", r.Name)
 		}
-		compiled = append(compiled, compiler.CompiledRule{
-			Instructions: instructions,
-			Dependencies: []string{}, // Dependencies can be populated if needed
-		})
+		usedNames[r.Name] = struct{}{}
 	}
+
+	// Compile each rule
+	for _, r := range rules {
+		instructions, err := compiler.CompileRule(&r, dependencyGraph, rules)
+		if err != nil {
+			return nil, fmt.Errorf("error compiling rule '%s': %w", r.Name, err)
+		}
+		compiledRule := compiler.CompiledRule{
+			Name:         r.Name,
+			Instructions: instructions,
+			// Dependencies will be set later based on the dependency graph
+		}
+		compiled = append(compiled, compiledRule)
+	}
+
+	// Set dependencies for each compiled rule
+	for i, r := range rules {
+		compiled[i].Dependencies = append(compiled[i].Dependencies, dependencyGraph.Dependencies(r.Name)...)
+	}
+
 	return compiled, nil
 }
 

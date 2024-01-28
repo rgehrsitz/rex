@@ -5,20 +5,59 @@ import (
 	"net"
 	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/rule"
-
-	"github.com/google/uuid"
 )
 
 type CompiledRule struct {
-	UUID         uuid.UUID // Add UUID field
+	Name         string
 	Instructions []bytecode.Instruction
 	Dependencies []string // Names of dependent rules
 }
 
-func CompileRule(r rule.Rule) ([]bytecode.Instruction, error) {
+// DependencyGraph represents the graph of rule dependencies using rule names
+type DependencyGraph struct {
+	edges   map[string][]string
+	visited map[string]bool
+}
+
+// Dependencies returns the dependencies for the given rule name.
+func (g *DependencyGraph) Dependencies(ruleName string) []string {
+	return g.edges[ruleName]
+}
+
+func NewDependencyGraph() *DependencyGraph {
+	return &DependencyGraph{
+		edges:   make(map[string][]string),
+		visited: make(map[string]bool),
+	}
+}
+
+func (g *DependencyGraph) AddDependency(from, to string) {
+	g.edges[from] = append(g.edges[from], to)
+}
+
+func (g *DependencyGraph) CheckCircularDependency(node string) bool {
+	if g.visited[node] {
+		return true
+	}
+	g.visited[node] = true
+	defer func() { g.visited[node] = false }()
+
+	for _, dep := range g.edges[node] {
+		if g.CheckCircularDependency(dep) {
+			return true
+		}
+	}
+	return false
+}
+
+func CompileRule(r *rule.Rule, graph *DependencyGraph, allRules []rule.Rule) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
 
-	// Compile 'All' conditions
+	// Analyze and Populate ConsumedFacts and ProducedFacts
+	r.ConsumedFacts = getConsumedFacts(r.Conditions)
+	r.ProducedFacts = getProducedFacts(r.Event.Actions)
+
+	// Compile 'All' Conditions
 	for _, cond := range r.Conditions.All {
 		compiled, err := compileCondition(cond)
 		if err != nil {
@@ -27,37 +66,49 @@ func CompileRule(r rule.Rule) ([]bytecode.Instruction, error) {
 		instructions = append(instructions, compiled...)
 	}
 
-	// Compile 'Any' conditions
-	if len(r.Conditions.Any) > 0 {
-		anyInstructions, err := compileAnyConditions(r.Conditions.Any)
+	// Compile 'Any' Conditions
+	for _, cond := range r.Conditions.Any {
+		compiled, err := compileCondition(cond)
 		if err != nil {
 			return nil, err
 		}
-		instructions = append(instructions, anyInstructions...)
+		instructions = append(instructions, compiled...)
 	}
 
-	// Compile actions (now handling a slice of actions)
+	// Compile Actions
 	for _, action := range r.Event.Actions {
-		if action.Type != "" {
-			actionInstructions, err := compileAction(action)
-			if err != nil {
-				return nil, err
+		compiledAction, err := compileAction(action)
+		if err != nil {
+			return nil, err
+		}
+		instructions = append(instructions, compiledAction...)
+	}
+
+	// Update Dependency Graph
+	for _, consumedFact := range r.ConsumedFacts {
+		for _, otherRule := range allRules {
+			if contains(otherRule.ProducedFacts, consumedFact) && otherRule.Name != r.Name {
+				graph.AddDependency(r.Name, otherRule.Name)
 			}
-			instructions = append(instructions, actionInstructions...)
 		}
 	}
 
-	// After compiling conditions and actions
-	if r.Event.EventType != "" {
-		// Compile event trigger
-		eventTriggerInstruction := bytecode.Instruction{
-			Opcode:   bytecode.OpTriggerEvent,
-			Operands: []interface{}{r.Event.EventType, r.Event.CustomProperty},
-		}
-		instructions = append(instructions, eventTriggerInstruction)
+	// Check for Circular Dependencies
+	if graph.CheckCircularDependency(r.Name) {
+		return nil, fmt.Errorf("circular dependency detected in rule '%s'", r.Name)
 	}
 
 	return instructions, nil
+}
+
+// contains checks if a slice of strings contains a specific string.
+func contains(slice []string, element string) bool {
+	for _, item := range slice {
+		if item == element {
+			return true
+		}
+	}
+	return false
 }
 
 func compileCondition(cond rule.Condition) ([]bytecode.Instruction, error) {
@@ -195,66 +246,53 @@ func compileContainsCondition(cond rule.Condition) ([]bytecode.Instruction, erro
 
 func CompileRulesWithDependencies(rules []rule.Rule) ([]CompiledRule, error) {
 	compiledRules := make([]CompiledRule, len(rules))
-	writeFactMap := make(map[string][]string) // Map of facts to rules that write them
+	dependencyGraph := NewDependencyGraph()
 
-	// Compile rules and track write facts
+	// Compile each rule and update the dependency graph
 	for i, r := range rules {
-		instructions, err := CompileRule(r)
+		instructions, err := CompileRule(&r, dependencyGraph, rules)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error compiling rule '%s': %w", r.Name, err)
 		}
 		compiledRules[i] = CompiledRule{
+			Name:         r.Name,
 			Instructions: instructions,
-			Dependencies: []string{},
-		}
-		writeFacts := getWriteFacts(r.Event)
-		for _, fact := range writeFacts {
-			writeFactMap[fact] = append(writeFactMap[fact], r.Name)
+			// Dependencies will be inferred directly from the dependency graph
 		}
 	}
 
-	// Determine dependencies based on read facts and write facts
+	// Update dependencies for each compiled rule
 	for i, r := range rules {
-		readFacts := getReadFacts(r.Conditions.All)
-		readFacts = append(readFacts, getReadFacts(r.Conditions.Any)...)
-		for _, fact := range readFacts {
-			if dependentRules, exists := writeFactMap[fact]; exists {
-				for _, depRule := range dependentRules {
-					if depRule != r.Name {
-						compiledRules[i].Dependencies = append(compiledRules[i].Dependencies, depRule)
-					}
-				}
-			}
-		}
+		compiledRules[i].Dependencies = append(compiledRules[i].Dependencies, dependencyGraph.edges[r.Name]...)
 	}
 
 	return compiledRules, nil
 }
 
-func getReadFacts(conditions []rule.Condition) []string {
-	var facts []string
-	for _, cond := range conditions {
-		facts = append(facts, cond.Fact)
-		facts = append(facts, getReadFacts(cond.All)...)
-		facts = append(facts, getReadFacts(cond.Any)...)
-	}
-	return facts
-}
+// func getReadFacts(conditions []rule.Condition) []string {
+// 	var facts []string
+// 	for _, cond := range conditions {
+// 		facts = append(facts, cond.Fact)
+// 		facts = append(facts, getReadFacts(cond.All)...)
+// 		facts = append(facts, getReadFacts(cond.Any)...)
+// 	}
+// 	return facts
+// }
 
-func getWriteFacts(event rule.Event) []string {
-	var writeFacts []string
+// func getWriteFacts(event rule.Event) []string {
+// 	var writeFacts []string
 
-	// Iterate over all actions in the event
-	for _, action := range event.Actions {
-		// Check if the action type is 'updateStore', which changes a fact
-		if action.Type == "updateStore" {
-			// Add the target of the action to the list of written facts
-			writeFacts = append(writeFacts, action.Target)
-		}
-	}
+// 	// Iterate over all actions in the event
+// 	for _, action := range event.Actions {
+// 		// Check if the action type is 'updateStore', which changes a fact
+// 		if action.Type == "updateStore" {
+// 			// Add the target of the action to the list of written facts
+// 			writeFacts = append(writeFacts, action.Target)
+// 		}
+// 	}
 
-	return writeFacts
-}
+// 	return writeFacts
+// }
 
 func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
@@ -327,4 +365,40 @@ func isValidAddress(address string) bool {
 	}
 
 	return false
+}
+
+func getConsumedFacts(conditions rule.Conditions) []string {
+	var consumedFacts []string
+	for _, cond := range conditions.All {
+		consumedFacts = append(consumedFacts, extractFactsFromCondition(cond)...)
+	}
+	for _, cond := range conditions.Any {
+		consumedFacts = append(consumedFacts, extractFactsFromCondition(cond)...)
+	}
+	return consumedFacts
+}
+
+func extractFactsFromCondition(cond rule.Condition) []string {
+	var facts []string
+	if cond.Fact != "" {
+		facts = append(facts, cond.Fact)
+	}
+	for _, subCond := range cond.All {
+		facts = append(facts, extractFactsFromCondition(subCond)...)
+	}
+	for _, subCond := range cond.Any {
+		facts = append(facts, extractFactsFromCondition(subCond)...)
+	}
+	return facts
+}
+
+func getProducedFacts(actions []rule.Action) []string {
+	var producedFacts []string
+	for _, action := range actions {
+		if action.Type == "updateStore" {
+			producedFacts = append(producedFacts, action.Target)
+		}
+		// Additional logic for other action types that produce facts, if any.
+	}
+	return producedFacts
 }

@@ -1,13 +1,12 @@
 package rule
 
-import "github.com/google/uuid"
-
 type Rule struct {
-	UUID       uuid.UUID  `json:"-"`
-	Name       string     `json:"name"`
-	Priority   int        `json:"priority"`
-	Conditions Conditions `json:"conditions"`
-	Event      Event      `json:"event"`
+	Name          string     `json:"name"`
+	Priority      int        `json:"priority"`
+	Conditions    Conditions `json:"conditions"`
+	Event         Event      `json:"event"`
+	ProducedFacts []string   `json:"producedFacts,omitempty"` // Facts produced by this rule
+	ConsumedFacts []string   `json:"consumedFacts,omitempty"` // Facts consumed by this rule
 }
 
 type Event struct {

@@ -23,7 +23,8 @@ func TestCompileSimpleRule(t *testing.T) {
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
 	}
 
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -54,8 +55,8 @@ func TestCompileRuleWithAnyConditions(t *testing.T) {
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
 	}
-
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -77,7 +78,8 @@ func TestCompileEmptyConditions(t *testing.T) {
 	// An empty slice for expected instructions
 	var expected []bytecode.Instruction
 
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -103,7 +105,8 @@ func TestCompileInvalidCondition(t *testing.T) {
 		},
 	}
 
-	_, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+	_, err := CompileRule(r, dependencyGraph)
 	if err == nil {
 		t.Errorf("Expected an error for invalid operator, but got none")
 	}
@@ -159,7 +162,9 @@ func TestCompileNestedConditions(t *testing.T) {
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
 	}
 
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -210,7 +215,9 @@ func TestCompileComplexRule(t *testing.T) {
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
 	}
 
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -241,7 +248,9 @@ func TestCompileRuleWithEvents(t *testing.T) {
 		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"Alert", "Temperature too high"}},
 	}
 
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -363,7 +372,9 @@ func TestCompileComplexNestedConditions(t *testing.T) {
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{25}},
 	}
 
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -405,7 +416,9 @@ func TestCompileRuleWithMultipleActions(t *testing.T) {
 		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"HighTemperature", nil}},
 	}
 
-	instructions, err := CompileRule(r)
+	dependencyGraph := NewDependencyGraph()
+
+	instructions, err := CompileRule(r, dependencyGraph)
 	if err != nil {
 		t.Fatalf("CompileRule failed: %v", err)
 	}
@@ -433,8 +446,10 @@ func TestCompileRuleWithUnsupportedOperator(t *testing.T) {
 		},
 	}
 
+	dependencyGraph := NewDependencyGraph()
+
 	// Compile the rule
-	instructions, err := CompileRule(unsupportedRule)
+	instructions, err := CompileRule(unsupportedRule, dependencyGraph)
 
 	// Check that no instructions were generated and an error was returned
 	if instructions != nil {
@@ -503,8 +518,10 @@ func TestCompileRuleWithMixedConditions(t *testing.T) {
 		},
 	}
 
+	dependencyGraph := NewDependencyGraph()
+
 	// Compile the complex rule
-	compiledInstructions, err := CompileRule(complexRule)
+	compiledInstructions, err := CompileRule(complexRule, dependencyGraph)
 	if err != nil {
 		t.Errorf("Failed to compile rule: %v", err)
 	}
@@ -554,8 +571,10 @@ func TestCompileRuleWithActionsHavingInvalidTargets(t *testing.T) {
 		},
 	}
 
+	dependencyGraph := NewDependencyGraph()
+
 	// Compile the rule
-	compiled, err := CompileRule(testRule)
+	compiled, err := CompileRule(testRule, dependencyGraph)
 	if err == nil {
 		t.Errorf("CompileRule did not return an error for invalid targets")
 	}

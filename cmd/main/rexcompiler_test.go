@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"rgehrsitz/rex/internal/rule"
 	"testing"
-
-	"github.com/google/uuid"
 )
 
 // TestReadAndParseRules tests the readAndParseRules function
@@ -95,7 +93,7 @@ func TestReadAndParseRules(t *testing.T) {
 				t.Fatalf("Failed to write to temp file: %s", err)
 			}
 
-			rules, _, err := ReadAndParseRules(tempFilePath)
+			rules, err := ReadAndParseRules(tempFilePath)
 			if tc.expectErr {
 				if err == nil {
 					t.Errorf("Expected an error, but got nil")
@@ -246,28 +244,19 @@ func TestCompileRuleWithCircularDependencies(t *testing.T) {
 	tempFile.Close() // Close the file after writing
 
 	// Now use the temp file path in the ReadAndParseRules function
-	rules, rulesMap, err := ReadAndParseRules(tempFile.Name())
+	rules, err := ReadAndParseRules(tempFile.Name())
 	if err != nil {
 		t.Fatalf("Failed to read rules: %v", err)
 	}
 
-	compiledRules, err := CompileRules(rules)
+	_, err = CompileRules(rules)
 	if err != nil {
 		t.Fatalf("Failed to compile rules: %v", err)
 	}
 
-	// Check for circular dependencies
-	for _, compiledRule := range compiledRules {
-		originalRuleName := rulesMap[compiledRule.UUID]
-		for _, dependencyUUIDStr := range compiledRule.Dependencies {
-			dependencyUUID, err := uuid.Parse(dependencyUUIDStr)
-			if err != nil {
-				t.Errorf("Failed to parse UUID: %s", dependencyUUIDStr)
-				continue
-			}
-			if rulesMap[dependencyUUID] == originalRuleName {
-				t.Errorf("Circular dependency detected in rule: %s", originalRuleName)
-			}
-		}
+	// Check the expected behavior of the compiler
+	if err == nil {
+		t.Error("Expected an error due to circular dependencies, but got none")
 	}
+
 }
