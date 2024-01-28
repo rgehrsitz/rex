@@ -53,7 +53,7 @@ func compileRules(filename string) []compiler.CompiledRule {
 	}
 
 	// Compile the rules
-	compiledRules, err := compiler.CompileRulesWithDependencies(rules)
+	compiledRules, err := compiler.CompileRuleSet(rules)
 	if err != nil {
 		log.Fatalf("Error compiling rules: %v", err)
 	}

@@ -27,14 +27,14 @@ func main() {
 	// Read and parse the rules file
 	rules, err := ReadAndParseRules(*rulesFilePath)
 	if err != nil {
-		fmt.Printf("Error reading or parsing rules file: %s\\n", err)
+		fmt.Printf("Error reading or parsing rules file: %s\n", err)
 		os.Exit(1)
 	}
 
-	// Compile the rules
-	compiledRules, err := CompileRules(rules)
+	// Compile the rules with dependencies
+	compiledRules, err := compiler.CompileRuleSet(rules)
 	if err != nil {
-		fmt.Printf("Error compiling rules: %s\\n", err)
+		fmt.Printf("Error compiling rules: %s\n", err)
 		os.Exit(1)
 	}
 

@@ -93,11 +93,6 @@ func CompileRule(r *rule.Rule, graph *DependencyGraph, allRules []rule.Rule) ([]
 		}
 	}
 
-	// Check for Circular Dependencies
-	if graph.CheckCircularDependency(r.Name) {
-		return nil, fmt.Errorf("circular dependency detected in rule '%s'", r.Name)
-	}
-
 	return instructions, nil
 }
 
@@ -244,55 +239,44 @@ func compileContainsCondition(cond rule.Condition) ([]bytecode.Instruction, erro
 	return instructions, nil
 }
 
-func CompileRulesWithDependencies(rules []rule.Rule) ([]CompiledRule, error) {
+func CompileRuleSet(rules []rule.Rule) ([]CompiledRule, error) {
 	compiledRules := make([]CompiledRule, len(rules))
 	dependencyGraph := NewDependencyGraph()
+	usedNames := make(map[string]struct{})
 
-	// Compile each rule and update the dependency graph
-	for i, r := range rules {
-		instructions, err := CompileRule(&r, dependencyGraph, rules)
+	// Ensure unique rule names and compile each rule
+	for _, r := range rules {
+		if _, exists := usedNames[r.Name]; exists {
+			return nil, fmt.Errorf("duplicate rule name detected: '%s'", r.Name)
+		}
+		usedNames[r.Name] = struct{}{}
+
+		// Compile each rule without checking for circular dependencies yet
+		instructions, err := CompileRule(&r, dependencyGraph, rules) // false indicates not to check for circular dependencies here
 		if err != nil {
 			return nil, fmt.Errorf("error compiling rule '%s': %w", r.Name, err)
 		}
-		compiledRules[i] = CompiledRule{
+
+		compiledRules = append(compiledRules, CompiledRule{
 			Name:         r.Name,
 			Instructions: instructions,
-			// Dependencies will be inferred directly from the dependency graph
+		})
+	}
+
+	// Check for circular dependencies after all rules are compiled
+	for _, rule := range rules {
+		if dependencyGraph.CheckCircularDependency(rule.Name) {
+			return nil, fmt.Errorf("circular dependency detected involving rule '%s'", rule.Name)
 		}
 	}
 
-	// Update dependencies for each compiled rule
+	// Set dependencies for each compiled rule
 	for i, r := range rules {
-		compiledRules[i].Dependencies = append(compiledRules[i].Dependencies, dependencyGraph.edges[r.Name]...)
+		compiledRules[i].Dependencies = dependencyGraph.Dependencies(r.Name)
 	}
 
 	return compiledRules, nil
 }
-
-// func getReadFacts(conditions []rule.Condition) []string {
-// 	var facts []string
-// 	for _, cond := range conditions {
-// 		facts = append(facts, cond.Fact)
-// 		facts = append(facts, getReadFacts(cond.All)...)
-// 		facts = append(facts, getReadFacts(cond.Any)...)
-// 	}
-// 	return facts
-// }
-
-// func getWriteFacts(event rule.Event) []string {
-// 	var writeFacts []string
-
-// 	// Iterate over all actions in the event
-// 	for _, action := range event.Actions {
-// 		// Check if the action type is 'updateStore', which changes a fact
-// 		if action.Type == "updateStore" {
-// 			// Add the target of the action to the list of written facts
-// 			writeFacts = append(writeFacts, action.Target)
-// 		}
-// 	}
-
-// 	return writeFacts
-// }
 
 func compileAction(action rule.Action) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction

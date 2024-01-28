@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"rgehrsitz/rex/internal/compiler"
 	"rgehrsitz/rex/internal/rule"
+	"strings"
 	"testing"
 )
 
@@ -249,14 +251,13 @@ func TestCompileRuleWithCircularDependencies(t *testing.T) {
 		t.Fatalf("Failed to read rules: %v", err)
 	}
 
-	_, err = CompileRules(rules)
-	if err != nil {
-		t.Fatalf("Failed to compile rules: %v", err)
-	}
+	// Compile the rules and check for circular dependencies
+	_, err = compiler.CompileRuleSet(rules)
 
 	// Check the expected behavior of the compiler
 	if err == nil {
 		t.Error("Expected an error due to circular dependencies, but got none")
+	} else if !strings.Contains(err.Error(), "circular dependency detected") {
+		t.Errorf("Expected a circular dependency error, but got: %v", err)
 	}
-
 }
