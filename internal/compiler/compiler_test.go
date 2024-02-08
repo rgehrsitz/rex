@@ -1,7 +1,6 @@
 package compiler
 
 import (
-	"reflect"
 	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/rule"
 	"strings"
@@ -20,19 +19,17 @@ func TestCompileSimpleRule(t *testing.T) {
 		},
 	}
 
-	expected := []bytecode.Instruction{
+	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
 	}
+	expectedSensorDependencies := []string{"temperature"}
 
-	instructions, err := CompileRule(&r)
-	if err != nil {
-		t.Fatalf("CompileRule failed: %v", err)
-	}
+	instructions, sensorDependencies, err := CompileRule(&r)
 
-	if !reflect.DeepEqual(instructions, expected) {
-		t.Errorf("Expected %v, got %v", expected, instructions)
-	}
+	assert.NoError(t, err, "CompileRule should not fail")
+	assert.Equal(t, expectedInstructions, instructions, "Compiled instructions do not match expected")
+	assert.ElementsMatch(t, expectedSensorDependencies, sensorDependencies, "Sensor dependencies do not match expected")
 }
 
 // TestCompileRuleWithAnyConditions tests compiling a rule with 'Any' conditions.
@@ -47,7 +44,7 @@ func TestCompileRuleWithAnyConditions(t *testing.T) {
 	}
 
 	// Expected bytecode includes jump instructions for 'Any' logic
-	expected := []bytecode.Instruction{
+	expectedInstructions := []bytecode.Instruction{
 		// First condition
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{50}},
@@ -57,11 +54,13 @@ func TestCompileRuleWithAnyConditions(t *testing.T) {
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
 	}
+	expectedSensorDependencies := []string{"humidity", "windSpeed"}
 
-	instructions, err := CompileRule(&r)
+	instructions, sensorDependencies, err := CompileRule(&r)
+
 	assert.NoError(t, err, "CompileRule should not fail")
-
-	assert.Equal(t, expected, instructions, "Compiled instructions do not match expected")
+	assert.Equal(t, expectedInstructions, instructions, "Compiled instructions do not match expected")
+	assert.ElementsMatch(t, expectedSensorDependencies, sensorDependencies, "Sensor dependencies do not match expected")
 }
 
 // TestCompileEmptyConditions tests compiling a rule with no conditions.
@@ -73,22 +72,11 @@ func TestCompileEmptyConditions(t *testing.T) {
 		},
 	}
 
-	// An empty slice for expected instructions
-	var expected []bytecode.Instruction
+	instructions, sensorDependencies, err := CompileRule(&r)
 
-	instructions, err := CompileRule(&r)
-	if err != nil {
-		t.Fatalf("CompileRule failed: %v", err)
-	}
-
-	if !isEmpty(instructions) || !isEmpty(expected) {
-		t.Errorf("Expected an empty instruction set, got %v", instructions)
-	}
-}
-
-// isEmpty checks if a slice of instructions is empty.
-func isEmpty(instructions []bytecode.Instruction) bool {
-	return len(instructions) == 0
+	assert.NoError(t, err, "CompileRule should not fail")
+	assert.Empty(t, instructions, "Expected an empty instruction set")
+	assert.Empty(t, sensorDependencies, "Expected no sensor dependencies")
 }
 
 // TestCompileInvalidCondition tests error handling for an invalid condition.
@@ -102,17 +90,13 @@ func TestCompileInvalidCondition(t *testing.T) {
 		},
 	}
 
-	_, err := CompileRule(&r)
-	if err == nil {
-		t.Errorf("Expected an error for invalid operator, but got none")
-	}
+	_, _, err := CompileRule(&r) // Adjusted to capture all return values
+	assert.Error(t, err, "Expected an error for invalid operator")
 
 	// Optionally, you can check for specific error messages if your implementation
 	// returns descriptive errors for different types of invalid conditions.
 	expectedErrMsg := "unsupported operator: invalidOperator"
-	if err.Error() != expectedErrMsg {
-		t.Errorf("Expected error message '%s', got '%s'", expectedErrMsg, err.Error())
-	}
+	assert.EqualError(t, err, expectedErrMsg, "Error message does not match expected")
 }
 
 // TestCompileNestedConditions tests compiling a rule with nested conditions.
@@ -143,7 +127,7 @@ func TestCompileNestedConditions(t *testing.T) {
 		},
 	}
 
-	expected := []bytecode.Instruction{
+	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
@@ -152,11 +136,14 @@ func TestCompileNestedConditions(t *testing.T) {
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
 	}
+	// Since we're dealing with nested conditions, let's assume the sensors "temperature", "humidity", and "windSpeed" are involved.
+	expectedSensorDependencies := []string{"temperature", "humidity", "windSpeed"}
 
-	instructions, err := CompileRule(&r)
+	instructions, sensorDependencies, err := CompileRule(&r)
 
 	assert.NoError(t, err, "CompileRule should not fail")
-	assert.Equal(t, expected, instructions, "Compiled instructions do not match expected")
+	assert.Equal(t, expectedInstructions, instructions, "Compiled instructions do not match expected")
+	assert.ElementsMatch(t, expectedSensorDependencies, sensorDependencies, "Sensor dependencies do not match expected")
 }
 
 // TestCompileComplexRule tests compiling a rule with a mix of 'All', 'Any', and nested conditions.
@@ -206,7 +193,7 @@ func TestCompileComplexRule(t *testing.T) {
 	}
 
 	// Expected bytecode should reflect the complex logic described above
-	expected := []bytecode.Instruction{
+	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
@@ -219,10 +206,14 @@ func TestCompileComplexRule(t *testing.T) {
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"dayOfWeek"}},
 		{Opcode: bytecode.OpEqual, Operands: []interface{}{"Saturday"}},
 	}
+	// Assuming expectedSensorDependencies based on the rule's conditions
+	expectedSensorDependencies := []string{"temperature", "humidity", "windSpeed", "isRaining", "dayOfWeek"}
 
-	instructions, err := CompileRule(&r)
+	instructions, sensorDependencies, err := CompileRule(&r)
+
 	assert.NoError(t, err, "CompileRule should not fail")
-	assert.Equal(t, expected, instructions, "Compiled instructions do not match expected")
+	assert.Equal(t, expectedInstructions, instructions, "Compiled instructions do not match expected")
+	assert.ElementsMatch(t, expectedSensorDependencies, sensorDependencies, "Sensor dependencies do not match expected")
 }
 
 func TestCompileRuleWithEvents(t *testing.T) {
@@ -234,22 +225,24 @@ func TestCompileRuleWithEvents(t *testing.T) {
 		},
 		Event: rule.Event{
 			EventType:      "Alert",
-			CustomProperty: "Temperature too high", // Note: This might not directly translate to an operand based on your CompileRule implementation.
+			CustomProperty: "Temperature too high", // This might not directly translate to an operand based on your CompileRule implementation.
 		},
 	}
 
 	// Define expected bytecode, assuming specific opcodes for event handling
-	expected := []bytecode.Instruction{
+	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
 		// Adjust according to the actual implementation for event handling
 		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"Alert", "Temperature too high"}},
 	}
+	expectedSensorDependencies := []string{"temperature"} // Assuming temperature is the only sensor dependency
 
-	instructions, err := CompileRule(&r)
+	instructions, sensorDependencies, err := CompileRule(&r)
+
 	assert.NoError(t, err, "CompileRule should not fail")
-
-	assert.Equal(t, expected, instructions, "Compiled instructions do not match expected")
+	assert.Equal(t, expectedInstructions, instructions, "Compiled instructions do not match expected")
+	assert.ElementsMatch(t, expectedSensorDependencies, sensorDependencies, "Sensor dependencies do not match expected")
 }
 
 // TestCompileRuleSet tests the compilation of rules with dependency analysis
@@ -304,7 +297,8 @@ func TestCompileRuleSet(t *testing.T) {
 				{Opcode: bytecode.OpUpdateStore, Operands: []interface{}{"alertLevel", "high"}},
 				{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"TemperatureHigh", nil}},
 			},
-			Dependencies: nil, // Use nil to represent no dependencies, matching the actual output
+			RuleDependencies:   nil, // Use nil to represent no dependencies, matching the actual output
+			SensorDependencies: []string{"temperature"},
 		},
 		{
 			Name: "Rule2", // Add the correct rule name
@@ -314,7 +308,8 @@ func TestCompileRuleSet(t *testing.T) {
 				{Opcode: bytecode.OpSendMessage, Operands: []interface{}{"192.168.0.1", "Alert level high"}},
 				{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"SendAlert", nil}},
 			},
-			Dependencies: []string{"Rule1"}, // Correctly reflect dependencies
+			RuleDependencies:   []string{"Rule1"}, // Correctly reflect dependencies
+			SensorDependencies: []string{"alertLevel"},
 		},
 	}
 
@@ -347,25 +342,23 @@ func TestCompileComplexNestedConditions(t *testing.T) {
 	}
 
 	// Define the correct expected bytecode for the complex nested conditions
-	expected := []bytecode.Instruction{
-		// First 'Any' condition
+	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{50}},
-		// Jump if "humidity" condition is true, skipping the nested 'All'
-		// The jump should skip the next 4 instructions to go beyond the 'All' conditions
-		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{4}}, // This assumes 4 instructions to skip
-		// Nested 'All' conditions
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{4}}, // Adjusted for dynamic calculation
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{25}},
 	}
+	// Since this rule involves complex nested conditions, identify the sensor dependencies
+	expectedSensorDependencies := []string{"humidity", "windSpeed", "temperature"}
 
-	instructions, err := CompileRule(&r)
+	instructions, sensorDependencies, err := CompileRule(&r)
+
 	assert.NoError(t, err, "CompileRule should not return an error")
-
-	// Using assert.Equal to compare the instructions and expected output
-	assert.Equal(t, expected, instructions, "Compiled instructions do not match expected output")
+	assert.Equal(t, expectedInstructions, instructions, "Compiled instructions do not match expected output")
+	assert.ElementsMatch(t, expectedSensorDependencies, sensorDependencies, "Sensor dependencies do not match expected")
 }
 
 func TestCompileRuleWithMultipleActions(t *testing.T) {
@@ -392,26 +385,24 @@ func TestCompileRuleWithMultipleActions(t *testing.T) {
 		},
 	}
 
-	expected := []bytecode.Instruction{
+	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{30}},
 		{Opcode: bytecode.OpUpdateStore, Operands: []interface{}{"alertLevel", "high"}},
 		{Opcode: bytecode.OpSendMessage, Operands: []interface{}{"192.168.0.101", "Temperature exceeded 30 degrees"}},
 		{Opcode: bytecode.OpTriggerEvent, Operands: []interface{}{"HighTemperature", nil}},
 	}
+	// Assuming no sensor dependencies are directly specified by the actions in this case
+	expectedSensorDependencies := []string{"temperature"}
 
-	instructions, err := CompileRule(&r)
-	if err != nil {
-		t.Fatalf("CompileRule failed: %v", err)
-	}
+	instructions, sensorDependencies, err := CompileRule(&r)
 
-	if !reflect.DeepEqual(instructions, expected) {
-		t.Errorf("Expected %v, got %v", expected, instructions)
-	}
+	assert.NoError(t, err, "CompileRule should not fail")
+	assert.Equal(t, expectedInstructions, instructions, "Compiled instructions do not match expected")
+	assert.ElementsMatch(t, expectedSensorDependencies, sensorDependencies, "Sensor dependencies do not match expected")
 }
 
 func TestCompileRuleWithUnsupportedOperator(t *testing.T) {
-	// Define a rule with an unsupported operator
 	unsupportedRule := rule.Rule{
 		Name: "TestRuleWithUnsupportedOperator",
 		Conditions: rule.Conditions{
@@ -428,20 +419,13 @@ func TestCompileRuleWithUnsupportedOperator(t *testing.T) {
 		},
 	}
 
-	instructions, err := CompileRule(&unsupportedRule)
+	instructions, sensorDependencies, err := CompileRule(&unsupportedRule)
 
-	// Check that no instructions were generated and an error was returned
-	if len(instructions) != 0 {
-		t.Errorf("Expected no instructions to be generated for an unsupported operator, got: %v", instructions)
-	}
-
-	if err == nil {
-		t.Fatal("Expected an error to be returned for an unsupported operator, got nil")
-	}
-
-	if !containsSubstring(err.Error(), "unsupported operator") {
-		t.Errorf("Expected error message to contain 'unsupported operator', got: %s", err.Error())
-	}
+	// Using assert library for cleaner checks
+	assert.Empty(t, instructions, "Expected no instructions to be generated for an unsupported operator")
+	assert.Empty(t, sensorDependencies, "Expected no sensor dependencies for an unsupported operator")
+	assert.Error(t, err, "Expected an error to be returned for an unsupported operator")
+	assert.Contains(t, err.Error(), "unsupported operator", "Expected error message to contain 'unsupported operator'")
 }
 
 // Helper function to check if a substring is present in a string
@@ -497,25 +481,21 @@ func TestCompileRuleWithMixedConditions(t *testing.T) {
 		},
 	}
 
-	compiledInstructions, err := CompileRule(&complexRule)
+	compiledInstructions, sensorDependencies, err := CompileRule(&complexRule)
 
-	if err != nil {
-		t.Errorf("Failed to compile rule: %v", err)
-	}
-
-	// Add assertions to check if the compiled instructions meet the expected criteria
-	// This could include checking the length of the compiled instructions,
-	// specific opcodes, or other relevant attributes
-	if len(compiledInstructions) == 0 {
-		t.Errorf("Compiled instructions are empty")
-	}
+	assert.NoError(t, err, "Failed to compile rule")
+	assert.NotEmpty(t, compiledInstructions, "Compiled instructions are empty")
 
 	// Example assertion: check if the first opcode is OpLoadFact for temperature
-	if compiledInstructions[0].Opcode != bytecode.OpLoadFact || compiledInstructions[0].Operands[0] != "temperature" {
-		t.Errorf("Expected first instruction to load fact 'temperature', got: %v", compiledInstructions[0])
-	}
+	expectedFirstInstruction := bytecode.Instruction{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}}
+	assert.Equal(t, expectedFirstInstruction, compiledInstructions[0], "First instruction does not match expected load fact 'temperature'")
 
-	// Additional assertions can be added as needed to validate the compilation
+	// Since the rule involves sensors "temperature", "humidity", "windSpeed", and "rain",
+	// assert that all are included in sensorDependencies
+	expectedSensors := []string{"temperature", "humidity", "windSpeed", "rain"}
+	assert.ElementsMatch(t, expectedSensors, sensorDependencies, "Sensor dependencies do not match expected")
+
+	// Additional assertions can be added as needed to validate the compilation details
 }
 
 // TestCompileRuleWithActionsHavingInvalidTargets tests the compiler's handling of actions with invalid targets.
@@ -548,13 +528,79 @@ func TestCompileRuleWithActionsHavingInvalidTargets(t *testing.T) {
 		},
 	}
 
-	compiled, err := CompileRule(&testRule)
-	if err == nil {
-		t.Errorf("CompileRule did not return an error for invalid targets")
-	}
+	instructions, sensorDependencies, err := CompileRule(&testRule)
+
+	// Use assert to check if an error was returned due to invalid targets
+	assert.Error(t, err, "CompileRule should return an error for invalid targets")
+
+	// Additionally, check if the error is specific to invalid targets if your implementation supports detailed error messages
 
 	// Check if the compiled output is empty as expected in case of an error
-	if len(compiled) != 0 {
-		t.Errorf("CompileRule returned compiled instructions despite invalid targets")
+	assert.Empty(t, instructions, "CompileRule should not return instructions for rules with invalid targets")
+
+	// Since sensorDependencies is not directly related to the validity of the targets, its assertion might not be necessary unless your logic specifies otherwise.
+	// However, if you want to ensure it's empty or has specific content despite the error, you can assert as follows:
+	assert.Empty(t, sensorDependencies, "Sensor dependencies should be empty for rules with invalid targets")
+}
+
+func TestCompileRuleWithCyclicDependencies(t *testing.T) {
+	// Define rules that create a cyclic dependency
+	rules := []rule.Rule{
+		{
+			Name: "RuleA",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "factB", Operator: "equal", Value: true}, // Depends on a fact produced by RuleB
+				},
+			},
+			Event: rule.Event{
+				Actions: []rule.Action{
+					{Type: "produceFact", Target: "factA", Value: true}, // Produces factA
+				},
+			},
+		},
+		{
+			Name: "RuleB",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "factA", Operator: "equal", Value: true}, // Depends on a fact produced by RuleA
+				},
+			},
+			Event: rule.Event{
+				Actions: []rule.Action{
+					{Type: "produceFact", Target: "factB", Value: true}, // Produces factB
+				},
+			},
+		},
 	}
+
+	// Attempt to compile the rules
+	compiledRules, err := CompileRuleSet(rules)
+
+	// Verify that the compiler correctly identifies and rejects the cyclic dependency
+	assert.Nil(t, compiledRules, "Compiled rules should be nil due to cyclic dependency")
+	assert.Error(t, err, "An error should be returned due to cyclic dependency")
+}
+
+func TestCompileRuleWithErrorHandling(t *testing.T) {
+	// Define a rule with a condition that uses an unsupported operator
+	r := rule.Rule{
+		Name: "RuleWithError",
+		Conditions: rule.Conditions{
+			All: []rule.Condition{
+				{Fact: "temperature", Operator: "unknownOperator", Value: 30},
+			},
+		},
+		Event: rule.Event{
+			Actions: []rule.Action{
+				{Type: "notify", Target: "admin", Value: "Error encountered in rule evaluation"},
+			},
+		},
+	}
+
+	// Attempt to compile the rule
+	_, _, err := CompileRule(&r)
+
+	// Check if an error was returned due to the unsupported operator
+	assert.Error(t, err, "Compilation should fail due to unsupported operator")
 }

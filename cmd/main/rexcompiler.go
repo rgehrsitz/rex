@@ -85,21 +85,19 @@ func CompileRules(rules []rule.Rule) ([]compiler.CompiledRule, error) {
 
 	// Compile each rule
 	for _, r := range rules {
-		instructions, err := compiler.CompileRule(&r)
+		// Adjusted to capture sensorDependencies from the updated CompileRule signature
+		instructions, sensorDependencies, err := compiler.CompileRule(&r)
 		if err != nil {
 			return nil, fmt.Errorf("error compiling rule '%s': %w", r.Name, err)
 		}
+		// Include sensorDependencies in the compiled rule
 		compiledRule := compiler.CompiledRule{
-			Name:         r.Name,
-			Instructions: instructions,
-			// Dependencies will be set later based on the dependency graph
+			Name:               r.Name,
+			Instructions:       instructions,
+			RuleDependencies:   dependencyGraph.Dependencies(r.Name), // Now immediately setting dependencies
+			SensorDependencies: sensorDependencies,                   // Include sensor dependencies
 		}
 		compiled = append(compiled, compiledRule)
-	}
-
-	// Set dependencies for each compiled rule
-	for i, r := range rules {
-		compiled[i].Dependencies = append(compiled[i].Dependencies, dependencyGraph.Dependencies(r.Name)...)
 	}
 
 	return compiled, nil

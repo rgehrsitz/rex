@@ -8,9 +8,10 @@ import (
 )
 
 type CompiledRule struct {
-	Name         string
-	Instructions []bytecode.Instruction
-	Dependencies []string // Names of dependent rules
+	Name               string
+	Instructions       []bytecode.Instruction
+	RuleDependencies   []string // Names of dependent rules
+	SensorDependencies []string // Names of sensors (facts) required for the rule
 }
 
 // DependencyGraph represents the graph of rule dependencies using rule names
@@ -50,71 +51,113 @@ func (g *DependencyGraph) CheckCircularDependency(node string) bool {
 	return false
 }
 
-func CompileRule(r *rule.Rule) ([]bytecode.Instruction, error) {
+func CompileRule(r *rule.Rule) ([]bytecode.Instruction, []string, error) {
 	var instructions []bytecode.Instruction
+	sensorDependenciesMap := make(map[string]struct{}) // Use map to avoid duplicates
 
-	// Compile 'All' Conditions directly since they don't require special jump logic
-	for _, cond := range r.Conditions.All {
-		compiled, err := compileCondition(cond)
-		if err != nil {
-			return nil, err
+	// Function to recursively compile conditions and collect sensor dependencies
+	var compileConditions func([]rule.Condition)
+	compileConditions = func(conditions []rule.Condition) {
+		for _, cond := range conditions {
+			if cond.Fact != "" {
+				sensorDependenciesMap[cond.Fact] = struct{}{} // Add fact as a sensor dependency
+			}
+			// Recursively compile nested 'All' conditions
+			if len(cond.All) > 0 {
+				compileConditions(cond.All)
+			}
+			// Recursively compile nested 'Any' conditions
+			if len(cond.Any) > 0 {
+				compileConditions(cond.Any)
+			}
+			// Compile the current condition
+			compiled, err := compileCondition(cond)
+			if err != nil {
+				continue // Handle error appropriately
+			}
+			instructions = append(instructions, compiled...)
 		}
-		instructions = append(instructions, compiled...)
 	}
 
-	// Special handling for 'Any' Conditions to implement jump logic
-	if len(r.Conditions.Any) > 0 {
-		compiledAny, err := compileAnyConditions(r.Conditions.Any)
-		if err != nil {
-			return nil, err
-		}
-		instructions = append(instructions, compiledAny...)
-	}
+	// Compile 'All' and 'Any' conditions using the recursive function
+	compileConditions(r.Conditions.All)
+	compileConditions(r.Conditions.Any)
 
 	// Compile Actions
 	for _, action := range r.Event.Actions {
 		compiledAction, err := compileAction(action)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		instructions = append(instructions, compiledAction...)
+		// This section is simplified since actions don't contribute to sensorDependencies in this context
+	}
+
+	// Convert sensorDependenciesMap to slice
+	var sensorDependencies []string
+	for sensor := range sensorDependenciesMap {
+		sensorDependencies = append(sensorDependencies, sensor)
 	}
 
 	// Conditionally append event trigger instruction if an event type is defined
 	if r.Event.EventType != "" {
 		eventOperands := []interface{}{r.Event.EventType}
-		// Include CustomProperty if it's not empty, otherwise append nil for consistency
 		if r.Event.CustomProperty != "" {
 			eventOperands = append(eventOperands, r.Event.CustomProperty)
 		} else {
 			eventOperands = append(eventOperands, nil)
 		}
-
 		instructions = append(instructions, bytecode.Instruction{
 			Opcode:   bytecode.OpTriggerEvent,
 			Operands: eventOperands,
 		})
 	}
 
-	return instructions, nil
+	return instructions, sensorDependencies, nil
 }
 
-func compileCondition(cond rule.Condition) ([]bytecode.Instruction, error) {
+func compileCondition(cond rule.Condition, sensorDependencies *map[string]struct{}) ([]bytecode.Instruction, error) {
+	var instructions []bytecode.Instruction
 
-	if len(cond.All) > 0 || len(cond.Any) > 0 {
-		// Handle nested conditions
-		return compileNestedCondition(cond)
+	if cond.Fact != "" {
+		(*sensorDependencies)[cond.Fact] = struct{}{}
+
+		switch cond.Operator {
+		case "equal", "notEqual", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual":
+			compInstructions, err := compileComparisonCondition(cond)
+			if err != nil {
+				return nil, err
+			}
+			instructions = append(instructions, compInstructions...)
+		case "contains", "notContains":
+			containsInstructions, err := compileContainsCondition(cond)
+			if err != nil {
+				return nil, err
+			}
+			instructions = append(instructions, containsInstructions...)
+		default:
+			return nil, fmt.Errorf("unsupported operator: %s", cond.Operator)
+		}
 	}
 
-	// Convert condition based on the operator
-	switch cond.Operator {
-	case "equal", "notEqual", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual":
-		return compileComparisonCondition(cond)
-	case "contains", "notContains":
-		return compileContainsCondition(cond)
-	default:
-		return nil, fmt.Errorf("unsupported operator: %s", cond.Operator)
+	// Recursive handling for 'All' and 'Any' nested conditions
+	for _, nestedCond := range cond.All {
+		nestedInstructions, err := compileCondition(nestedCond, sensorDependencies)
+		if err != nil {
+			return nil, err
+		}
+		instructions = append(instructions, nestedInstructions...)
 	}
+
+	if len(cond.Any) > 0 {
+		anyInstructions, err := compileAnyConditions(cond.Any, sensorDependencies)
+		if err != nil {
+			return nil, err
+		}
+		instructions = append(instructions, anyInstructions...)
+	}
+
+	return instructions, nil
 }
 
 func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, error) {
@@ -249,18 +292,18 @@ func CompileRuleSet(rules []rule.Rule) ([]CompiledRule, error) {
 		}
 		usedNames[r.Name] = struct{}{}
 
-		instructions, err := CompileRule(&r) // Note: Adjust CompileRule as needed
+		instructions, sensorDependencies, err := CompileRule(&r)
 		if err != nil {
 			return nil, fmt.Errorf("error compiling rule '%s': %w", r.Name, err)
 		}
 
-		// Append compiled rule
-		compiledRule := CompiledRule{
-			Name:         r.Name,
-			Instructions: instructions,
-			Dependencies: dependencyGraph.Dependencies(r.Name), // Set dependencies from the preprocessed graph
-		}
-		compiledRules = append(compiledRules, compiledRule)
+		// Include sensorDependencies in the CompiledRule
+		compiledRules = append(compiledRules, CompiledRule{
+			Name:               r.Name,
+			Instructions:       instructions,
+			RuleDependencies:   dependencyGraph.Dependencies(r.Name), // Rule dependencies
+			SensorDependencies: sensorDependencies,                   // Sensor dependencies
+		})
 	}
 
 	// Circular dependency check might still be relevant but ensure it's done based on the preprocessed graph
