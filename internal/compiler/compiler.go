@@ -50,14 +50,10 @@ func (g *DependencyGraph) CheckCircularDependency(node string) bool {
 	return false
 }
 
-func CompileRule(r *rule.Rule, graph *DependencyGraph, allRules []rule.Rule) ([]bytecode.Instruction, error) {
+func CompileRule(r *rule.Rule) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
 
-	// Analyze and Populate ConsumedFacts and ProducedFacts
-	r.ConsumedFacts = getConsumedFacts(r.Conditions)
-	r.ProducedFacts = getProducedFacts(r.Event.Actions)
-
-	// Compile 'All' Conditions
+	// Compile 'All' Conditions directly since they don't require special jump logic
 	for _, cond := range r.Conditions.All {
 		compiled, err := compileCondition(cond)
 		if err != nil {
@@ -66,13 +62,13 @@ func CompileRule(r *rule.Rule, graph *DependencyGraph, allRules []rule.Rule) ([]
 		instructions = append(instructions, compiled...)
 	}
 
-	// Compile 'Any' Conditions
-	for _, cond := range r.Conditions.Any {
-		compiled, err := compileCondition(cond)
+	// Special handling for 'Any' Conditions to implement jump logic
+	if len(r.Conditions.Any) > 0 {
+		compiledAny, err := compileAnyConditions(r.Conditions.Any)
 		if err != nil {
 			return nil, err
 		}
-		instructions = append(instructions, compiled...)
+		instructions = append(instructions, compiledAny...)
 	}
 
 	// Compile Actions
@@ -84,26 +80,23 @@ func CompileRule(r *rule.Rule, graph *DependencyGraph, allRules []rule.Rule) ([]
 		instructions = append(instructions, compiledAction...)
 	}
 
-	// Update Dependency Graph
-	for _, consumedFact := range r.ConsumedFacts {
-		for _, otherRule := range allRules {
-			if contains(otherRule.ProducedFacts, consumedFact) && otherRule.Name != r.Name {
-				graph.AddDependency(r.Name, otherRule.Name)
-			}
+	// Conditionally append event trigger instruction if an event type is defined
+	if r.Event.EventType != "" {
+		eventOperands := []interface{}{r.Event.EventType}
+		// Include CustomProperty if it's not empty, otherwise append nil for consistency
+		if r.Event.CustomProperty != "" {
+			eventOperands = append(eventOperands, r.Event.CustomProperty)
+		} else {
+			eventOperands = append(eventOperands, nil)
 		}
+
+		instructions = append(instructions, bytecode.Instruction{
+			Opcode:   bytecode.OpTriggerEvent,
+			Operands: eventOperands,
+		})
 	}
 
 	return instructions, nil
-}
-
-// contains checks if a slice of strings contains a specific string.
-func contains(slice []string, element string) bool {
-	for _, item := range slice {
-		if item == element {
-			return true
-		}
-	}
-	return false
 }
 
 func compileCondition(cond rule.Condition) ([]bytecode.Instruction, error) {
@@ -126,6 +119,7 @@ func compileCondition(cond rule.Condition) ([]bytecode.Instruction, error) {
 
 func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
+	// This slice stores the positions where the jump instructions will be patched.
 	var jumpPlaceholders []int
 
 	for i, cond := range conditions {
@@ -135,19 +129,19 @@ func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, 
 		}
 		instructions = append(instructions, compiled...)
 
-		// For all but the last condition, add a jump instruction
+		// For all but the last condition, append a jump instruction placeholder
 		if i < len(conditions)-1 {
-			jumpPlaceholder := len(instructions)
-			jumpPlaceholders = append(jumpPlaceholders, jumpPlaceholder)
+			jumpPlaceholders = append(jumpPlaceholders, len(instructions))
+			// Append a placeholder jump instruction; actual target set later
 			instructions = append(instructions, bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}})
 		}
 	}
 
-	// Correctly set jump destinations
-	endOfAnyBlock := len(instructions)
+	// Now, set the correct targets for the jump instructions
 	for _, placeholder := range jumpPlaceholders {
-		// Adjusting the destination to account for the position of the jump instruction itself
-		instructions[placeholder].Operands[0] = endOfAnyBlock + 1
+		// Calculate how far we need to jump ahead to skip the remaining conditions
+		// The target is the total length of instructions minus the position of the jump instruction itself
+		instructions[placeholder].Operands[0] = len(instructions) - placeholder - 1
 	}
 
 	return instructions, nil
@@ -240,39 +234,40 @@ func compileContainsCondition(cond rule.Condition) ([]bytecode.Instruction, erro
 }
 
 func CompileRuleSet(rules []rule.Rule) ([]CompiledRule, error) {
-	compiledRules := make([]CompiledRule, len(rules))
-	dependencyGraph := NewDependencyGraph()
+	var compiledRules []CompiledRule
 	usedNames := make(map[string]struct{})
 
-	// Ensure unique rule names and compile each rule
+	PreprocessRulesFacts(rules)
+	dependencyGraph := PreprocessDependencies(rules)
+
+	// Assuming preprocessing of facts and dependencies has already been done,
+	// and a filled dependencyGraph is passed as a parameter
+
 	for _, r := range rules {
 		if _, exists := usedNames[r.Name]; exists {
 			return nil, fmt.Errorf("duplicate rule name detected: '%s'", r.Name)
 		}
 		usedNames[r.Name] = struct{}{}
 
-		// Compile each rule without checking for circular dependencies yet
-		instructions, err := CompileRule(&r, dependencyGraph, rules) // false indicates not to check for circular dependencies here
+		instructions, err := CompileRule(&r) // Note: Adjust CompileRule as needed
 		if err != nil {
 			return nil, fmt.Errorf("error compiling rule '%s': %w", r.Name, err)
 		}
 
-		compiledRules = append(compiledRules, CompiledRule{
+		// Append compiled rule
+		compiledRule := CompiledRule{
 			Name:         r.Name,
 			Instructions: instructions,
-		})
+			Dependencies: dependencyGraph.Dependencies(r.Name), // Set dependencies from the preprocessed graph
+		}
+		compiledRules = append(compiledRules, compiledRule)
 	}
 
-	// Check for circular dependencies after all rules are compiled
-	for _, rule := range rules {
+	// Circular dependency check might still be relevant but ensure it's done based on the preprocessed graph
+	for _, rule := range compiledRules {
 		if dependencyGraph.CheckCircularDependency(rule.Name) {
 			return nil, fmt.Errorf("circular dependency detected involving rule '%s'", rule.Name)
 		}
-	}
-
-	// Set dependencies for each compiled rule
-	for i, r := range rules {
-		compiledRules[i].Dependencies = dependencyGraph.Dependencies(r.Name)
 	}
 
 	return compiledRules, nil
@@ -385,4 +380,38 @@ func getProducedFacts(actions []rule.Action) []string {
 		// Additional logic for other action types that produce facts, if any.
 	}
 	return producedFacts
+}
+
+func PreprocessRulesFacts(rules []rule.Rule) {
+	for i := range rules {
+		rules[i].ConsumedFacts = getConsumedFacts(rules[i].Conditions)
+		rules[i].ProducedFacts = getProducedFacts(rules[i].Event.Actions)
+	}
+}
+
+func PreprocessDependencies(rules []rule.Rule) *DependencyGraph {
+	graph := NewDependencyGraph()
+
+	// Create a mapping of produced facts to rules that produce them for efficient lookups
+	factToRule := make(map[string][]string)
+	for _, r := range rules {
+		for _, fact := range r.ProducedFacts {
+			factToRule[fact] = append(factToRule[fact], r.Name)
+		}
+	}
+
+	// Determine dependencies based on consumed facts
+	for _, r := range rules {
+		for _, fact := range r.ConsumedFacts {
+			if producers, exists := factToRule[fact]; exists {
+				for _, producer := range producers {
+					if producer != r.Name { // Avoid self-dependency
+						graph.AddDependency(r.Name, producer)
+					}
+				}
+			}
+		}
+	}
+
+	return graph
 }

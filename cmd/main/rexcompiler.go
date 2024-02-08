@@ -85,7 +85,7 @@ func CompileRules(rules []rule.Rule) ([]compiler.CompiledRule, error) {
 
 	// Compile each rule
 	for _, r := range rules {
-		instructions, err := compiler.CompileRule(&r, dependencyGraph, rules)
+		instructions, err := compiler.CompileRule(&r)
 		if err != nil {
 			return nil, fmt.Errorf("error compiling rule '%s': %w", r.Name, err)
 		}
