@@ -71,7 +71,7 @@ func CompileRule(r *rule.Rule) ([]bytecode.Instruction, []string, error) {
 				compileConditions(cond.Any)
 			}
 			// Compile the current condition
-			compiled, err := compileCondition(cond)
+			compiled, err := compileCondition(cond, sensorDependenciesMap)
 			if err != nil {
 				continue // Handle error appropriately
 			}
@@ -116,11 +116,11 @@ func CompileRule(r *rule.Rule) ([]bytecode.Instruction, []string, error) {
 	return instructions, sensorDependencies, nil
 }
 
-func compileCondition(cond rule.Condition, sensorDependencies *map[string]struct{}) ([]bytecode.Instruction, error) {
+func compileCondition(cond rule.Condition, sensorDependencies map[string]struct{}) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
 
 	if cond.Fact != "" {
-		(*sensorDependencies)[cond.Fact] = struct{}{}
+		(sensorDependencies)[cond.Fact] = struct{}{}
 
 		switch cond.Operator {
 		case "equal", "notEqual", "greaterThan", "lessThan", "greaterThanOrEqual", "lessThanOrEqual":
@@ -160,43 +160,41 @@ func compileCondition(cond rule.Condition, sensorDependencies *map[string]struct
 	return instructions, nil
 }
 
-func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, error) {
+func compileAnyConditions(conditions []rule.Condition, sensorDependencies map[string]struct{}) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
-	// This slice stores the positions where the jump instructions will be patched.
-	var jumpPlaceholders []int
+	jumpPlaceholders := make([]int, 0)
 
-	for i, cond := range conditions {
-		compiled, err := compileCondition(cond)
+	for i, condition := range conditions {
+		compiledCondition, err := compileCondition(condition, sensorDependencies)
 		if err != nil {
 			return nil, err
 		}
-		instructions = append(instructions, compiled...)
+		instructions = append(instructions, compiledCondition...)
 
-		// For all but the last condition, append a jump instruction placeholder
+		// If not the last condition, add a jump placeholder
 		if i < len(conditions)-1 {
-			jumpPlaceholders = append(jumpPlaceholders, len(instructions))
-			// Append a placeholder jump instruction; actual target set later
+			jumpPos := len(instructions)
+			jumpPlaceholders = append(jumpPlaceholders, jumpPos)
+			// Placeholder jump; target updated later
 			instructions = append(instructions, bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}})
 		}
 	}
 
-	// Now, set the correct targets for the jump instructions
+	// Update jump targets
+	finalPos := len(instructions)
 	for _, placeholder := range jumpPlaceholders {
-		// Calculate how far we need to jump ahead to skip the remaining conditions
-		// The target is the total length of instructions minus the position of the jump instruction itself
-		instructions[placeholder].Operands[0] = len(instructions) - placeholder - 1
+		instructions[placeholder].Operands[0] = finalPos - placeholder
 	}
 
 	return instructions, nil
 }
 
-func compileNestedCondition(cond rule.Condition) ([]bytecode.Instruction, error) {
+func compileNestedCondition(cond rule.Condition, sensorDependenciesMap map[string]struct{}) ([]bytecode.Instruction, error) {
 	var instructions []bytecode.Instruction
-	var err error
 
 	// Recursively compile 'All' conditions
 	for _, c := range cond.All {
-		nestedInstr, err := compileCondition(c)
+		nestedInstr, err := compileCondition(c, sensorDependenciesMap)
 		if err != nil {
 			return nil, err
 		}
@@ -205,14 +203,14 @@ func compileNestedCondition(cond rule.Condition) ([]bytecode.Instruction, error)
 
 	// Recursively compile 'Any' conditions
 	if len(cond.Any) > 0 {
-		anyInstr, err := compileAnyConditions(cond.Any)
+		anyInstr, err := compileAnyConditions(cond.Any, sensorDependenciesMap) // Corrected to include sensorDependenciesMap
 		if err != nil {
 			return nil, err
 		}
 		instructions = append(instructions, anyInstr...)
 	}
 
-	return instructions, err
+	return instructions, nil
 }
 
 // compileComparisonCondition handles comparison operators

@@ -3,7 +3,6 @@ package compiler
 import (
 	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/rule"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -426,11 +425,6 @@ func TestCompileRuleWithUnsupportedOperator(t *testing.T) {
 	assert.Empty(t, sensorDependencies, "Expected no sensor dependencies for an unsupported operator")
 	assert.Error(t, err, "Expected an error to be returned for an unsupported operator")
 	assert.Contains(t, err.Error(), "unsupported operator", "Expected error message to contain 'unsupported operator'")
-}
-
-// Helper function to check if a substring is present in a string
-func containsSubstring(s, substr string) bool {
-	return strings.Contains(s, substr)
 }
 
 func TestCompileRuleWithMixedConditions(t *testing.T) {
