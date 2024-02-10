@@ -32,6 +32,21 @@ func (r *RedisStore) GetValue(key string) (interface{}, error) {
 	return val, nil
 }
 
+func (r *RedisStore) GetValues(keys []string) (map[string]interface{}, error) {
+
+	values, err := r.client.MGet(context.Background(), keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]interface{}, len(keys))
+	for i, value := range values {
+		result[keys[i]] = value
+	}
+
+	return result, nil
+}
+
 func (r *RedisStore) Subscribe(key string, callback func(interface{})) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

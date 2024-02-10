@@ -3,7 +3,9 @@ package store
 // Store is an interface for key/value stores with pub/sub capabilities.
 type Store interface {
 	// GetValue retrieves a value for a given key from the store.
-	GetValue(key string) (interface{}, error)
+	GetValue(sensorName string) (interface{}, error)
+
+	GetValues(sensorNames []string) (map[string]interface{}, error)
 
 	// Subscribe sets up a subscription for changes to a specific key.
 	Subscribe(key string, callback func(interface{})) error

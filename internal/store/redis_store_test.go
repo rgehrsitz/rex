@@ -18,7 +18,7 @@ func TestRedisStoreSubscription(t *testing.T) {
 	}
 
 	// Create a new RedisStore instance with the real Redis server options
-	redisStore := NewRedisStore(opts).(*RedisStore)
+	redisStore := NewRedisStore(opts)
 
 	testKey := "testKey"
 	receivedMessage := ""
@@ -60,7 +60,7 @@ func TestRedisStoreGetValue(t *testing.T) {
 	}
 
 	// Create a new RedisStore instance with the real Redis server options
-	redisStore := NewRedisStore(opts).(*RedisStore)
+	redisStore := NewRedisStore(opts)
 
 	testKey, testValue := "getValueKey", "someValue"
 
@@ -96,7 +96,7 @@ func TestRedisStoreErrorHandling(t *testing.T) {
 		// Include other options like password, DB, etc., if needed
 	}
 
-	redisStore := NewRedisStore(opts).(*RedisStore)
+	redisStore := NewRedisStore(opts)
 
 	// Use a unique key to avoid conflicts with other tests or processes
 	nonExistentKey := "uniqueNonExistentKeyForTesting"
@@ -137,7 +137,7 @@ func TestRedisStoreMultipleSubscriptions(t *testing.T) {
 		// Include other options like password, DB, etc., if needed
 	}
 
-	redisStore := NewRedisStore(opts).(*RedisStore)
+	redisStore := NewRedisStore(opts)
 
 	keys := []string{"testKey1", "testKey2", "testKey3"}
 	values := []string{"value1", "value2", "value3"}
