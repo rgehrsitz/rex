@@ -2,9 +2,8 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
-	"rgehrsitz/rex/internal/engine"
+	"rgehrsitz/rex/internal/rulesengine"
 	"rgehrsitz/rex/internal/store"
 
 	"github.com/redis/go-redis/v9"
@@ -13,7 +12,7 @@ import (
 func main() {
 	// Load compiled rules from a file
 	rulesFilePath := "path_to_compiled_rules.json" // Replace with the actual path
-	rules, err := engine.LoadRulesFromFile(rulesFilePath)
+	rules, err := rulesengine.LoadCompiledRulesFromFile(rulesFilePath)
 	if err != nil {
 		fmt.Printf("Error loading rules: %v\n", err)
 		os.Exit(1)
@@ -27,7 +26,7 @@ func main() {
 	redisStore := store.NewRedisStore(redisOptions)
 
 	// Initialize the rules engine with the loaded rules
-	rulesEngine := engine.NewRulesEngine(rules, redisStore)
+	rulesEngine := rulesengine.NewRulesEngine(rules, redisStore)
 
 	// Subscribe to sensor updates
 	subscribeToSensorUpdates(redisStore, rulesEngine)
@@ -36,19 +35,19 @@ func main() {
 	select {} // Prevents the application from exiting
 }
 
-func subscribeToSensorUpdates(redisStore store.Store, rulesEngine *engine.RulesEngine) {
-	// Assuming the RulesEngine has a method to extract the necessary sensor keys
-	sensorKeys := rulesEngine.ExtractSensorKeys()
+func subscribeToSensorUpdates(redisStore store.Store, rulesEngine *rulesengine.RulesEngine) {
+	// // Assuming the RulesEngine has a method to extract the necessary sensor keys
+	// sensorKeys := rulesEngine.ExtractSensorKeys()
 
-	// Subscribe to each sensor key
-	for _, key := range sensorKeys {
-		err := redisStore.Subscribe(key, func(data interface{}) {
-			// Process the incoming sensor data with the rules engine
-			rulesEngine.ProcessSensorData(key, data)
-		})
+	// // Subscribe to each sensor key
+	// for _, key := range sensorKeys {
+	// 	err := redisStore.Subscribe(key, func(data interface{}) {
+	// 		// Process the incoming sensor data with the rules engine
+	// 		//rulesEngine.ProcessSensorData(key, data)
+	// 	})
 
-		if err != nil {
-			log.Printf("Error subscribing to %s: %v", key, err)
-		}
-	}
+	// 	if err != nil {
+	// 		log.Printf("Error subscribing to %s: %v", key, err)
+	// 	}
+	// }
 }

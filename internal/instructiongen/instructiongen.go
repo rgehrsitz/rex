@@ -147,42 +147,11 @@ func compileComparisonCondition(cond rule.Condition) ([]bytecode.Instruction, []
 	}
 }
 
-// All Conditions (Logical AND)
+// compileAllConditions compiles all conditions with logical AND semantics.
+// It adds jump instructions to skip actions if any condition is false.
 func compileAllConditions(conditions []rule.Condition) ([]bytecode.Instruction, []string, error) {
 	var instructions []bytecode.Instruction
-	var jumpToEndIndexes []int // To keep track of where to update the jump target later.
 	var allSensorDeps []string
-
-	for _, cond := range conditions {
-		condInstructions, condDeps, err := CompileCondition(cond)
-		if err != nil {
-			return nil, nil, err
-		}
-		instructions = append(instructions, condInstructions...)
-		allSensorDeps = append(allSensorDeps, condDeps...)
-
-		// Add a jump instruction if this condition is false. The exact jump target will be set later.
-		jumpToEnd := bytecode.Instruction{
-			Opcode:   bytecode.OpJumpIfFalse,
-			Operands: []interface{}{0}, // Placeholder for the jump target, to be updated.
-		}
-		instructions = append(instructions, jumpToEnd)
-		jumpToEndIndexes = append(jumpToEndIndexes, len(instructions)-1)
-	}
-
-	// Update jump targets now that we know the final length of instructions
-	for _, index := range jumpToEndIndexes {
-		instructions[index].Operands[0] = len(instructions) - index
-	}
-
-	return instructions, allSensorDeps, nil
-}
-
-// Any Conditions (Logical OR)
-func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, []string, error) {
-	var instructions []bytecode.Instruction
-	var jumpToEndIndexes []int // To keep track of where to update the jump target later.
-	var anySensorDeps []string
 
 	for i, cond := range conditions {
 		condInstructions, condDeps, err := CompileCondition(cond)
@@ -190,26 +159,61 @@ func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, 
 			return nil, nil, err
 		}
 		instructions = append(instructions, condInstructions...)
-		anySensorDeps = append(anySensorDeps, condDeps...)
+		allSensorDeps = append(allSensorDeps, condDeps...)
 
-		// Add jump instruction logic as in the original code
+		// For all conditions except the last, add a jump instruction to skip to the end if the condition is false.
 		if i < len(conditions)-1 {
 			jumpToEnd := bytecode.Instruction{
-				Opcode:   bytecode.OpJumpIfTrue,
-				Operands: []interface{}{0}, // Placeholder to be updated
+				Opcode:   bytecode.OpJumpIfFalse,
+				Operands: []interface{}{0}, // Placeholder for the jump target, to be updated later.
 			}
 			instructions = append(instructions, jumpToEnd)
-			jumpToEndIndexes = append(jumpToEndIndexes, len(instructions)-1)
 		}
 	}
 
-	// Update jump targets for 'Any' conditions
-	finalPos := len(instructions)
-	for _, index := range jumpToEndIndexes {
-		instructions[index].Operands[0] = finalPos - index
+	// Update jump targets for all but the last condition.
+	// The final position after all instructions for conditions and actions are compiled is not known here,
+	// so the placeholder '0' is used and should be updated outside this function based on the overall rule compilation logic.
+	for i := range instructions {
+		if instructions[i].Opcode == bytecode.OpJumpIfFalse && i < len(instructions)-1 { // Avoid adjusting the last condition's non-existent jump
+			// Assuming the actions immediately follow the conditions, and knowing the final instruction set size,
+			// the jump target would be calculated to skip over all remaining conditions and actions.
+			// This placeholder adjustment logic will need to be refined based on the complete compilation process.
+			instructions[i].Operands[0] = len(instructions) - i
+		}
 	}
 
-	return instructions, anySensorDeps, nil
+	return instructions, deduplicate(allSensorDeps), nil
+}
+
+// Any Conditions (Logical OR)
+func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, []string, error) {
+	var instructions []bytecode.Instruction
+	var anySensorDeps []string
+	var jumpToEndIndexes []int // Track jump instruction positions for later update.
+
+	for _, cond := range conditions {
+		condInstructions, condDeps, err := CompileCondition(cond)
+		if err != nil {
+			return nil, nil, err
+		}
+		instructions = append(instructions, condInstructions...)
+		anySensorDeps = append(anySensorDeps, condDeps...)
+
+		// Append a jump instruction after each condition, to be updated later.
+		jumpToEnd := bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}}
+		instructions = append(instructions, jumpToEnd)
+		jumpToEndIndexes = append(jumpToEndIndexes, len(instructions)-1)
+	}
+
+	// Adjust the jump targets based on the final instruction count.
+	for _, index := range jumpToEndIndexes {
+		// Calculate distance to end of conditions block, assuming actions follow immediately.
+		// This might need adjustment to account for any intermediate instructions.
+		instructions[index].Operands[0] = len(instructions) - index + additionalOffset // Define additionalOffset based on actual layout.
+	}
+
+	return instructions, deduplicate(anySensorDeps), nil
 }
 
 func compileEquals(cond rule.Condition) ([]bytecode.Instruction, error) {
@@ -305,39 +309,36 @@ func optimizeConditions(conditions rule.Conditions) ([]bytecode.Instruction, []s
 	var optimizedInstructions []bytecode.Instruction
 	equalityChecks := make(map[string][]interface{})
 
-	// Identify equality checks on the same fact that can be combined
+	// Loop through all conditions to find 'equal' conditions on the same fact
 	for _, cond := range conditions.All {
 		if cond.Operator == "equal" {
 			equalityChecks[cond.Fact] = append(equalityChecks[cond.Fact], cond.Value)
 		}
 	}
 
-	// Generate optimized instructions for combined equality checks
+	// For each fact with multiple 'equal' conditions, generate an OpEqualAny instruction
 	for fact, values := range equalityChecks {
-		if len(values) > 1 {
+		if len(values) > 1 { // Only optimize if there are multiple equal checks on the same fact
 			optimizedInstructions = append(optimizedInstructions, bytecode.Instruction{
 				Opcode:   bytecode.OpLoadFact,
 				Operands: []interface{}{fact},
 			})
 			optimizedInstructions = append(optimizedInstructions, bytecode.Instruction{
 				Opcode:   bytecode.OpEqualAny,
-				Operands: values,
+				Operands: []interface{}{values},
 			})
 		}
 	}
 
-	// Return optimized instructions if we have any, otherwise return the original instructions
+	// If we have generated any optimized instructions, return them along with the sensor dependencies
 	if len(optimizedInstructions) > 0 {
-		return optimizedInstructions, extractSensorDependencies(equalityChecks)
+		sensorDeps := make([]string, 0, len(equalityChecks))
+		for fact := range equalityChecks {
+			sensorDeps = append(sensorDeps, fact)
+		}
+		return optimizedInstructions, deduplicate(sensorDeps)
 	}
-	return nil, nil
-}
 
-// extractSensorDependencies extracts sensor dependencies from the optimized conditions
-func extractSensorDependencies(equalityChecks map[string][]interface{}) []string {
-	var sensors []string
-	for sensor := range equalityChecks {
-		sensors = append(sensors, sensor)
-	}
-	return deduplicate(sensors)
+	// If no optimizations were applicable, return nil to indicate no optimizations were done
+	return nil, nil
 }

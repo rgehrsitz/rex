@@ -16,6 +16,7 @@ const (
 	OpContains
 	OpNotContains
 	OpTriggerEvent
+	OpEqualAny
 
 	// New opcodes for actions
 	OpUpdateStore // Opcode for updating a value in the store

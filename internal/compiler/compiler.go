@@ -14,6 +14,13 @@ type CompiledRule struct {
 	Instructions       []bytecode.Instruction
 	RuleDependencies   []string // Names of dependent rules
 	SensorDependencies []string // Names of sensors (facts) required for the rule
+	Actions            []Action
+}
+
+type Action struct {
+	Type   string
+	Target string
+	Value  interface{}
 }
 
 // Removed DependencyGraph struct and associated methods.

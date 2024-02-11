@@ -43,7 +43,7 @@ func (re *RulesEngine) StartEvaluationCycle() {
 		}
 
 		if satisfied {
-			re.ExecuteActions(compiledRule.Event.Actions)
+			re.ExecuteActions(compiledRule)
 		}
 	}
 }
@@ -67,11 +67,11 @@ func LoadCompiledRulesFromFile(filePath string) ([]compiler.CompiledRule, error)
 }
 
 // ExecuteActions executes the actions associated with a rule's event.
-func (re *RulesEngine) ExecuteActions(actions []rule.Action) {
-	for _, action := range actions {
-		// Execute each action, similar to the existing switch-case logic
-		// in the ProcessSensorData method.
-	}
+func (re *RulesEngine) ExecuteActions(actions compiler.CompiledRule) {
+	//for _, action := range actions {
+	// Execute each action, similar to the existing switch-case logic
+	// in the ProcessSensorData method.
+	//}
 }
 
 func isGreaterThan(factValue, condValue interface{}) (bool, error) {
@@ -148,6 +148,7 @@ func toFloat64(value interface{}) (float64, error) {
 // ExecuteBytecode evaluates a series of bytecode instructions against pre-fetched sensor values.
 func ExecuteBytecode(instructions []bytecode.Instruction, sensorValues map[string]interface{}, store store.Store) (bool, error) {
 	var stack []interface{}
+	var lastLoadedFactValue interface{} // Temporarily store the last loaded fact value
 
 	for _, instr := range instructions {
 		switch instr.Opcode {
@@ -160,38 +161,43 @@ func ExecuteBytecode(instructions []bytecode.Instruction, sensorValues map[strin
 			if !exists {
 				return false, fmt.Errorf("fact %s not found in pre-fetched sensor values", factName)
 			}
-			stack = append(stack, value)
+			lastLoadedFactValue = value // Update last loaded fact value
 
 		case bytecode.OpEqual, bytecode.OpNotEqual, bytecode.OpGreaterThan, bytecode.OpLessThan, bytecode.OpGreaterThanOrEqual, bytecode.OpLessThanOrEqual:
-			// Ensure there are enough values in the stack for comparison
-			if len(stack) < 2 {
-				return false, fmt.Errorf("not enough values in stack for comparison")
-			}
-			b, a := stack[len(stack)-1], stack[len(stack)-2] // Pop two values from stack
-			stack = stack[:len(stack)-2]                     // Reduce stack size
-			result, err := executeComparison(instr.Opcode, a, b)
+			compareValue := instr.Operands[0]
+			result, err := executeComparison(instr.Opcode, lastLoadedFactValue, compareValue)
 			if err != nil {
 				return false, err
 			}
+			// Push the result of the comparison onto the stack
 			stack = append(stack, result)
 
-		// Handle other opcodes, such as actions and logical operators (AND, OR, NOT)
+		case bytecode.OpEqualAny:
+			values, ok := instr.Operands[0].([]interface{})
+			if !ok {
+				return false, fmt.Errorf("OpEqualAny expects a slice of interface{} operands, got %T", instr.Operands[0])
+			}
+			matchFound := false
+			for _, v := range values {
+				if reflect.DeepEqual(lastLoadedFactValue, v) {
+					matchFound = true
+					break
+				}
+			}
+			// Push the result of the OpEqualAny comparison onto the stack
+			stack = append(stack, matchFound)
 
-		default:
-			return false, fmt.Errorf("unsupported opcode: %v", instr.Opcode)
+			// Handle other opcodes as necessary
 		}
 	}
 
-	// After executing all instructions, expect a boolean result on the stack
-	if len(stack) != 1 {
-		return false, fmt.Errorf("expected single boolean result, got stack: %v", stack)
-	}
-	result, ok := stack[0].(bool)
-	if !ok {
-		return false, fmt.Errorf("final value in stack is not boolean: %v", stack[0])
+	// After executing all instructions, the stack should contain a single boolean value indicating the rule's outcome
+	if len(stack) != 1 || reflect.TypeOf(stack[0]).Kind() != reflect.Bool {
+		return false, fmt.Errorf("invalid execution state; expected a single boolean result")
 	}
 
-	return result, nil
+	// The final value on the stack is the result of the rule evaluation
+	return stack[0].(bool), nil
 }
 
 func executeComparison(opcode bytecode.Opcode, a, b interface{}) (bool, error) {
@@ -338,28 +344,28 @@ func uniqueSensors(r rule.Rule) map[string]struct{} {
 	return sensors
 }
 
-// ExtractSensorKeys returns a slice of unique sensor keys required by the rules
-func (re *RulesEngine) ExtractSensorKeys() []string {
-	keyMap := make(map[string]struct{})
-	for _, r := range re.CompiledRules {
-		extractKeysFromConditions(r.Conditions.All, keyMap)
-		extractKeysFromConditions(r.Conditions.Any, keyMap)
-	}
+// // ExtractSensorKeys returns a slice of unique sensor keys required by the rules
+// func (re *RulesEngine) ExtractSensorKeys() []string {
+// 	keyMap := make(map[string]struct{})
+// 	for _, r := range re.CompiledRules {
+// 		extractKeysFromConditions(r.Conditions.All, keyMap)
+// 		extractKeysFromConditions(r.Conditions.Any, keyMap)
+// 	}
 
-	var keys []string
-	for key := range keyMap {
-		keys = append(keys, key)
-	}
-	return keys
-}
+// 	var keys []string
+// 	for key := range keyMap {
+// 		keys = append(keys, key)
+// 	}
+// 	return keys
+// }
 
-// extractKeysFromConditions extracts sensor keys from a slice of Condition and adds them to the provided map.
-func extractKeysFromConditions(conditions []rule.Condition, keyMap map[string]struct{}) {
-	for _, cond := range conditions {
-		if cond.Fact != "" {
-			keyMap[cond.Fact] = struct{}{}
-		}
-		extractKeysFromConditions(cond.All, keyMap)
-		extractKeysFromConditions(cond.Any, keyMap)
-	}
-}
+// // extractKeysFromConditions extracts sensor keys from a slice of Condition and adds them to the provided map.
+// func extractKeysFromConditions(conditions []rule.Condition, keyMap map[string]struct{}) {
+// 	for _, cond := range conditions {
+// 		if cond.Fact != "" {
+// 			keyMap[cond.Fact] = struct{}{}
+// 		}
+// 		extractKeysFromConditions(cond.All, keyMap)
+// 		extractKeysFromConditions(cond.Any, keyMap)
+// 	}
+// }
