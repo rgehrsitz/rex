@@ -1,6 +1,7 @@
 package instructiongen
 
 import (
+	"fmt"
 	"rgehrsitz/rex/internal/bytecode"
 	"rgehrsitz/rex/internal/rule"
 	"testing"
@@ -125,12 +126,12 @@ func TestCompileAllConditions(t *testing.T) {
 		// Assuming compileGreaterThan generates these instructions for the first condition
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temp"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
-		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{3}}, // Placeholder for jump; will need adjustment based on actual logic
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{4}}, // Placeholder for jump; will need adjustment based on actual logic
 
 		// Assuming compileLessThan generates these instructions for the second condition
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{80}},
-		// No jump after the last condition since it's the final check in the 'All' block
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{1}},
 	}
 	expectedSensorDependencies := []string{"temp", "humidity"}
 
@@ -179,12 +180,12 @@ func TestCompileCondition_NestedAll(t *testing.T) {
 		// Assuming compileGreaterThan generates these instructions for the first condition "temp > 20"
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temp"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{20}},
-		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{3}}, // Jump to skip next condition if false
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{4}}, // Jump to skip next condition if false
 
 		// Assuming compileLessThan generates these instructions for the second condition "humidity < 80"
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{80}},
-		// Note: For the last condition in an 'All' block, there might not be a jump if actions immediately follow.
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{1}}, // Jump to skip the action if false
 	}
 
 	// Execute CompileCondition with the nested 'All' condition
@@ -237,32 +238,31 @@ func TestCompileCondition_ComplexNested(t *testing.T) {
 		},
 	}
 
-	// Assuming the instruction generation process handles nested conditions correctly,
-	// the expected instructions would involve:
-	// 1. Loading "temp", checking if less than 0, jumping if true (skipping next condition check)
-	// 2. Loading "temp", checking if greater than 100
-	// 3. Loading "pressure", checking if greater than 1200
-	// Note: Simplified for demonstration. Actual implementation may require jump adjustments.
 	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temp"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{0}},
-		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{3}}, // Jump past the next temp check if this is true
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{3}},
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temp"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{100}},
-		// No jump here since this is the last check in the 'Any' block; execution falls through to the next condition
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{4}},
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"pressure"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{1200}},
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{1}},
 	}
 
 	instructions, _, err := CompileCondition(cond)
 
 	assert.NoError(t, err, "CompileCondition should not return an error for valid nested conditions")
-	// This assertion compares the generated instructions with the expected output.
-	// The comparison needs to be detailed, especially for jump targets which are placeholders here.
 	assert.Equal(t, len(expectedInstructions), len(instructions), "Number of generated instructions does not match expected")
 	for i, inst := range instructions {
-		assert.Equal(t, expectedInstructions[i].Opcode, inst.Opcode, "Opcode mismatch at instruction %d", i)
-		// Further detailed comparisons for operands can be done here, especially for values and jump targets.
+		assert.Equal(t, expectedInstructions[i].Opcode, inst.Opcode, fmt.Sprintf("Opcode mismatch at instruction %d", i))
+		if inst.Opcode == bytecode.OpJumpIfTrue {
+			// Verify the jump distance is correctly calculated.
+			assert.Equal(t, expectedInstructions[i].Operands[0], inst.Operands[0], fmt.Sprintf("Jump distance mismatch at instruction %d", i))
+		} else {
+			// For non-jump instructions, verify operands match.
+			assert.Equal(t, expectedInstructions[i].Operands, inst.Operands, fmt.Sprintf("Operands mismatch at instruction %d", i))
+		}
 	}
 }
 
@@ -271,20 +271,23 @@ func TestCompileConditions_AnyConditions(t *testing.T) {
 		Any: []rule.Condition{
 			{Fact: "humidity", Operator: "lessThan", Value: 30},
 			{Fact: "humidity", Operator: "greaterThan", Value: 70},
+			{Fact: "temperature", Operator: "greaterThan", Value: 25}, // Additional condition
 		},
 	}
 
-	// Expected bytecode sequence should check each condition and jump to action execution if any condition is true.
-	// The logic should skip to the next condition check if the current one is false,
-	// and only skip all actions if none of the conditions are true.
+	// Corrected bytecode sequence expectations based on the discussion:
+	// - Each condition compiles to two instructions: load fact and comparison.
+	// - For 'Any' conditions, we want to jump over the next conditions if the current one evaluates to true.
 	expectedInstructions := []bytecode.Instruction{
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{30}},
-		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{3}}, // Jump past next condition check if true
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{6}}, // Jump to skip two conditions if true.
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"humidity"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{70}},
-		// Note: No jump after the last condition since we want to proceed to actions if it's true.
-		// If the last condition is false, execution continues naturally to the next instructions (presumably actions).
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{3}}, // Jump to skip one condition if true.
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{25}},
+		// No jump after the last condition since we proceed to actions if it's true.
 	}
 
 	instructions, sensorDependencies, err := CompileConditions(conditions)
@@ -292,6 +295,70 @@ func TestCompileConditions_AnyConditions(t *testing.T) {
 	assert.NoError(t, err, "CompileConditions should not return an error for valid 'Any' conditions")
 	assert.Equal(t, expectedInstructions, instructions, "Instructions generated by CompileConditions do not match expected for 'Any' conditions")
 	assert.Contains(t, sensorDependencies, "humidity", "Sensor dependencies should contain 'humidity'")
+	assert.Contains(t, sensorDependencies, "temperature", "Sensor dependencies should also contain 'temperature'")
 	// Ensuring the correct number of sensor dependencies is identified.
-	assert.Len(t, sensorDependencies, 1, "There should be exactly one sensor dependency identified")
+	assert.Len(t, sensorDependencies, 2, "There should be exactly two sensor dependencies identified")
+}
+
+func TestCompileAnyConditions(t *testing.T) {
+	// Define conditions that simulate realistic scenarios where 'Any' logic is applied.
+	conditions := []rule.Condition{
+		{Fact: "temperature", Operator: "greaterThan", Value: 25},
+		{Fact: "rainChance", Operator: "greaterThan", Value: 50},
+	}
+
+	// Expected bytecode instructions.
+	// These instructions assume a direct translation of the conditions into bytecode,
+	// with jump instructions to bypass all remaining conditions if one evaluates to true.
+	expectedInstructions := []bytecode.Instruction{
+		// First condition: If temperature > 25
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"temperature"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{25}},
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{3}}, // Jump past next condition check if true
+
+		// Second condition: If rainChance > 50 (no jump needed after the last condition)
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"rainChance"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{50}},
+	}
+
+	actualInstructions, sensorDependencies, err := compileAnyConditions(conditions)
+
+	assert.NoError(t, err, "compileAnyConditions should not produce an error")
+	assert.Equal(t, expectedInstructions, actualInstructions, "The compiled instructions did not match the expected output")
+	assert.ElementsMatch(t, []string{"temperature", "rainChance"}, sensorDependencies, "Sensor dependencies should accurately reflect the conditions' facts")
+}
+
+func TestCompileCondition_DeepNestedAllWithinAny(t *testing.T) {
+	cond := rule.Condition{
+		Any: []rule.Condition{
+			{
+				All: []rule.Condition{
+					{Fact: "windSpeed", Operator: "greaterThan", Value: 25},
+					{Fact: "visibility", Operator: "lessThan", Value: 1000},
+				},
+			},
+			{Fact: "weather", Operator: "equal", Value: "rainy"},
+		},
+	}
+
+	expectedInstructions := []bytecode.Instruction{
+		// First 'All' block within 'Any'
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
+		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{25}},
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{4}}, // Jump to check "weather" == "rainy" if false
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"visibility"}},
+		{Opcode: bytecode.OpLessThan, Operands: []interface{}{1000}},
+		// Second condition in 'Any'
+		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"weather"}},
+		{Opcode: bytecode.OpEqual, Operands: []interface{}{"rainy"}},
+	}
+
+	instructions, _, err := CompileCondition(cond)
+
+	assert.NoError(t, err, "CompileCondition should not return an error for valid deeply nested conditions")
+	assert.Equal(t, len(expectedInstructions), len(instructions), "Number of generated instructions does not match expected")
+	for i, inst := range instructions {
+		assert.Equal(t, expectedInstructions[i].Opcode, inst.Opcode, fmt.Sprintf("Opcode mismatch at instruction %d", i))
+		assert.Equal(t, expectedInstructions[i].Operands, inst.Operands, fmt.Sprintf("Operands mismatch at instruction %d", i))
+	}
 }

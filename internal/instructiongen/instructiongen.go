@@ -13,62 +13,34 @@ func CompileConditions(conditions rule.Conditions) ([]bytecode.Instruction, []st
 	var instructions []bytecode.Instruction
 	var sensorDependencies []string
 
-	// First, attempt to optimize the conditions before compiling them
+	// Handle optimized conditions first
 	optimizedInstructions, optimizedSensorDeps := optimizeConditions(conditions)
-
-	// If optimizations were applied, use those instructions and dependencies
 	if len(optimizedInstructions) > 0 {
 		instructions = optimizedInstructions
 		sensorDependencies = optimizedSensorDeps
 	} else {
-		// Otherwise, compile conditions as before
-		// Compile 'All' conditions with an early exit jump if any condition is false.
+		// Compile 'All' conditions if present
 		if len(conditions.All) > 0 {
-			var endOfAllJumpIndexes []int
-			for _, cond := range conditions.All {
-				condInstructions, condDeps, err := CompileCondition(cond)
-				if err != nil {
-					return nil, nil, err
-				}
-				instructions = append(instructions, condInstructions...)
-				sensorDependencies = append(sensorDependencies, condDeps...)
-				// Add jump instruction placeholder for false evaluation to skip remaining conditions and actions.
-				jumpInst := bytecode.Instruction{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{0}} // Placeholder
-				instructions = append(instructions, jumpInst)
-				endOfAllJumpIndexes = append(endOfAllJumpIndexes, len(instructions)-1)
+			allInstructions, allSensorDeps, err := compileAllConditions(conditions.All)
+			if err != nil {
+				return nil, nil, err
 			}
-			// Update the jump targets for 'All' conditions.
-			for _, index := range endOfAllJumpIndexes {
-				instructions[index].Operands[0] = len(instructions) - index
-			}
+			instructions = append(instructions, allInstructions...)
+			sensorDependencies = append(sensorDependencies, allSensorDeps...)
 		}
 
-		// Compile 'Any' conditions with an optimization to skip remaining conditions if one is true.
+		// Compile 'Any' conditions if present
 		if len(conditions.Any) > 0 {
-			var jumpToEndIfTrueIndexes []int
-			for _, cond := range conditions.Any {
-				condInstructions, condDeps, err := CompileCondition(cond)
-				if err != nil {
-					return nil, nil, err
-				}
-				instructions = append(instructions, condInstructions...)
-				sensorDependencies = append(sensorDependencies, condDeps...)
-				// Add jump instruction to skip the rest of the 'Any' conditions if this condition is true.
-				jumpInst := bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}} // Placeholder
-				instructions = append(instructions, jumpInst)
-				jumpToEndIfTrueIndexes = append(jumpToEndIfTrueIndexes, len(instructions)-1)
+			anyInstructions, anySensorDeps, err := compileAnyConditions(conditions.Any)
+			if err != nil {
+				return nil, nil, err
 			}
-			// Update jump targets for 'Any' conditions to jump past the 'Any' block.
-			for _, index := range jumpToEndIfTrueIndexes {
-				instructions[index].Operands[0] = len(instructions) - index
-			}
+			instructions = append(instructions, anyInstructions...)
+			sensorDependencies = append(sensorDependencies, anySensorDeps...)
 		}
 	}
 
-	// Deduplicate sensor dependencies
-	sensorDependencies = deduplicate(sensorDependencies)
-
-	return instructions, sensorDependencies, nil
+	return instructions, deduplicate(sensorDependencies), nil
 }
 
 // deduplicate removes duplicate strings from a slice.
@@ -152,45 +124,7 @@ func compileComparisonCondition(cond rule.Condition) ([]bytecode.Instruction, []
 func compileAllConditions(conditions []rule.Condition) ([]bytecode.Instruction, []string, error) {
 	var instructions []bytecode.Instruction
 	var allSensorDeps []string
-
-	for i, cond := range conditions {
-		condInstructions, condDeps, err := CompileCondition(cond)
-		if err != nil {
-			return nil, nil, err
-		}
-		instructions = append(instructions, condInstructions...)
-		allSensorDeps = append(allSensorDeps, condDeps...)
-
-		// For all conditions except the last, add a jump instruction to skip to the end if the condition is false.
-		if i < len(conditions)-1 {
-			jumpToEnd := bytecode.Instruction{
-				Opcode:   bytecode.OpJumpIfFalse,
-				Operands: []interface{}{0}, // Placeholder for the jump target, to be updated later.
-			}
-			instructions = append(instructions, jumpToEnd)
-		}
-	}
-
-	// Update jump targets for all but the last condition.
-	// The final position after all instructions for conditions and actions are compiled is not known here,
-	// so the placeholder '0' is used and should be updated outside this function based on the overall rule compilation logic.
-	for i := range instructions {
-		if instructions[i].Opcode == bytecode.OpJumpIfFalse && i < len(instructions)-1 { // Avoid adjusting the last condition's non-existent jump
-			// Assuming the actions immediately follow the conditions, and knowing the final instruction set size,
-			// the jump target would be calculated to skip over all remaining conditions and actions.
-			// This placeholder adjustment logic will need to be refined based on the complete compilation process.
-			instructions[i].Operands[0] = len(instructions) - i
-		}
-	}
-
-	return instructions, deduplicate(allSensorDeps), nil
-}
-
-// Any Conditions (Logical OR)
-func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, []string, error) {
-	var instructions []bytecode.Instruction
-	var anySensorDeps []string
-	var jumpToEndIndexes []int // Track jump instruction positions for later update.
+	var jumpToEndIndexes []int // Track positions of jump instructions for later adjustment
 
 	for _, cond := range conditions {
 		condInstructions, condDeps, err := CompileCondition(cond)
@@ -198,22 +132,63 @@ func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, 
 			return nil, nil, err
 		}
 		instructions = append(instructions, condInstructions...)
-		anySensorDeps = append(anySensorDeps, condDeps...)
+		allSensorDeps = append(allSensorDeps, condDeps...)
 
-		// Append a jump instruction after each condition, to be updated later.
-		jumpToEnd := bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}}
+		// Append a jump instruction to skip the rest of the conditions and actions if the current condition is false.
+		jumpToEnd := bytecode.Instruction{
+			Opcode:   bytecode.OpJumpIfFalse,
+			Operands: []interface{}{0}, // Placeholder for jump distance; to be calculated later.
+		}
 		instructions = append(instructions, jumpToEnd)
 		jumpToEndIndexes = append(jumpToEndIndexes, len(instructions)-1)
 	}
 
-	// Adjust the jump targets based on the final instruction count.
+	// Calculate and update the jump distances for the jump instructions
+	// Assuming here that actions or end of rule instructions follow immediately after conditions.
+	finalInstructionCount := len(instructions) // This might need adjustment if actions are appended later
 	for _, index := range jumpToEndIndexes {
-		// Calculate distance to end of conditions block, assuming actions follow immediately.
-		// This might need adjustment to account for any intermediate instructions.
-		instructions[index].Operands[0] = len(instructions) - index + additionalOffset // Define additionalOffset based on actual layout.
+		instructions[index].Operands[0] = finalInstructionCount - index
 	}
 
-	return instructions, deduplicate(anySensorDeps), nil
+	return instructions, deduplicate(allSensorDeps), nil
+}
+
+// Revised compileAnyConditions function implementation
+func compileAnyConditions(conditions []rule.Condition) ([]bytecode.Instruction, []string, error) {
+	var instructions []bytecode.Instruction
+	var sensorDeps []string
+	var jumpToEndIndexes []int // To keep track of jump instruction positions for later adjustment.
+
+	for i, cond := range conditions {
+		condInstructions, condDeps, err := CompileCondition(cond)
+		if err != nil {
+			return nil, nil, err
+		}
+		instructions = append(instructions, condInstructions...)
+		sensorDeps = append(sensorDeps, condDeps...)
+
+		// For each condition, append a jump instruction to skip the rest of the conditions if the current one evaluates to true.
+		// This jump instruction will be appended after all but the last condition.
+		if i < len(conditions)-1 {
+			jumpToEnd := bytecode.Instruction{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{0}} // Placeholder for jump distance.
+			instructions = append(instructions, jumpToEnd)
+			jumpToEndIndexes = append(jumpToEndIndexes, len(instructions)-1)
+		}
+	}
+
+	// Assuming 'instructions' is a slice of all compiled instructions for the conditions
+	// and 'jumpToEndIndexes' contains the indexes of jump instructions within this slice.
+	for _, index := range jumpToEndIndexes {
+		// The distance to jump is the total length of 'instructions' minus the current index.
+		// This calculation assumes that you are at the position of the jump instruction in 'instructions'
+		// and need to jump over the remaining part of the instructions list.
+		jumpDistance := len(instructions) - index // Subtract 1 to account for the current position being on the jump instruction itself.
+
+		// Update the jump instruction to reflect the calculated distance.
+		instructions[index].Operands[0] = jumpDistance
+	}
+
+	return instructions, deduplicate(sensorDeps), nil
 }
 
 func compileEquals(cond rule.Condition) ([]bytecode.Instruction, error) {
