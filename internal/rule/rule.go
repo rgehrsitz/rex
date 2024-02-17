@@ -25,7 +25,7 @@ type Action struct {
 
 type Conditions struct {
 	All []Condition `json:"all"`
-	Any []Condition `json:"any"`
+	Any []Condition `json:"any,omitempty"` // `omitempty` will omit this if nil or empty
 }
 
 type Condition struct {

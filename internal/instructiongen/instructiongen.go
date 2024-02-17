@@ -126,7 +126,7 @@ func compileAllConditions(conditions []rule.Condition) ([]bytecode.Instruction, 
 	var allSensorDeps []string
 	var jumpToEndIndexes []int // Track positions of jump instructions for later adjustment
 
-	for _, cond := range conditions {
+	for i, cond := range conditions {
 		condInstructions, condDeps, err := CompileCondition(cond)
 		if err != nil {
 			return nil, nil, err
@@ -135,19 +135,24 @@ func compileAllConditions(conditions []rule.Condition) ([]bytecode.Instruction, 
 		allSensorDeps = append(allSensorDeps, condDeps...)
 
 		// Append a jump instruction to skip the rest of the conditions and actions if the current condition is false.
-		jumpToEnd := bytecode.Instruction{
-			Opcode:   bytecode.OpJumpIfFalse,
-			Operands: []interface{}{0}, // Placeholder for jump distance; to be calculated later.
+		// Do not append a jump instruction after the last condition in the 'All' block to avoid unnecessary jumps.
+		if i < len(conditions)-1 {
+			jumpToEnd := bytecode.Instruction{
+				Opcode:   bytecode.OpJumpIfFalse,
+				Operands: []interface{}{0}, // Placeholder for jump distance; to be calculated later.
+			}
+			instructions = append(instructions, jumpToEnd)
+			jumpToEndIndexes = append(jumpToEndIndexes, len(instructions)-1)
 		}
-		instructions = append(instructions, jumpToEnd)
-		jumpToEndIndexes = append(jumpToEndIndexes, len(instructions)-1)
 	}
 
 	// Calculate and update the jump distances for the jump instructions
-	// Assuming here that actions or end of rule instructions follow immediately after conditions.
-	finalInstructionCount := len(instructions) // This might need adjustment if actions are appended later
 	for _, index := range jumpToEndIndexes {
-		instructions[index].Operands[0] = finalInstructionCount - index
+		// The jump distance should now point to the instruction immediately following the 'All' block,
+		// which could be another condition or the end of the rule.
+		// We calculate it as the distance from the current jump instruction to the end of the 'All' block's instructions.
+		jumpDistance := len(instructions) - index
+		instructions[index].Operands[0] = jumpDistance
 	}
 
 	return instructions, deduplicate(allSensorDeps), nil

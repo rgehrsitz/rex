@@ -1,46 +1,48 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"rgehrsitz/rex/cmd/jsonoptimizer/optimizer"
 	"rgehrsitz/rex/internal/compiler"
 	"rgehrsitz/rex/internal/rule"
-
-	"github.com/schollz/progressbar/v3"
 	// other imports
 )
 
 func main() {
-	inputFilePath, outputFilePath, verbose := parseFlags()
+	rulesFilePath, outputFilePath, verbose := parseFlags()
 
-	bar := progressbar.Default(-1, "Starting JSON optimization")
-	bar.RenderBlank()
+	// Create an instance of the optimizer with the desired verbosity level.
 
-	// Read JSON from the input file
-	bar.Add(1)
-	rules, err := readRulesFromFile(*inputFilePath)
-	// Check for errors and handle them...
+	opt := optimizer.New(*verbose)
 
-	// Update progress bar description and increment for each step
-	bar.Describe("Validating JSON")
-	bar.Add(1)
-	// Perform validation...
+	// Read rules from the file.
+	rules, err := readRulesFromFile(*rulesFilePath)
+	if err != nil {
+		exitWithError(fmt.Errorf("error reading rules file: %w", err))
+	}
 
-	// Optimization steps with progress display
-	bar.Describe("Optimizing rules")
-	bar.Add(1)
-	optimizedRules, err := optimizer.OptimizeRules(rules, *verbose)
-	// Check for errors and handle them...
+	// Optimize the rules using the optimizer instance.
+	optimizedRules, err := opt.OptimizeRules(rules)
+	if err != nil {
+		exitWithError(fmt.Errorf("error optimizing rules: %w", err))
+	}
 
-	// Save the optimized JSON to the output file
-	bar.Describe("Saving optimized JSON")
-	bar.Add(1)
-	err = saveOptimizedRules(optimizedRules, *outputFilePath)
-	// Check for errors and handle them...
+	// If an output file is specified, save the optimized rules.
+	if *outputFilePath != "" {
+		err = saveOptimizedRules(optimizedRules, *outputFilePath)
+		if err != nil {
+			exitWithError(fmt.Errorf("error saving optimized rules: %w", err))
+		}
+	}
 
-	bar.Finish()
+	// Additional logic...
+}
+func exitWithError(err error) {
+	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	os.Exit(1)
 }
 
 // Other functions like parseFlags, readRulesFromFile, saveOptimizedRules, exitWithError...
@@ -71,4 +73,18 @@ func readRulesFromFile(filePath string) ([]rule.Rule, error) {
 	}
 
 	return rules, nil
+}
+
+func saveOptimizedRules(rules []rule.Rule, filePath string) error {
+	data, err := json.Marshal(rules)
+	if err != nil {
+		return fmt.Errorf("failed to marshal optimized rules: %w", err)
+	}
+
+	err = os.WriteFile(filePath, data, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to save optimized rules to file: %w", err)
+	}
+
+	return nil
 }

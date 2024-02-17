@@ -342,13 +342,17 @@ func TestCompileCondition_DeepNestedAllWithinAny(t *testing.T) {
 	}
 
 	expectedInstructions := []bytecode.Instruction{
-		// First 'All' block within 'Any'
+		// Evaluate the first condition in the 'All' block
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"windSpeed"}},
 		{Opcode: bytecode.OpGreaterThan, Operands: []interface{}{25}},
-		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{4}}, // Jump to check "weather" == "rainy" if false
+		// If windSpeed > 25 is false, jump to the next condition (weather == "rainy")
+		{Opcode: bytecode.OpJumpIfFalse, Operands: []interface{}{3}}, // Adjusted jump distance if necessary
+		// Evaluate the second condition in the 'All' block
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"visibility"}},
 		{Opcode: bytecode.OpLessThan, Operands: []interface{}{1000}},
-		// Second condition in 'Any'
+		// If both conditions in 'All' are true, jump over the evaluation of "weather" == "rainy"
+		{Opcode: bytecode.OpJumpIfTrue, Operands: []interface{}{3}}, // Jump past the next condition
+		// Evaluate the second (standalone) condition in the 'Any' block
 		{Opcode: bytecode.OpLoadFact, Operands: []interface{}{"weather"}},
 		{Opcode: bytecode.OpEqual, Operands: []interface{}{"rainy"}},
 	}
