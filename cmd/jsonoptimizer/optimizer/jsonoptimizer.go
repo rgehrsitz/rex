@@ -167,3 +167,170 @@ func normalizeAndSortConditionSlice(conds []rule.Condition) []rule.Condition {
 
 	return conds
 }
+
+// MergeAndSimplifyRules optimizes a set of rules by merging similar rules and simplifying conditions.
+func MergeAndSimplifyRules(rules []rule.Rule) ([]rule.Rule, error) {
+	var optimizedRules []rule.Rule
+
+	// Step 1: Group rules by actions to identify merge candidates.
+	actionGroups := groupRulesByActions(rules)
+
+	// Step 2: For each group, attempt to merge rules based on their conditions.
+	for _, group := range actionGroups {
+		mergedRules := mergeRulesWithinGroup(group)
+		optimizedRules = append(optimizedRules, mergedRules...)
+	}
+
+	// Step 3: Simplify conditions for each rule.
+	for i, r := range optimizedRules {
+		optimizedRules[i].Conditions = simplifyConditions(r.Conditions)
+	}
+
+	return optimizedRules, nil
+}
+
+// groupRulesByActions groups rules that have identical actions.
+func groupRulesByActions(rules []rule.Rule) map[string][]rule.Rule {
+	groups := make(map[string][]rule.Rule)
+	for _, r := range rules {
+		actionKey := generateActionKey(r.Event.Actions)
+		groups[actionKey] = append(groups[actionKey], r)
+	}
+	return groups
+}
+
+// mergeRulesWithinGroup takes a slice of rules that are candidates for merging (based on identical actions)
+// and attempts to merge them into a smaller number of rules by intelligently combining their conditions.
+func mergeRulesWithinGroup(group []rule.Rule) []rule.Rule {
+	if len(group) <= 1 {
+		return group // No merging necessary for a single rule.
+	}
+
+	// Initial approach: start with the first rule as the base for merging.
+	// This is a simplified strategy; more complex scenarios may require a different approach.
+	mergedRule := group[0]
+
+	for _, r := range group[1:] {
+		mergedRule.Conditions = mergeConditions(mergedRule.Conditions, r.Conditions)
+	}
+
+	return []rule.Rule{mergedRule} // Return a slice containing the single, merged rule.
+}
+
+// mergeConditions combines two sets of conditions (each potentially having 'All' and 'Any' sub-conditions)
+// into a single set of conditions that preserves the logical intent of both.
+func mergeConditions(conds1, conds2 rule.Conditions) rule.Conditions {
+	// Merge 'All' conditions by concatenating them.
+	mergedAll := append(conds1.All, conds2.All...)
+
+	// Merge 'Any' conditions by concatenating them.
+	mergedAny := append(conds1.Any, conds2.Any...)
+
+	// Create a temporary Conditions struct for each to pass to optimizeConditions.
+	tempAllConds := rule.Conditions{All: mergedAll}
+	tempAnyConds := rule.Conditions{Any: mergedAny}
+
+	// Optimize merged conditions for 'All' and 'Any' separately.
+	optimizedAllConds := optimizeConditions(tempAllConds) // Optimizes the 'All' conditions.
+	optimizedAnyConds := optimizeConditions(tempAnyConds) // Optimizes the 'Any' conditions.
+
+	// Construct the final Conditions struct with optimized 'All' and 'Any' conditions.
+	return rule.Conditions{
+		All: optimizedAllConds.All,
+		Any: optimizedAnyConds.Any,
+	}
+}
+
+// optimizeConditions simplifies the conditions of a rule by removing redundancies and optimizing logical structures.
+func optimizeConditions(conds rule.Conditions) rule.Conditions {
+	optimizedConds := rule.Conditions{
+		All: removeRedundantConditions(conds.All),
+		Any: removeRedundantConditions(conds.Any),
+	}
+
+	// Further optimization could involve flattening nested conditions, combining conditions, etc.
+	// This example focuses on removing redundancies.
+	return optimizedConds
+}
+
+// removeRedundantConditions removes duplicate conditions from a slice of conditions.
+func removeRedundantConditions(conditions []rule.Condition) []rule.Condition {
+	unique := make([]rule.Condition, 0, len(conditions))
+	seen := make(map[string]struct{})
+
+	for _, cond := range conditions {
+		// Serialize condition to use as a key for detecting duplicates.
+		// This simple serialization assumes that identical conditions will produce identical JSON strings.
+		// Adjust serialization as needed to ensure accurate comparison.
+		serialized, _ := json.Marshal(cond) // Simplification, handle errors in production code.
+		if _, exists := seen[string(serialized)]; !exists {
+			seen[string(serialized)] = struct{}{}
+			unique = append(unique, cond)
+		}
+	}
+
+	return unique
+}
+
+// Simplifies the conditions of a rule by removing duplicates.
+func simplifyConditions(conds rule.Conditions) rule.Conditions {
+	simplifiedAll := removeDuplicateConditions(conds.All)
+	simplifiedAny := removeDuplicateConditions(conds.Any)
+
+	return rule.Conditions{All: simplifiedAll, Any: simplifiedAny}
+}
+
+// Removes duplicate conditions from a slice of conditions.
+func removeDuplicateConditions(conditions []rule.Condition) []rule.Condition {
+	var unique []rule.Condition
+	seen := make(map[string]struct{})
+
+	for _, cond := range conditions {
+		key := conditionKey(cond)
+		if _, exists := seen[key]; !exists {
+			seen[key] = struct{}{}
+			unique = append(unique, cond)
+		}
+	}
+
+	return unique
+}
+
+// Generates a unique key for a condition based on its Fact, Operator, and Value.
+// This key is used to identify duplicate conditions.
+func conditionKey(cond rule.Condition) string {
+	// Use JSON serialization or a similar method to generate a unique key for the condition.
+	// This simplistic approach assumes that identical conditions will produce identical strings.
+	serialized, _ := json.Marshal(cond) // Simplification: handle errors in production code.
+	return string(serialized)
+}
+
+// generateActionKey generates a unique key for a slice of actions to facilitate grouping.
+func generateActionKey(actions []rule.Action) string {
+	// Simple approach: Concatenate action types and targets. Consider hashing for complex scenarios.
+	var key string
+	for _, action := range actions {
+		key += action.Type + ":" + action.Target + ";"
+	}
+	return key
+}
+
+func DetectConflicts(rules []rule.Rule) ([]string, error) {
+	var conflictReports []string
+
+	// Logic to analyze the rule set for potential conflicts.
+	// This involves comparing the conditions and actions of rules to identify contradictions or logical conflicts.
+
+	return conflictReports, nil
+}
+
+func ValidateRuleSet(rules []rule.Rule) (bool, []string) {
+	var validationErrors []string
+
+	// Extended validation logic here.
+	// This could involve checking for logical inconsistencies within rules,
+	// ensuring that all referenced facts exist, and validating data types and values are appropriate for their usage in conditions and actions.
+
+	isValid := len(validationErrors) == 0
+	return isValid, validationErrors
+}

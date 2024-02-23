@@ -11,7 +11,7 @@ type Rule struct {
 
 type Event struct {
 	EventType      string        `json:"eventType"`
-	CustomProperty interface{}   `json:"customProperty"`
+	CustomProperty interface{}   `json:"customProperty,omitempty"`
 	Facts          []string      `json:"facts,omitempty"`
 	Values         []interface{} `json:"values,omitempty"`
 	Actions        []Action      `json:"actions,omitempty"`

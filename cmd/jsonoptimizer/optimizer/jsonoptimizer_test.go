@@ -273,3 +273,127 @@ func TestGenerateDeduplicationKey_ComplexScenarios(t *testing.T) {
 	modifiedKey := GenerateDeduplicationKey(modifiedComplexRule)
 	assert.Equal(t, key, modifiedKey, "Deduplication keys for logically equivalent complex rules should match")
 }
+
+func TestMergeAndSimplifyRules_Merging(t *testing.T) {
+	rules := []rule.Rule{
+		{
+			Name: "Rule1",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{{Fact: "temperature", Operator: "greaterThan", Value: 30}},
+			},
+			Event: rule.Event{
+				Actions: []rule.Action{{Type: "alert", Target: "system", Value: "High temperature"}},
+			},
+		},
+		{
+			Name: "Rule2",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{{Fact: "humidity", Operator: "lessThan", Value: 50}},
+			},
+			Event: rule.Event{
+				Actions: []rule.Action{{Type: "alert", Target: "system", Value: "High temperature"}},
+			},
+		},
+	}
+
+	expectedMergedConditionsLength := 2 // Expecting the two conditions to be merged under a single rule.
+
+	optimizedRules, err := MergeAndSimplifyRules(rules)
+	assert.NoError(t, err, "MergeAndSimplifyRules should not return an error.")
+	assert.Len(t, optimizedRules, 1, "Expected rules to be merged into a single rule.")
+	assert.Len(t, optimizedRules[0].Conditions.All, expectedMergedConditionsLength, "Expected merged rule to contain all conditions from original rules.")
+}
+
+func TestMergeAndSimplifyRules_Simplification(t *testing.T) {
+	// Assuming simplifyConditions is implemented to remove duplicate conditions.
+	rules := []rule.Rule{
+		{
+			Name: "RuleWithDuplicateConditions",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "temperature", Operator: "greaterThan", Value: 30},
+					{Fact: "temperature", Operator: "greaterThan", Value: 30},
+				},
+			},
+			Event: rule.Event{
+				Actions: []rule.Action{{Type: "alert", Target: "system", Value: "Repeated condition"}},
+			},
+		},
+	}
+
+	optimizedRules, err := MergeAndSimplifyRules(rules)
+	assert.NoError(t, err, "MergeAndSimplifyRules should not return an error for simplification.")
+	assert.Len(t, optimizedRules, 1, "Expected a single rule after simplification.")
+	assert.Len(t, optimizedRules[0].Conditions.All, 1, "Expected duplicate conditions to be simplified.")
+}
+
+func TestProcessAndOptimizeRuleset_EndToEnd(t *testing.T) {
+	// Define a set of rules that includes potential duplicates, simplifiable conditions, and a realistic mix of conditions and actions.
+	rules := []rule.Rule{
+		{
+			Name: "HighTemperatureAlert",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "temperature", Operator: "greaterThan", Value: 30},
+				},
+			},
+			Event: rule.Event{
+				EventType: "Alert",
+				Actions: []rule.Action{
+					{Type: "emailNotification", Target: "admin@example.com", Value: "Temperature is too high"},
+				},
+			},
+		},
+		{
+			Name: "HighTemperatureAlertDuplicate",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "temperature", Operator: "greaterThan", Value: 30},
+				},
+			},
+			Event: rule.Event{
+				EventType: "Alert",
+				Actions: []rule.Action{
+					{Type: "emailNotification", Target: "admin@example.com", Value: "Temperature is too high"},
+				},
+			},
+		},
+		{
+			Name: "LowHumidityWarning",
+			Conditions: rule.Conditions{
+				All: []rule.Condition{
+					{Fact: "humidity", Operator: "lessThan", Value: 20},
+				},
+			},
+			Event: rule.Event{
+				EventType: "Warning",
+				Actions: []rule.Action{
+					{Type: "smsNotification", Target: "+123456789", Value: "Humidity is too low"},
+				},
+			},
+		},
+	}
+
+	optimizedRules, err := ProcessAndOptimizeRuleset(rules)
+	assert.NoError(t, err, "The optimization process should complete without errors.")
+
+	// Assertions to verify the expected outcomes of the optimization:
+	assert.Len(t, optimizedRules, 2, "Expected the optimized rule set to contain only unique rules, with duplicates merged.")
+
+	// Further assertions could check for specific conditions or actions in the optimized rules,
+	// but this might require a more detailed inspection of the optimization logic's expected behavior.
+	// For example, you could assert that the conditions of merged rules are correctly combined,
+	// or that the actions are appropriately deduplicated.
+
+	// This checks if deduplication removed the duplicate "HighTemperatureAlert" rule.
+	foundHighTempRule := false
+	for _, rule := range optimizedRules {
+		if rule.Name == "HighTemperatureAlert" || rule.Name == "HighTemperatureAlertDuplicate" {
+			if foundHighTempRule {
+				t.Errorf("Found duplicate rules for high temperature alert after optimization")
+			}
+			foundHighTempRule = true
+		}
+	}
+	assert.True(t, foundHighTempRule, "Expected to find a rule for high temperature alerts in the optimized ruleset.")
+}

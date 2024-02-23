@@ -23,29 +23,6 @@
     }
   },
   {
-    "name": "HighTemperatureAlertDuplicate",
-    "priority": 2,
-    "conditions": {
-      "all": [
-        {
-          "fact": "temperature",
-          "operator": "greaterThan",
-          "value": 30
-        }
-      ]
-    },
-    "event": {
-      "eventType": "Alert",
-      "actions": [
-        {
-          "type": "emailNotification",
-          "target": "admin@example.com",
-          "value": "Temperature is too high"
-        }
-      ]
-    }
-  },
-  {
     "name": "LowHumidityWarning",
     "priority": 3,
     "conditions": {
@@ -74,14 +51,14 @@
     "conditions": {
       "all": [
         {
-          "fact": "timeOfDay",
-          "operator": "equal",
-          "value": "evening"
-        },
-        {
           "fact": "temperature",
           "operator": "lessThan",
           "value": 15
+        },
+        {
+          "fact": "timeOfDay",
+          "operator": "equal",
+          "value": "evening"
         }
       ]
     },
