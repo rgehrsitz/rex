@@ -3,6 +3,7 @@
     "name": "ComplexWeatherAlert",
     "priority": 1,
     "conditions": {
+      "all": null,
       "any": [
         {
           "all": [

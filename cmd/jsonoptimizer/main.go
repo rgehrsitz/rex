@@ -5,18 +5,22 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"rgehrsitz/rex/cmd/jsonoptimizer/optimizer"
 	"rgehrsitz/rex/internal/compiler"
 	"rgehrsitz/rex/internal/rule"
+	"strings"
 	// other imports
 )
 
 func main() {
 	rulesFilePath, outputFilePath, verbose := parseFlags()
 
-	// Create an instance of the optimizer with the desired verbosity level.
-
-	opt := optimizer.New(*verbose)
+	if verbose != nil && *verbose {
+		fmt.Printf("Rules file path: %s\n", *rulesFilePath)
+		fmt.Printf("Output file path: %s\n", *outputFilePath)
+		fmt.Printf("Verbose mode enabled\n")
+	}
 
 	// Read rules from the file.
 	rules, err := readRulesFromFile(*rulesFilePath)
@@ -24,10 +28,16 @@ func main() {
 		exitWithError(fmt.Errorf("error reading rules file: %w", err))
 	}
 
-	// Optimize the rules using the optimizer instance.
-	optimizedRules, err := opt.OptimizeRules(rules)
+	optimizedRules, err := optimizer.ProcessAndOptimizeRuleset(rules)
 	if err != nil {
 		exitWithError(fmt.Errorf("error optimizing rules: %w", err))
+	}
+
+	// If an output file is not specified, use the original filename and path, but append the "_optimized" suffix.
+	if *outputFilePath == "" {
+		originalFileName := filepath.Base(*rulesFilePath)
+		optimizedFileName := strings.Replace(originalFileName, ".json", "_optimized.json", 1)
+		*outputFilePath = filepath.Join(filepath.Dir(*rulesFilePath), optimizedFileName)
 	}
 
 	// If an output file is specified, save the optimized rules.
@@ -38,7 +48,6 @@ func main() {
 		}
 	}
 
-	// Additional logic...
 }
 func exitWithError(err error) {
 	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -76,7 +85,7 @@ func readRulesFromFile(filePath string) ([]rule.Rule, error) {
 }
 
 func saveOptimizedRules(rules []rule.Rule, filePath string) error {
-	data, err := json.Marshal(rules)
+	data, err := json.MarshalIndent(rules, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal optimized rules: %w", err)
 	}

@@ -29,9 +29,24 @@ type Conditions struct {
 }
 
 type Condition struct {
-	Fact     string      `json:"fact,omitempty"`
-	Operator string      `json:"operator,omitempty"`
-	Value    interface{} `json:"value,omitempty"`
-	All      []Condition `json:"all,omitempty"`
-	Any      []Condition `json:"any,omitempty"`
+	Fact      string      `json:"fact,omitempty"`
+	Operator  string      `json:"operator,omitempty"`
+	ValueType string      `json:"valueType,omitempty"` // "string", "int", "float", "bool", "datetime"
+	Value     interface{} `json:"value,omitempty"`
+	All       []Condition `json:"all,omitempty"`
+	Any       []Condition `json:"any,omitempty"`
 }
+
+// Operator represents the type of comparison or logical operation to be performed.
+type Operator string
+
+const (
+	Equal              Operator = "equal"
+	NotEqual           Operator = "notEqual"
+	GreaterThan        Operator = "greaterThan"
+	GreaterThanOrEqual Operator = "greaterThanOrEqual"
+	LessThan           Operator = "lessThan"
+	LessThanOrEqual    Operator = "lessThanOrEqual"
+	Contains           Operator = "contains"
+	NotContains        Operator = "notContains"
+)
