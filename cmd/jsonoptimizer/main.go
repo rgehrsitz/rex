@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"rgehrsitz/rex/cmd/jsonoptimizer/optimizer"
-	"rgehrsitz/rex/internal/compiler"
 	"rgehrsitz/rex/internal/rule"
 	"strings"
 	// other imports
@@ -77,7 +76,8 @@ func readRulesFromFile(filePath string) ([]rule.Rule, error) {
 	}
 
 	var rules []rule.Rule
-	if err = compiler.ParseRules(data, &rules); err != nil {
+
+	if err = json.Unmarshal(data, &rules); err != nil {
 		return nil, fmt.Errorf("failed to parse rules: %w", err)
 	}
 

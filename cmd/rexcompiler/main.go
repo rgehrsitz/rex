@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -26,7 +27,7 @@ func main() {
 
 	// If an output file is specified, save the compiled rules
 	if *outputFilePath != "" {
-		err := saveCompiledRules(compiledRules, *outputFilePath)
+		// err := saveCompiledRules(compiledRules, *outputFilePath)
 		if err != nil {
 			exitWithError(fmt.Errorf("error saving compiled rules: %w", err))
 		}
@@ -59,19 +60,19 @@ func readRulesFromFile(filePath string) ([]rule.Rule, error) {
 	}
 
 	var rules []rule.Rule
-	if err = compiler.ParseRules(data, &rules); err != nil {
+	if err = json.Unmarshal(data, &rules); err != nil {
 		return nil, fmt.Errorf("failed to parse rules: %w", err)
 	}
 
 	return rules, nil
 }
 
-func saveCompiledRules(compiledRules []compiler.CompiledRule, filePath string) error {
-	if err := compiler.SaveCompiledRules(compiledRules, filePath); err != nil {
-		return fmt.Errorf("failed to save compiled rules: %w", err)
-	}
-	return nil
-}
+// func saveCompiledRules(compiledRules []compiler.CompiledRule, filePath string) error {
+// 	if err := compiler.SaveCompiledRules(compiledRules, filePath); err != nil {
+// 		return fmt.Errorf("failed to save compiled rules: %w", err)
+// 	}
+// 	return nil
+// }
 
 func exitWithError(err error) {
 	fmt.Fprintln(os.Stderr, err)
