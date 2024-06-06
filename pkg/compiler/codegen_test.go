@@ -20,15 +20,15 @@ func TestCalculateOffsets(t *testing.T) {
 		{Opcode: LABEL, Operands: []byte("L1")},
 	}
 
-	expectedOffsets := map[string]int{
-		"HEADER_START []":       0,
-		"VERSION [1 0]":         1,
-		"CONST_POOL_SIZE [0 0]": 4,
-		"NUM_RULES [1]":         7,
-		"HEADER_END []":         9,
-		"LABEL [76 48]":         10,
-		"JUMP_IF_FALSE [116 101 109 112 101 114 97 116 117 114 101 32 71 84 32 51 48 32 76 49]": 13,
-		"LABEL [76 49]": 34,
+	expectedOffsets := map[int]int{
+		0: 0,
+		1: 1,
+		2: 4,
+		3: 7,
+		4: 9,
+		5: 10,
+		6: 13,
+		7: 34,
 	}
 
 	offsets := CalculateOffsets(instructions)

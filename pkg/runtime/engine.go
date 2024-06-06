@@ -330,10 +330,10 @@ func (e *Engine) evaluateRule(ruleName string) {
 			action.Value = e.bytecode[offset] == 1
 			offset++
 			log.Printf("Loaded constant bool: %v\n", action.Value)
-		case byte(compiler.UPDATE_FACT):
-			action.Type = "updateStore"
-			log.Printf("Executing action: %v\n", action)
-			e.executeAction(action)
+		// case byte(compiler.UPDATE_FACT):
+		// 	action.Type = "updateStore"
+		// 	log.Printf("Executing action: %v\n", action)
+		// 	e.executeAction(action)
 		case byte(compiler.ACTION_END):
 			log.Printf("Ending actions")
 		case byte(compiler.RULE_END):

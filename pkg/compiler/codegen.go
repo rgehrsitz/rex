@@ -23,13 +23,13 @@ func (instr *Instruction) Size() int {
 }
 
 // CalculateOffsets calculates the byte offsets of each instruction.
-func CalculateOffsets(instructions []Instruction) map[string]int {
-	offsets := make(map[string]int)
+func CalculateOffsets(instructions []Instruction) map[int]int {
+	offsets := make(map[int]int)
 	currentOffset := 0
 
 	for i, instr := range instructions {
-		offsets[fmt.Sprintf("%v %v", instr.Opcode, instr.Operands)] = currentOffset
-		log.Info().Msgf("Instruction %d: Opcode %v, Operands %v, Size %d, Offset %d", i, instr.Opcode, instr.Operands, instr.Size(), currentOffset)
+		offsets[i] = currentOffset
+		log.Info().Msgf("Instruction %d: Opcode %v, Size %d, Offset %d", i, instr.Opcode, instr.Size(), currentOffset)
 		currentOffset += instr.Size()
 	}
 
@@ -72,39 +72,39 @@ func ReplaceLabels(instructions []Instruction, offsets map[int]int, labelPositio
 	// Log final instructions with their offsets
 	for i, instr := range finalInstructions {
 		position := offsets[i]
-		log.Info().Msgf("Final Instruction %d: Opcode %v, Operands %v, Position %d", i, instr.Opcode, instr.Operands, position)
+		log.Info().Msgf("Replaced Label Instruction %d: Opcode %v, Operands %v, Position %d", i, instr.Opcode, instr.Operands, position)
 	}
 
 	return finalInstructions
 }
 
-// RemoveLabels removes any remaining label instructions.
+// RemoveLabels removes any remaining label instructions and adjusts offsets.
 func RemoveLabels(instructions []Instruction) []Instruction {
 	finalInstructions := []Instruction{}
+	offsetAdjustment := 0
+
 	for _, instr := range instructions {
-		if instr.Opcode != LABEL {
-			finalInstructions = append(finalInstructions, instr)
+		if instr.Opcode == LABEL {
+			offsetAdjustment += instr.Size()
+			continue
 		}
+		// Adjust jump offsets
+		if instr.Opcode == JUMP_IF_FALSE || instr.Opcode == JUMP_IF_TRUE {
+			parts := strings.Split(string(instr.Operands), " ")
+			offset, err := strconv.Atoi(parts[3])
+			if err == nil {
+				adjustedOffset := offset - offsetAdjustment
+				parts[3] = strconv.Itoa(adjustedOffset)
+				instr.Operands = []byte(strings.Join(parts, " "))
+			}
+		}
+		finalInstructions = append(finalInstructions, instr)
+
+		log.Info().Msgf("Instruction %d: Opcode %v, Operands %v, Position %d", len(finalInstructions), instr.Opcode, instr.Operands, len(finalInstructions))
 	}
+
 	return finalInstructions
 }
-
-// // ResolveLabels resolves the 'success' and 'failure' labels to the actual positions of 'ACTION_START' and 'RULE_END'.
-// func ResolveLabels(instructions []Instruction) []Instruction {
-// 	// First pass: calculate byte offsets
-// 	offsets := CalculateOffsets(instructions)
-
-// 	// Map labels to their corresponding positions
-// 	labelPositions := MapLabels(instructions)
-
-// 	// Second pass: replace labels with byte offsets
-// 	instructions = ReplaceLabels(instructions, offsets, labelPositions)
-
-// 	// Third pass: remove any remaining label instructions
-// 	instructions = RemoveLabels(instructions)
-
-// 	return instructions
-// }
 
 // GenerateBytecode generates the bytecode instructions from the ruleset.
 func GenerateBytecode(ruleset *Ruleset) []byte {
@@ -151,7 +151,19 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 		}
 
 		//combine instructions
-		instructions = append(instructions, actionInstructions...)
+		if len(instructions) > 0 {
+			lastInstruction := instructions[len(instructions)-1]
+			instructions = append(instructions[:len(instructions)-1], actionInstructions...)
+			instructions = append(instructions, lastInstruction)
+		} else {
+			instructions = append(instructions, actionInstructions...)
+		}
+
+		// Map labels to their corresponding positions
+		labelPositions := MapLabels(instructions)
+
+		// Calculate byte offsets
+		offsets := CalculateOffsets(instructions)
 
 		// Replace labels and remove them
 		replacedInstructions := ReplaceLabels(instructions, offsets, labelPositions)
@@ -163,12 +175,7 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 			bytecode = append(bytecode, instr.Operands...)
 		}
 		// Append the optimized instructions to the bytecode
-		for _, instr := range instructions {
-			bytecode = append(bytecode, byte(instr.Opcode))
-			bytecode = append(bytecode, instr.Operands...)
-		}
-		// Append the action instructions to the bytecode
-		for _, instr := range actionInstructions {
+		for _, instr := range finalInstructions {
 			bytecode = append(bytecode, byte(instr.Opcode))
 			bytecode = append(bytecode, instr.Operands...)
 		}
