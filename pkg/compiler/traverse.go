@@ -5,6 +5,8 @@ package compiler
 import (
 	"fmt"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 // Node represents a node in the condition tree for generating bytecode.
@@ -216,11 +218,13 @@ func CombineJIFJIT(instructions []Instruction) []Instruction {
 				combinedOperands := []byte(fmt.Sprintf("%s %s %s %s", parts[0], parts[1], parts[2], label))
 				combinedInstructions = append(combinedInstructions, Instruction{Opcode: JUMP_IF_TRUE, Operands: combinedOperands})
 				i++ // Skip the next JUMP_IF_TRUE instruction
+				log.Debug().Msgf("Combined JIF and JIT instructions: %s", string(combinedOperands))
 				continue
 			}
 		}
 		combinedInstructions = append(combinedInstructions, instr)
 	}
+	log.Debug().Msgf("Combined instructions: %+v", combinedInstructions)
 	return combinedInstructions
 }
 
@@ -238,16 +242,21 @@ func RemoveUnusedLabels(instructions []Instruction) []Instruction {
 		}
 	}
 
+	log.Debug().Msgf("Used labels: %+v", usedLabels)
+
 	// Second pass: remove unused labels while preserving existing label identifiers
 	for _, instr := range instructions {
 		if instr.Opcode == LABEL {
 			if !usedLabels[string(instr.Operands)] {
 				// Skip the label if it's not used by any jump instruction
+				log.Debug().Msgf("Removing unused label: %s", string(instr.Operands))
 				continue
 			}
 		}
 		finalInstructions = append(finalInstructions, instr)
 	}
+
+	log.Debug().Msgf("Final instructions: %+v", finalInstructions)
 
 	return finalInstructions
 }

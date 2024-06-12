@@ -23,7 +23,7 @@ func TestEndToEnd(t *testing.T) {
 							{
 								"fact": "temperature",
 								"operator": "GT",
-								"value": 30.0
+								"value": 30.1
 							},
 							{
 								"fact": "humidity",
