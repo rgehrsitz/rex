@@ -24,36 +24,6 @@ func (instr *Instruction) Size() int {
 	return 1 + len(instr.Operands) // 1 byte for the opcode + length of operands
 }
 
-// CalculateOffsets calculates the byte offsets of each instruction.
-// func CalculateOffsets(instructions []Instruction) map[string]int {
-// 	log.Info().Msg("Calculating offsets")
-// 	offsets := make(map[string]int)
-// 	currentOffset := 0
-
-// 	for i, instr := range instructions {
-// 		offsets[fmt.Sprintf("%v %v", instr.Opcode, instr.Operands)] = currentOffset
-// 		log.Info().Msgf("Instruction %d: Opcode %v, Operands %v, Size %d, Offset %d", i, instr.Opcode, instr.Operands, instr.Size(), currentOffset)
-// 		currentOffset += instr.Size()
-// 	}
-
-// 	return offsets
-// }
-
-// // MapLabels maps labels to their corresponding positions.
-// func MapLabels(instructions []Instruction) map[string]int {
-// 	labelPositions := make(map[string]int)
-// 	for i, instr := range instructions {
-// 		if instr.Opcode == LABEL {
-// 			label := string(instr.Operands)
-// 			if strings.HasPrefix(label, "L") {
-// 				labelPositions[label] = i
-// 				log.Info().Msgf("Label %s at position %d", label, i)
-// 			}
-// 		}
-// 	}
-// 	return labelPositions
-// }
-
 // ReplaceLabels replaces labels with the corresponding byte offsets.
 func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPositions map[string]int) []Instruction {
 	log.Info().Msg("Replacing labels")
@@ -325,20 +295,6 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 
 		bytecode = append(bytecode, byte(RULE_END))
 
-		// // Generate offsets and label positions
-		// parsedInstructions := parseInstructions(bytecode)
-		// offsets := CalculateOffsets(parsedInstructions)
-		// labelPositions := MapLabels(parsedInstructions)
-
-		// // Replace labels with actual offsets
-		// parsedInstructions = ReplaceLabels(parsedInstructions, offsets, labelPositions)
-
-		// // Remove any remaining label instructions
-		// parsedInstructions = RemoveLabels(parsedInstructions)
-
-		// // Update the bytecode with the new instructions
-		// bytecode = serializeInstructions(parsedInstructions)
-
 		bytecode = ReplaceLabelOffsets(bytecode)
 	}
 
@@ -471,80 +427,6 @@ func collectFactsFromGroup(condOrGroup *ConditionOrGroup) []string {
 	}
 	return facts
 }
-
-// func parseInstructions(bytecode []byte) []Instruction {
-// 	log.Debug().Msg("Parsing bytecode")
-// 	var instructions []Instruction
-// 	for i := 0; i < len(bytecode); {
-// 		opcode := Opcode(bytecode[i])
-// 		log.Debug().Msgf("Opcode: %v", opcode)
-// 		//i++
-// 		var operands []byte
-// 		switch opcode {
-// 		case LOAD_FACT_STRING, LOAD_CONST_STRING, JUMP_IF_FALSE, JUMP_IF_TRUE, LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_BOOL:
-// 			i++
-// 			length := int(bytecode[i])
-// 			i++
-// 			operands = bytecode[i : i+length]
-// 			i += length
-// 		case LOAD_CONST_INT:
-// 			i++
-// 			operands = bytecode[i : i+8]
-// 			i += 8
-// 		case LOAD_CONST_FLOAT:
-// 			i++
-// 			operands = bytecode[i : i+8]
-// 			i += 8
-// 		case LOAD_CONST_BOOL:
-// 			i++
-// 			operands = []byte{bytecode[i]}
-// 			i++
-// 		case RULE_START, ACTION_START:
-// 			i++
-// 			length := int(bytecode[i])
-// 			i++
-// 			operands = bytecode[i : i+length]
-// 			i += length
-// 		case GTE_FLOAT, GTE_INT, GT_FLOAT, GT_INT, LTE_FLOAT, LTE_INT, LT_FLOAT, LT_INT,
-// 			NEQ_FLOAT, NEQ_INT, EQ_FLOAT, EQ_INT, CONTAINS_STRING, NOT_CONTAINS_STRING, EQ_STRING, NEQ_STRING,
-// 			EQ_BOOL, NEQ_BOOL, AND, OR, NOT:
-// 			i++
-// 		case LABEL:
-// 			operands = bytecode[i : i+4]
-// 			i += 4
-// 		default:
-// 			for ; i < len(bytecode) && bytecode[i] != byte(RULE_END) && bytecode[i] != byte(ACTION_END); i++ {
-// 				operands = append(operands, bytecode[i])
-// 			}
-// 		}
-// 		instructions = append(instructions, Instruction{Opcode: opcode, Operands: operands})
-// 		if opcode == RULE_END || opcode == ACTION_END {
-// 			i++
-// 		}
-// 		log.Debug().Msgf("Instruction: %v %v", opcode, operands)
-// 	}
-// 	return instructions
-// }
-
-// func serializeInstructions(instructions []Instruction) []byte {
-// 	var bytecode []byte
-// 	for _, instr := range instructions {
-// 		bytecode = append(bytecode, byte(instr.Opcode))
-// 		switch instr.Opcode {
-// 		case LOAD_FACT_STRING, LOAD_CONST_STRING, LABEL, JUMP_IF_FALSE, JUMP_IF_TRUE:
-// 			bytecode = append(bytecode, byte(len(instr.Operands)))
-// 			bytecode = append(bytecode, instr.Operands...)
-// 		case LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_BOOL, LOAD_CONST_INT, LOAD_CONST_FLOAT, LOAD_CONST_BOOL:
-// 			bytecode = append(bytecode, instr.Operands...)
-// 		case RULE_START, ACTION_START:
-// 			bytecode = append(bytecode, byte(len(instr.Operands)))
-// 			bytecode = append(bytecode, instr.Operands...)
-// 		default:
-// 			bytecode = append(bytecode, instr.Operands...)
-// 		}
-// 	}
-// 	return bytecode
-// }
 
 func ReplaceLabelOffsets(bytecode []byte) []byte {
 	log.Debug().Msg("Replacing label offsets")
