@@ -51,7 +51,7 @@ func main() {
 			Version:       1,
 			Checksum:      0,
 			ConstPoolSize: 0,
-			NumRules:      uint16(len(ruleset.Rules)),
+			NumRules:      uint32(len(ruleset.Rules)),
 		},
 		Instructions:        bytecode,
 		RuleExecIndex:       ruleExecIndex,

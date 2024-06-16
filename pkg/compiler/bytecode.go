@@ -10,6 +10,12 @@ import (
 	"strings"
 )
 
+const (
+	Version       = 1
+	Checksum      = 0
+	ConstPoolSize = 0
+)
+
 // Opcode represents the type of a bytecode instruction.
 type Opcode byte
 
@@ -180,16 +186,16 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 	buf := new(bytes.Buffer)
 
 	// Write header
-	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.Version); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, uint16(Version)); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.Checksum); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, uint32(Checksum)); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.ConstPoolSize); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, uint32(ConstPoolSize)); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.NumRules); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, uint32(bytecodeFile.Header.NumRules)); err != nil {
 		return err
 	}
 

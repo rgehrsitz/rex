@@ -73,11 +73,11 @@ func (e *Engine) parseHeaderAndIndices() {
 	log.Printf("Checksum: %d\n", checksum)
 	offset += 4
 
-	constPoolSize := binary.LittleEndian.Uint16(e.bytecode[offset:])
+	constPoolSize := binary.LittleEndian.Uint32(e.bytecode[offset:])
 	log.Printf("Constant pool size: %d\n", constPoolSize)
 	offset += 2
 
-	numRules := binary.LittleEndian.Uint16(e.bytecode[offset:])
+	numRules := binary.LittleEndian.Uint32(e.bytecode[offset:])
 	log.Printf("Number of rules: %d\n", numRules)
 	offset += 2
 
@@ -500,12 +500,12 @@ func NewEngineFromFile(filename string) (*Engine, error) {
 	offset += 4
 
 	// Read constant pool size
-	constPoolSize := binary.LittleEndian.Uint16(bytecode[offset:])
+	constPoolSize := binary.LittleEndian.Uint32(bytecode[offset:])
 	log.Printf("Constant pool size: %d\n", constPoolSize)
 	offset += 2
 
 	// Read number of rules
-	numRules := binary.LittleEndian.Uint16(bytecode[offset:])
+	numRules := binary.LittleEndian.Uint32(bytecode[offset:])
 	log.Printf("Number of rules: %d\n", numRules)
 	offset += 2
 

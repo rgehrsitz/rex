@@ -60,7 +60,7 @@ func TestEndToEnd(t *testing.T) {
 			Version:       1,
 			Checksum:      0,
 			ConstPoolSize: 1,
-			NumRules:      uint16(len(ruleset.Rules)),
+			NumRules:      uint32(len(ruleset.Rules)),
 		},
 		Instructions:        bytecode,
 		RuleExecIndex:       ruleExecIndex,
