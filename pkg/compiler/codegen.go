@@ -383,6 +383,8 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 	}
 
 	log.Debug().Msg("Bytecode generation complete")
+	log.Debug().Msgf("Bytecode length: %v", len(bytecode))
+	log.Debug().Msgf("Bytecode: %v", bytecode)
 	return bytecode
 }
 
@@ -549,36 +551,44 @@ func ReplaceLabelOffsets(bytecode []byte) []byte {
 
 	for i := 0; i < len(bytecode); {
 		opcode := Opcode(bytecode[i])
-		if opcode == JUMP_IF_FALSE || opcode == JUMP_IF_TRUE {
+		if (opcode == JUMP_IF_FALSE || opcode == JUMP_IF_TRUE) && i+5 < len(bytecode) {
+			// Check if the next 4 bytes form a label 'Lxyz'
 			labelStart := i + 1
 			label := string(bytecode[labelStart : labelStart+4])
-
-			labelOffset := -1
-			// Scan forward to find the label definition
-			for j := 0; j < len(bytecode); j++ {
-				if bytecode[j] == byte(LABEL) && string(bytecode[j+1:j+5]) == label {
-					labelOffset = j
-					break
+			if label[0] == 'L' && isDigit(label[1]) && isDigit(label[2]) && isDigit(label[3]) {
+				labelOffset := -1
+				// Scan forward to find the label definition
+				for j := 0; j < len(bytecode); j++ {
+					if bytecode[j] == byte(LABEL) && string(bytecode[j+1:j+5]) == label {
+						labelOffset = j
+						break
+					}
 				}
-			}
 
-			if labelOffset != -1 {
-				// Calculate the relative offset from the current instruction to the label
-				relativeOffset := labelOffset - i
-				offsetBytes := make([]byte, 4)
-				binary.LittleEndian.PutUint32(offsetBytes, uint32(relativeOffset))
-				// Replace the label with the offset bytes
-				copy(bytecode[labelStart:], offsetBytes)
-				log.Debug().Str("label", label).Int("position", i).Int("offset", relativeOffset).Msg("Replaced label with offset")
+				if labelOffset != -1 {
+					// Calculate the relative offset from the current instruction to the label
+					relativeOffset := labelOffset - i
+					offsetBytes := make([]byte, 4)
+					binary.LittleEndian.PutUint32(offsetBytes, uint32(relativeOffset))
+					// Replace the label with the offset bytes
+					copy(bytecode[labelStart:], offsetBytes)
+					log.Debug().Str("label", label).Int("position", i).Int("offset", relativeOffset).Msg("Replaced label with offset")
+				} else {
+					log.Warn().Str("label", label).Msg("Label not found for jump instruction")
+				}
+				i += 5 // Move past the JUMP instruction and the 4-byte label
 			} else {
-				log.Warn().Str("label", label).Msg("Label not found for jump instruction")
+				i += 1 // Move to the next byte
 			}
-			i += 5 // Move past the JUMP instruction and the 4-byte label
 		} else {
-			i += 1 // Move to next byte
+			i += 1 // Move to the next byte
 		}
 	}
 
 	log.Debug().Msg("Label offsets replacement completed")
 	return bytecode
+}
+
+func isDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }
