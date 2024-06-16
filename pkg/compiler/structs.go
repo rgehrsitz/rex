@@ -32,11 +32,13 @@ type Action struct {
 }
 
 type Header struct {
-	Version       uint16 // Version of the bytecode spec
-	Checksum      uint32 // Checksum for integrity verification
-	ConstPoolSize uint32 // Size of the constant pool
-	NumRules      uint32 // Number of rules in the bytecode
-	// ... other metadata fields
+	Version             uint32
+	Checksum            uint32
+	ConstPoolSize       uint32
+	NumRules            uint32
+	RuleExecIndexOffset uint32
+	FactRuleIndexOffset uint32
+	FactDepIndexOffset  uint32
 }
 
 type RuleExecutionIndex struct {

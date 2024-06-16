@@ -14,6 +14,7 @@ const (
 	Version       = 1
 	Checksum      = 0
 	ConstPoolSize = 0
+	HeaderSize    = 28
 )
 
 // Opcode represents the type of a bytecode instruction.
@@ -181,47 +182,39 @@ type BytecodeFile struct {
 	FactDependencyIndex []FactDependencyIndex
 }
 
-// WriteBytecodeToFile writes the bytecode file
 func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 	buf := new(bytes.Buffer)
 
 	// Write header
-	if err := binary.Write(buf, binary.LittleEndian, uint16(Version)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.Version); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, uint32(Checksum)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.Checksum); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, uint32(ConstPoolSize)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.ConstPoolSize); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, uint32(bytecodeFile.Header.NumRules)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.NumRules); err != nil {
 		return err
 	}
-
-	// Reserve space for index offsets
-	ruleExecIndexOffsetPos := buf.Len()
-	if err := binary.Write(buf, binary.LittleEndian, uint32(0)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.RuleExecIndexOffset); err != nil {
 		return err
 	}
-	factRuleIndexOffsetPos := buf.Len()
-	if err := binary.Write(buf, binary.LittleEndian, uint32(0)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.FactRuleIndexOffset); err != nil {
 		return err
 	}
-	factDepIndexOffsetPos := buf.Len()
-	if err := binary.Write(buf, binary.LittleEndian, uint32(0)); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.FactDepIndexOffset); err != nil {
 		return err
 	}
-
-	fmt.Printf("Writing header: %+v\n", bytecodeFile.Header)
 
 	// Write bytecode instructions
 	if _, err := buf.Write(bytecodeFile.Instructions); err != nil {
 		return err
 	}
 
-	// Write Rule Execution Index
-	ruleExecIndexOffset := buf.Len()
+	// Calculate and write the Rule Execution Index
+	bytecodeFile.Header.RuleExecIndexOffset = uint32(buf.Len())
 	for _, idx := range bytecodeFile.RuleExecIndex {
 		if err := writeString(buf, idx.RuleName); err != nil {
 			return err
@@ -229,11 +222,10 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 		if err := binary.Write(buf, binary.LittleEndian, uint32(idx.ByteOffset)); err != nil {
 			return err
 		}
-		fmt.Printf("Writing Rule Execution Index: %+v\n", idx)
 	}
 
-	// Write Fact Rule Lookup Index
-	factRuleIndexOffset := buf.Len()
+	// Calculate and write the Fact Rule Lookup Index
+	bytecodeFile.Header.FactRuleIndexOffset = uint32(buf.Len())
 	for factName, rules := range bytecodeFile.FactRuleLookupIndex {
 		if err := writeString(buf, factName); err != nil {
 			return err
@@ -242,17 +234,15 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 		if err := binary.Write(buf, binary.LittleEndian, rulesCount); err != nil {
 			return err
 		}
-		fmt.Printf("Writing Fact Rule Lookup Index: %s with %d rules\n", factName, rulesCount)
 		for _, ruleName := range rules {
 			if err := writeString(buf, ruleName); err != nil {
 				return err
 			}
-			fmt.Printf("Fact Rule Lookup: %s -> %s\n", factName, ruleName)
 		}
 	}
 
-	// Write Fact Dependency Index
-	factDepIndexOffset := buf.Len()
+	// Calculate and write the Fact Dependency Index
+	bytecodeFile.Header.FactDepIndexOffset = uint32(buf.Len())
 	for _, idx := range bytecodeFile.FactDependencyIndex {
 		if err := writeString(buf, idx.RuleName); err != nil {
 			return err
@@ -266,13 +256,34 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 				return err
 			}
 		}
-		fmt.Printf("Writing Fact Dependency Index: %+v\n", idx)
 	}
 
-	// Update index offsets in the header
-	binary.LittleEndian.PutUint32(buf.Bytes()[ruleExecIndexOffsetPos:], uint32(ruleExecIndexOffset))
-	binary.LittleEndian.PutUint32(buf.Bytes()[factRuleIndexOffsetPos:], uint32(factRuleIndexOffset))
-	binary.LittleEndian.PutUint32(buf.Bytes()[factDepIndexOffsetPos:], uint32(factDepIndexOffset))
+	// Write the updated header with correct index offsets
+	headerBytes := new(bytes.Buffer)
+	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.Version); err != nil {
+		return err
+	}
+	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.Checksum); err != nil {
+		return err
+	}
+	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.ConstPoolSize); err != nil {
+		return err
+	}
+	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.NumRules); err != nil {
+		return err
+	}
+	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.RuleExecIndexOffset); err != nil {
+		return err
+	}
+	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.FactRuleIndexOffset); err != nil {
+		return err
+	}
+	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.FactDepIndexOffset); err != nil {
+		return err
+	}
+
+	// Update the header in the buffer
+	copy(buf.Bytes()[:HeaderSize], headerBytes.Bytes())
 
 	// Write buffer to file
 	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {

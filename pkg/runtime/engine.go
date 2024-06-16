@@ -389,17 +389,17 @@ func evaluate(factValue interface{}, operator string, conditionValue interface{}
 	return result
 }
 
-func (e *Engine) executeAction(action compiler.Action) {
-	switch action.Type {
-	case "updateStore":
-		e.Facts[action.Target] = action.Value
-		log.Printf("Updating store: %s = %v\n", action.Target, action.Value)
-	case "sendMessage":
-		log.Printf("Sending message to %s: %v\n", action.Target, action.Value)
-	default:
-		log.Printf("Unknown action type: %s\n", action.Type)
-	}
-}
+// func (e *Engine) executeAction(action compiler.Action) {
+// 	switch action.Type {
+// 	case "updateStore":
+// 		e.Facts[action.Target] = action.Value
+// 		log.Printf("Updating store: %s = %v\n", action.Target, action.Value)
+// 	case "sendMessage":
+// 		log.Printf("Sending message to %s: %v\n", action.Target, action.Value)
+// 	default:
+// 		log.Printf("Unknown action type: %s\n", action.Type)
+// 	}
+// }
 
 func compareInt(a, b int, operator string) bool {
 	switch operator {

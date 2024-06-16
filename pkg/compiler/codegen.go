@@ -366,48 +366,99 @@ func boolToBytes(b bool) []byte {
 
 // GenerateIndices generates the indices for the bytecode
 func GenerateIndices(ruleset *Ruleset, bytecode []byte) ([]RuleExecutionIndex, map[string][]string, []FactDependencyIndex) {
-	ruleExecIndex := make([]RuleExecutionIndex, len(ruleset.Rules))
+	ruleExecIndex := make([]RuleExecutionIndex, 0)
 	factRuleIndex := make(map[string][]string)
-	factDepIndex := make([]FactDependencyIndex, len(ruleset.Rules))
+	factDepIndex := make([]FactDependencyIndex, 0)
 
-	offset := len(bytecode)
+	offset := 0
 
-	for i, rule := range ruleset.Rules {
-		ruleExecIndex[i] = RuleExecutionIndex{
-			RuleName:   rule.Name,
-			ByteOffset: offset,
-		}
-		offset += len(rule.Name) + 2 // Rule name length + opcode bytes
+	for _, rule := range ruleset.Rules {
+		ruleStartOffset := offset
+
+		// Skip past RULE_START and rule name length
+		offset += 1 + 1 + len(rule.Name)
 
 		// Collect facts for dependency index
 		facts := collectFacts(rule.Conditions)
-		factDepIndex[i] = FactDependencyIndex{
-			RuleName: rule.Name,
-			Facts:    facts,
-		}
 
 		// Update fact rule lookup index
 		for _, fact := range facts {
-			if _, ok := factRuleIndex[fact]; !ok {
-				factRuleIndex[fact] = []string{rule.Name}
-			} else {
-				factRuleIndex[fact] = append(factRuleIndex[fact], rule.Name)
-			}
+			factRuleIndex[fact] = append(factRuleIndex[fact], rule.Name)
 		}
+
+		// Process conditions to find out the size of the condition section
+		conditionSize := 0
+		conditionNode := convertConditionGroupToNode(rule.Conditions)
+		instructions := generateInstructions(conditionNode, "L")
+		for _, instr := range instructions {
+			conditionSize += instr.Size()
+		}
+
+		// Update offset after conditions
+		offset += conditionSize
+
+		// Update rule execution index
+		ruleExecIndex = append(ruleExecIndex, RuleExecutionIndex{
+			RuleName:   rule.Name,
+			ByteOffset: ruleStartOffset,
+		})
+
+		// Process actions to find out the size of the action section
+		actionSize := 0
+		for _, action := range rule.Actions {
+			switch v := action.Value.(type) {
+			case int:
+				actionSize += 1 + 1 + 8
+			case float64:
+				actionSize += 1 + 1 + 8
+			case string:
+				actionSize += 1 + 1 + len(v)
+			case bool:
+				actionSize += 1 + 1 + 1
+			}
+			actionSize += 1 + 1 + len(action.Type) + 1 + len(action.Target) + 1 // ACTION_END
+		}
+
+		// Update offset after actions
+		offset += actionSize
+
+		// Update fact dependency index
+		factDepIndex = append(factDepIndex, FactDependencyIndex{
+			RuleName: rule.Name,
+			Facts:    facts,
+		})
+
+		// Skip past RULE_END
+		offset += 1
 	}
 
 	return ruleExecIndex, factRuleIndex, factDepIndex
 }
 
+// collectFacts collects all facts from the condition group
 func collectFacts(conditions ConditionGroup) []string {
-	facts := []string{}
+	facts := make(map[string]struct{})
+	collectFactsRecursive(&conditions, facts)
+	factList := make([]string, 0, len(facts))
+	for fact := range facts {
+		factList = append(factList, fact)
+	}
+	return factList
+}
+
+// collectFactsRecursive is a helper function to collect facts from condition groups recursively
+func collectFactsRecursive(conditions *ConditionGroup, facts map[string]struct{}) {
 	for _, condOrGroup := range conditions.All {
 		if condOrGroup.Fact != "" {
-			facts = append(facts, condOrGroup.Fact)
+			facts[condOrGroup.Fact] = struct{}{}
 		}
-		facts = append(facts, collectFactsFromGroup(condOrGroup)...)
+		if condOrGroup.All != nil {
+			collectFactsRecursive(&condOrGroup.ConditionGroup, facts)
+		}
+		if condOrGroup.Any != nil {
+			collectFactsRecursive(&condOrGroup.ConditionGroup, facts)
+		}
 	}
-	return facts
 }
 
 func collectFactsFromGroup(condOrGroup *ConditionOrGroup) []string {
