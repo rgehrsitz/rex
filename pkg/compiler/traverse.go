@@ -107,7 +107,7 @@ func convertValue(value interface{}) interface{} {
 var labelCounter = 0
 
 func getNextLabel(prefix string) string {
-	label := fmt.Sprintf("%s%d", prefix, labelCounter)
+	label := fmt.Sprintf("%s%03d", prefix, labelCounter)
 	labelCounter++
 	return label
 }
@@ -215,7 +215,9 @@ func CombineJIFJIT(instructions []Instruction) []Instruction {
 			parts := strings.Split(condition, " ")
 			if i+1 < len(instructions) && instructions[i+1].Opcode == JUMP_IF_TRUE {
 				label := string(instructions[i+1].Operands)
-				combinedOperands := []byte(fmt.Sprintf("%s %s %s %s", parts[0], parts[1], parts[2], label))
+				// Pad the label with leading zeros to ensure fixed length
+				paddedLabel := fmt.Sprintf("%04s", label)
+				combinedOperands := []byte(fmt.Sprintf("%s %s %s %s", parts[0], parts[1], parts[2], paddedLabel))
 				combinedInstructions = append(combinedInstructions, Instruction{Opcode: JUMP_IF_TRUE, Operands: combinedOperands})
 				i++ // Skip the next JUMP_IF_TRUE instruction
 				log.Debug().Msgf("Combined JIF and JIT instructions: %s", string(combinedOperands))

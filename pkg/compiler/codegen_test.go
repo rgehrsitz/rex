@@ -8,21 +8,21 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestMapLabels(t *testing.T) {
-	instructions := []Instruction{
-		{Opcode: LABEL, Operands: []byte("L0")},
-		{Opcode: JUMP_IF_FALSE, Operands: []byte("temperature GT 30 L1")},
-		{Opcode: LABEL, Operands: []byte("L1")},
-	}
+// func TestMapLabels(t *testing.T) {
+// 	instructions := []Instruction{
+// 		{Opcode: LABEL, Operands: []byte("L0")},
+// 		{Opcode: JUMP_IF_FALSE, Operands: []byte("temperature GT 30 L1")},
+// 		{Opcode: LABEL, Operands: []byte("L1")},
+// 	}
 
-	expectedLabelPositions := map[string]int{
-		"L0": 0,
-		"L1": 2,
-	}
+// 	expectedLabelPositions := map[string]int{
+// 		"L0": 0,
+// 		"L1": 2,
+// 	}
 
-	labelPositions := MapLabels(instructions)
-	assert.Equal(t, expectedLabelPositions, labelPositions)
-}
+// 	labelPositions := MapLabels(instructions)
+// 	assert.Equal(t, expectedLabelPositions, labelPositions)
+// }
 
 // func TestReplaceLabels(t *testing.T) {
 // 	instructions := []Instruction{

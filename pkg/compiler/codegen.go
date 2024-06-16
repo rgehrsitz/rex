@@ -3,6 +3,7 @@
 package compiler
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -24,32 +25,34 @@ func (instr *Instruction) Size() int {
 }
 
 // CalculateOffsets calculates the byte offsets of each instruction.
-func CalculateOffsets(instructions []Instruction) map[string]int {
-	log.Info().Msg("Calculating offsets")
-	offsets := make(map[string]int)
-	currentOffset := 0
+// func CalculateOffsets(instructions []Instruction) map[string]int {
+// 	log.Info().Msg("Calculating offsets")
+// 	offsets := make(map[string]int)
+// 	currentOffset := 0
 
-	for i, instr := range instructions {
-		offsets[fmt.Sprintf("%v %v", instr.Opcode, instr.Operands)] = currentOffset
-		log.Info().Msgf("Instruction %d: Opcode %v, Operands %v, Size %d, Offset %d", i, instr.Opcode, instr.Operands, instr.Size(), currentOffset)
-		currentOffset += instr.Size()
-	}
+// 	for i, instr := range instructions {
+// 		offsets[fmt.Sprintf("%v %v", instr.Opcode, instr.Operands)] = currentOffset
+// 		log.Info().Msgf("Instruction %d: Opcode %v, Operands %v, Size %d, Offset %d", i, instr.Opcode, instr.Operands, instr.Size(), currentOffset)
+// 		currentOffset += instr.Size()
+// 	}
 
-	return offsets
-}
+// 	return offsets
+// }
 
-// MapLabels maps labels to their corresponding positions.
-func MapLabels(instructions []Instruction) map[string]int {
-	labelPositions := make(map[string]int)
-	for i, instr := range instructions {
-		if instr.Opcode == LABEL {
-			label := string(instr.Operands)
-			labelPositions[label] = i
-			log.Info().Msgf("Label %s at position %d", label, i)
-		}
-	}
-	return labelPositions
-}
+// // MapLabels maps labels to their corresponding positions.
+// func MapLabels(instructions []Instruction) map[string]int {
+// 	labelPositions := make(map[string]int)
+// 	for i, instr := range instructions {
+// 		if instr.Opcode == LABEL {
+// 			label := string(instr.Operands)
+// 			if strings.HasPrefix(label, "L") {
+// 				labelPositions[label] = i
+// 				log.Info().Msgf("Label %s at position %d", label, i)
+// 			}
+// 		}
+// 	}
+// 	return labelPositions
+// }
 
 // ReplaceLabels replaces labels with the corresponding byte offsets.
 func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPositions map[string]int) []Instruction {
@@ -64,8 +67,10 @@ func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPosi
 			if _, ok := labelPositions[label]; ok {
 				// Calculate the relative offset from the current instruction to the target instruction
 				offset := offsets[fmt.Sprintf("%v %v", instr.Opcode, instr.Operands)] - (offsets[fmt.Sprintf("%v %v", instr.Opcode, instr.Operands)] + instr.Size())
-				parts[3] = strconv.Itoa(offset)
-				instr.Operands = []byte(strings.Join(parts, " "))
+				// Convert the offset to a uint32 and overwrite the label bytes
+				offsetBytes := make([]byte, 4)
+				binary.LittleEndian.PutUint32(offsetBytes, uint32(offset))
+				copy(instr.Operands[len(instr.Operands)-4:], offsetBytes)
 				log.Info().Msgf("Replaced label %s with offset %d in instruction %d", label, offset, i)
 			}
 		}
@@ -235,7 +240,7 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 
 					bytecode = append(bytecode, byte(instr.Opcode))
 
-					bytecode = append(bytecode, byte(len(label)))
+					//bytecode = append(bytecode, byte(len(label)))
 					bytecode = append(bytecode, []byte(label)...)
 
 					log.Debug().Msgf("Appended separated instructions for condition: factOpcode=%v, valueOpcode=%v, comparisonOpcode=%v", factOpcode, valueOpcode, comparisonOpcode)
@@ -255,26 +260,51 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 			log.Debug().Msgf("Processing action: %s", action.Type)
 			actionBytecode = append(actionBytecode, byte(ACTION_START))
 
-			// NEW CODE: Append the action type with length prefix
+			// Append the action type
+			actionBytecode = append(actionBytecode, byte(ACTION_TYPE))
 			actionBytecode = append(actionBytecode, byte(len(action.Type)))
 			actionBytecode = append(actionBytecode, []byte(action.Type)...)
 
-			// NEW CODE: Append the action target with length prefix
+			// Append the action target
+			actionBytecode = append(actionBytecode, byte(ACTION_TARGET))
 			actionBytecode = append(actionBytecode, byte(len(action.Target)))
 			actionBytecode = append(actionBytecode, []byte(action.Target)...)
 
-			// EXISTING CODE: Append the action value as is, assuming it's not a string
-			actionBytecode = append(actionBytecode, []byte(fmt.Sprintf("%v", action.Value))...)
+			// Append the action value based on its type
+			switch v := action.Value.(type) {
+			case int:
+				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_INT))
+				intBytes := make([]byte, 8)
+				binary.Write(bytes.NewBuffer(intBytes), binary.LittleEndian, int64(v))
+				actionBytecode = append(actionBytecode, intBytes...)
+			case float64:
+				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_FLOAT))
+				floatBytes := make([]byte, 8)
+				binary.Write(bytes.NewBuffer(floatBytes), binary.LittleEndian, v)
+				actionBytecode = append(actionBytecode, floatBytes...)
+			case string:
+				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_STRING))
+				actionBytecode = append(actionBytecode, byte(len(v)))
+				actionBytecode = append(actionBytecode, []byte(v)...)
+			case bool:
+				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_BOOL))
+				if v {
+					actionBytecode = append(actionBytecode, byte(1))
+				} else {
+					actionBytecode = append(actionBytecode, byte(0))
+				}
+			default:
+				log.Error().Msgf("Unsupported action value type: %T", v)
+				continue
+			}
+
 			actionBytecode = append(actionBytecode, byte(ACTION_END))
 		}
 
-		// to determine the last instruction, we need to check the several byte of the code, back to the 'label' instruction (opcode 43)
-		// please set the lastInstruction to the 'label' instruction (opcode 43) along with the operand of it
-
 		var lastInstructionStart int
 		for i := len(bytecode) - 1; i >= 0; i-- {
-			if bytecode[i] == 43 {
-				lastInstructionStart = i + 1
+			if bytecode[i] == byte(LABEL) && i+1 < len(bytecode) && bytecode[i+1] == 'L' {
+				lastInstructionStart = i
 				break
 			}
 		}
@@ -285,7 +315,7 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 		copy(lastInstruction, bytecode[lastInstructionStart:])
 
 		log.Debug().Msgf("Last instruction: %v", lastInstruction)
-		tempBytecode := bytecode[:len(bytecode)-2]
+		tempBytecode := bytecode[:len(bytecode)-len(lastInstruction)]
 		log.Debug().Msgf("Temp bytecode: %v", tempBytecode)
 		tempBytecode = append(tempBytecode, actionBytecode...)
 		log.Debug().Msgf("Temp bytecode after appending actions: %v", tempBytecode)
@@ -295,19 +325,21 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 
 		bytecode = append(bytecode, byte(RULE_END))
 
-		// Generate offsets and label positions
-		parsedInstructions := parseInstructions(bytecode)
-		offsets := CalculateOffsets(parsedInstructions)
-		labelPositions := MapLabels(parsedInstructions)
+		// // Generate offsets and label positions
+		// parsedInstructions := parseInstructions(bytecode)
+		// offsets := CalculateOffsets(parsedInstructions)
+		// labelPositions := MapLabels(parsedInstructions)
 
-		// Replace labels with actual offsets
-		parsedInstructions = ReplaceLabels(parsedInstructions, offsets, labelPositions)
+		// // Replace labels with actual offsets
+		// parsedInstructions = ReplaceLabels(parsedInstructions, offsets, labelPositions)
 
-		// Remove any remaining label instructions
-		parsedInstructions = RemoveLabels(parsedInstructions)
+		// // Remove any remaining label instructions
+		// parsedInstructions = RemoveLabels(parsedInstructions)
 
-		// Update the bytecode with the new instructions
-		bytecode = serializeInstructions(parsedInstructions)
+		// // Update the bytecode with the new instructions
+		// bytecode = serializeInstructions(parsedInstructions)
+
+		bytecode = ReplaceLabelOffsets(bytecode)
 	}
 
 	// Generate indices
@@ -438,73 +470,115 @@ func collectFactsFromGroup(condOrGroup *ConditionOrGroup) []string {
 	return facts
 }
 
-func parseInstructions(bytecode []byte) []Instruction {
-	log.Debug().Msg("Parsing bytecode")
-	var instructions []Instruction
+// func parseInstructions(bytecode []byte) []Instruction {
+// 	log.Debug().Msg("Parsing bytecode")
+// 	var instructions []Instruction
+// 	for i := 0; i < len(bytecode); {
+// 		opcode := Opcode(bytecode[i])
+// 		log.Debug().Msgf("Opcode: %v", opcode)
+// 		//i++
+// 		var operands []byte
+// 		switch opcode {
+// 		case LOAD_FACT_STRING, LOAD_CONST_STRING, JUMP_IF_FALSE, JUMP_IF_TRUE, LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_BOOL:
+// 			i++
+// 			length := int(bytecode[i])
+// 			i++
+// 			operands = bytecode[i : i+length]
+// 			i += length
+// 		case LOAD_CONST_INT:
+// 			i++
+// 			operands = bytecode[i : i+8]
+// 			i += 8
+// 		case LOAD_CONST_FLOAT:
+// 			i++
+// 			operands = bytecode[i : i+8]
+// 			i += 8
+// 		case LOAD_CONST_BOOL:
+// 			i++
+// 			operands = []byte{bytecode[i]}
+// 			i++
+// 		case RULE_START, ACTION_START:
+// 			i++
+// 			length := int(bytecode[i])
+// 			i++
+// 			operands = bytecode[i : i+length]
+// 			i += length
+// 		case GTE_FLOAT, GTE_INT, GT_FLOAT, GT_INT, LTE_FLOAT, LTE_INT, LT_FLOAT, LT_INT,
+// 			NEQ_FLOAT, NEQ_INT, EQ_FLOAT, EQ_INT, CONTAINS_STRING, NOT_CONTAINS_STRING, EQ_STRING, NEQ_STRING,
+// 			EQ_BOOL, NEQ_BOOL, AND, OR, NOT:
+// 			i++
+// 		case LABEL:
+// 			operands = bytecode[i : i+4]
+// 			i += 4
+// 		default:
+// 			for ; i < len(bytecode) && bytecode[i] != byte(RULE_END) && bytecode[i] != byte(ACTION_END); i++ {
+// 				operands = append(operands, bytecode[i])
+// 			}
+// 		}
+// 		instructions = append(instructions, Instruction{Opcode: opcode, Operands: operands})
+// 		if opcode == RULE_END || opcode == ACTION_END {
+// 			i++
+// 		}
+// 		log.Debug().Msgf("Instruction: %v %v", opcode, operands)
+// 	}
+// 	return instructions
+// }
+
+// func serializeInstructions(instructions []Instruction) []byte {
+// 	var bytecode []byte
+// 	for _, instr := range instructions {
+// 		bytecode = append(bytecode, byte(instr.Opcode))
+// 		switch instr.Opcode {
+// 		case LOAD_FACT_STRING, LOAD_CONST_STRING, LABEL, JUMP_IF_FALSE, JUMP_IF_TRUE:
+// 			bytecode = append(bytecode, byte(len(instr.Operands)))
+// 			bytecode = append(bytecode, instr.Operands...)
+// 		case LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_BOOL, LOAD_CONST_INT, LOAD_CONST_FLOAT, LOAD_CONST_BOOL:
+// 			bytecode = append(bytecode, instr.Operands...)
+// 		case RULE_START, ACTION_START:
+// 			bytecode = append(bytecode, byte(len(instr.Operands)))
+// 			bytecode = append(bytecode, instr.Operands...)
+// 		default:
+// 			bytecode = append(bytecode, instr.Operands...)
+// 		}
+// 	}
+// 	return bytecode
+// }
+
+func ReplaceLabelOffsets(bytecode []byte) []byte {
+	log.Debug().Msg("Replacing label offsets")
+
 	for i := 0; i < len(bytecode); {
 		opcode := Opcode(bytecode[i])
-		log.Debug().Msgf("Opcode: %v", opcode)
-		//i++
-		var operands []byte
-		switch opcode {
-		case LOAD_FACT_STRING, LOAD_CONST_STRING, LABEL, JUMP_IF_FALSE, JUMP_IF_TRUE, LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_BOOL:
-			i++
-			length := int(bytecode[i])
-			i++
-			operands = bytecode[i : i+length]
-			i += length
-		case LOAD_CONST_INT:
-			i++
-			operands = bytecode[i : i+8]
-			i += 8
-		case LOAD_CONST_FLOAT:
-			i++
-			operands = bytecode[i : i+8]
-			i += 8
-		case LOAD_CONST_BOOL:
-			i++
-			operands = []byte{bytecode[i]}
-			i++
-		case RULE_START, ACTION_START:
-			i++
-			length := int(bytecode[i])
-			i++
-			operands = bytecode[i : i+length]
-			i += length
-		case GTE_FLOAT, GTE_INT, GT_FLOAT, GT_INT, LTE_FLOAT, LTE_INT, LT_FLOAT, LT_INT,
-			NEQ_FLOAT, NEQ_INT, EQ_FLOAT, EQ_INT, CONTAINS_STRING, NOT_CONTAINS_STRING, EQ_STRING, NEQ_STRING,
-			EQ_BOOL, NEQ_BOOL, AND, OR, NOT:
-			i++
-		default:
-			for ; i < len(bytecode) && bytecode[i] != byte(RULE_END) && bytecode[i] != byte(ACTION_END); i++ {
-				operands = append(operands, bytecode[i])
-			}
-		}
-		instructions = append(instructions, Instruction{Opcode: opcode, Operands: operands})
-		if opcode == RULE_END || opcode == ACTION_END {
-			i++
-		}
-		log.Debug().Msgf("Instruction: %v %v", opcode, operands)
-	}
-	return instructions
-}
+		if opcode == JUMP_IF_FALSE || opcode == JUMP_IF_TRUE {
+			labelStart := i + 1
+			label := string(bytecode[labelStart : labelStart+4])
 
-func serializeInstructions(instructions []Instruction) []byte {
-	var bytecode []byte
-	for _, instr := range instructions {
-		bytecode = append(bytecode, byte(instr.Opcode))
-		switch instr.Opcode {
-		case LOAD_FACT_STRING, LOAD_CONST_STRING, LABEL, JUMP_IF_FALSE, JUMP_IF_TRUE:
-			bytecode = append(bytecode, byte(len(instr.Operands)))
-			bytecode = append(bytecode, instr.Operands...)
-		case LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_BOOL, LOAD_CONST_INT, LOAD_CONST_FLOAT, LOAD_CONST_BOOL:
-			bytecode = append(bytecode, instr.Operands...)
-		case RULE_START, ACTION_START:
-			bytecode = append(bytecode, byte(len(instr.Operands)))
-			bytecode = append(bytecode, instr.Operands...)
-		default:
-			bytecode = append(bytecode, instr.Operands...)
+			labelOffset := -1
+			// Scan forward to find the label definition
+			for j := 0; j < len(bytecode); j++ {
+				if bytecode[j] == byte(LABEL) && string(bytecode[j+1:j+5]) == label {
+					labelOffset = j
+					break
+				}
+			}
+
+			if labelOffset != -1 {
+				// Calculate the relative offset from the current instruction to the label
+				relativeOffset := labelOffset - i
+				offsetBytes := make([]byte, 4)
+				binary.LittleEndian.PutUint32(offsetBytes, uint32(relativeOffset))
+				// Replace the label with the offset bytes
+				copy(bytecode[labelStart:], offsetBytes)
+				log.Debug().Str("label", label).Int("position", i).Int("offset", relativeOffset).Msg("Replaced label with offset")
+			} else {
+				log.Warn().Str("label", label).Msg("Label not found for jump instruction")
+			}
+			i += 5 // Move past the JUMP instruction and the 4-byte label
+		} else {
+			i += 1 // Move to next byte
 		}
 	}
+
+	log.Debug().Msg("Label offsets replacement completed")
 	return bytecode
 }
