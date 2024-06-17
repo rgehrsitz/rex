@@ -68,16 +68,16 @@ func RemoveLabels(instructions []Instruction) []Instruction {
 }
 
 // GenerateBytecode generates the bytecode instructions from the ruleset.
-func GenerateBytecode(ruleset *Ruleset) []byte {
+func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 	var bytecode []byte
 
-	// Generate rules bytecode
 	for _, rule := range ruleset.Rules {
 		log.Debug().Msgf("Processing rule: %s", rule.Name)
-		bytecode = append(bytecode, byte(RULE_START))
+		ruleBytecode := []byte{byte(RULE_START)}
+
 		// Append the rule name as an operand
-		bytecode = append(bytecode, byte(len(rule.Name)))
-		bytecode = append(bytecode, []byte(rule.Name)...)
+		ruleBytecode = append(ruleBytecode, byte(len(rule.Name)))
+		ruleBytecode = append(ruleBytecode, []byte(rule.Name)...)
 
 		// Convert the conditions to a Node structure
 		conditionNode := convertConditionGroupToNode(rule.Conditions)
@@ -90,7 +90,7 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 		instructions = CombineJIFJIT(instructions)
 		instructions = RemoveUnusedLabels(instructions)
 
-		// Append the optimized instructions to the bytecode
+		// Append the optimized instructions to the rule's bytecode
 		for _, instr := range instructions {
 			// Handle JUMP_IF_FALSE and JUMP_IF_TRUE with comparison operations separately
 			if instr.Opcode == JUMP_IF_FALSE || instr.Opcode == JUMP_IF_TRUE {
@@ -107,29 +107,23 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 					// Convert operator and value into appropriate opcodes and operands
 					var valueOpcode Opcode
 					var factOpcode Opcode
-					// var factBytes []byte
 					var valueBytes []byte
 					var comparisonOpcode Opcode
 
-					// figure out which factOpcode to use and the corresponding operand of type string
 					if intValue, err := strconv.Atoi(value); err == nil {
 						factOpcode = LOAD_FACT_INT
-						// factBytes = stringToBytes(fact)
 						valueOpcode = LOAD_CONST_INT
 						valueBytes = intToBytes(intValue)
 					} else if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
 						factOpcode = LOAD_FACT_FLOAT
-						// factBytes = stringToBytes(fact)
 						valueOpcode = LOAD_CONST_FLOAT
 						valueBytes = floatToBytes(floatValue)
 					} else if boolValue, err := strconv.ParseBool(value); err == nil {
 						factOpcode = LOAD_FACT_BOOL
-						// factBytes = stringToBytes(fact)
 						valueOpcode = LOAD_CONST_BOOL
 						valueBytes = boolToBytes(boolValue)
 					} else {
 						factOpcode = LOAD_FACT_STRING
-						// factBytes = stringToBytes(fact)
 						valueOpcode = LOAD_CONST_STRING
 						valueBytes = []byte(value)
 					}
@@ -196,22 +190,21 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 					}
 
 					// Append the separated instructions
-					bytecode = append(bytecode, byte(factOpcode))
-					bytecode = append(bytecode, byte(len(fact)))
-					bytecode = append(bytecode, []byte(fact)...)
+					ruleBytecode = append(ruleBytecode, byte(factOpcode))
+					ruleBytecode = append(ruleBytecode, byte(len(fact)))
+					ruleBytecode = append(ruleBytecode, []byte(fact)...)
 
-					bytecode = append(bytecode, byte(valueOpcode))
+					ruleBytecode = append(ruleBytecode, byte(valueOpcode))
 					if valueOpcode == LOAD_CONST_STRING {
-						bytecode = append(bytecode, byte(len(value)))
+						ruleBytecode = append(ruleBytecode, byte(len(value)))
 					}
-					bytecode = append(bytecode, valueBytes...)
+					ruleBytecode = append(ruleBytecode, valueBytes...)
 
-					bytecode = append(bytecode, byte(comparisonOpcode))
+					ruleBytecode = append(ruleBytecode, byte(comparisonOpcode))
 
-					bytecode = append(bytecode, byte(instr.Opcode))
+					ruleBytecode = append(ruleBytecode, byte(instr.Opcode))
 
-					//bytecode = append(bytecode, byte(len(label)))
-					bytecode = append(bytecode, []byte(label)...)
+					ruleBytecode = append(ruleBytecode, []byte(label)...)
 
 					log.Debug().Msgf("Appended separated instructions for condition: factOpcode=%v, valueOpcode=%v, comparisonOpcode=%v", factOpcode, valueOpcode, comparisonOpcode)
 					continue
@@ -219,13 +212,13 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 			}
 
 			// Append the instruction as usual
-			bytecode = append(bytecode, byte(instr.Opcode))
-			bytecode = append(bytecode, instr.Operands...)
+			ruleBytecode = append(ruleBytecode, byte(instr.Opcode))
+			ruleBytecode = append(ruleBytecode, instr.Operands...)
 			log.Debug().Msgf("Appended instruction: Opcode=%v, Operands=%v", instr.Opcode, instr.Operands)
 		}
 
-		actionBytecode := []byte{}
 		// Generate bytecode for actions
+		actionBytecode := []byte{}
 		for _, action := range rule.Actions {
 			log.Debug().Msgf("Processing action: %s", action.Type)
 			actionBytecode = append(actionBytecode, byte(ACTION_START))
@@ -272,8 +265,8 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 		}
 
 		var lastInstructionStart int
-		for i := len(bytecode) - 1; i >= 0; i-- {
-			if bytecode[i] == byte(LABEL) && i+1 < len(bytecode) && bytecode[i+1] == 'L' {
+		for i := len(ruleBytecode) - 1; i >= 0; i-- {
+			if ruleBytecode[i] == byte(LABEL) && i+1 < len(ruleBytecode) && ruleBytecode[i+1] == 'L' {
 				lastInstructionStart = i
 				break
 			}
@@ -281,67 +274,40 @@ func GenerateBytecode(ruleset *Ruleset) []byte {
 
 		log.Debug().Msgf("Last instruction start: %v", lastInstructionStart)
 
-		lastInstruction := make([]byte, len(bytecode)-lastInstructionStart)
-		copy(lastInstruction, bytecode[lastInstructionStart:])
+		lastInstruction := make([]byte, len(ruleBytecode)-lastInstructionStart)
+		copy(lastInstruction, ruleBytecode[lastInstructionStart:])
 
 		log.Debug().Msgf("Last instruction: %v", lastInstruction)
-		tempBytecode := bytecode[:len(bytecode)-len(lastInstruction)]
+		tempBytecode := ruleBytecode[:len(ruleBytecode)-len(lastInstruction)]
 		log.Debug().Msgf("Temp bytecode: %v", tempBytecode)
 		tempBytecode = append(tempBytecode, actionBytecode...)
 		log.Debug().Msgf("Temp bytecode after appending actions: %v", tempBytecode)
 		tempBytecode = append(tempBytecode, lastInstruction...)
 		log.Debug().Msgf("Temp bytecode after appending last instruction: %v", tempBytecode)
-		bytecode = tempBytecode
+		ruleBytecode = tempBytecode
 
-		bytecode = append(bytecode, byte(RULE_END))
+		ruleBytecode = append(ruleBytecode, byte(RULE_END))
 
-		bytecode = ReplaceLabelOffsets(bytecode)
+		ruleBytecode = ReplaceLabelOffsets(ruleBytecode)
+		bytecode = append(bytecode, ruleBytecode...)
 	}
 
 	// Generate indices
-	ruleExecIndex, factRuleIndex, factDepIndex := GenerateIndices(ruleset, bytecode)
+	ruleExecIndex, factRuleIndex, factDepIndex := GenerateIndices(bytecode)
 
-	// Write indices to bytecode
-	for _, idx := range ruleExecIndex {
-		// NEW CODE: Append the rule name with length prefix
-		bytecode = append(bytecode, byte(len(idx.RuleName)))
-		bytecode = append(bytecode, []byte(idx.RuleName)...)
-
-		offsetBytes := make([]byte, 4)
-		binary.LittleEndian.PutUint32(offsetBytes, uint32(idx.ByteOffset))
-		bytecode = append(bytecode, offsetBytes...)
+	// Return BytecodeFile structure
+	return BytecodeFile{
+		Header: Header{
+			Version:       Version,
+			Checksum:      Checksum,
+			ConstPoolSize: ConstPoolSize,
+			NumRules:      uint32(len(ruleset.Rules)),
+		},
+		Instructions:        bytecode,
+		RuleExecIndex:       ruleExecIndex,
+		FactRuleLookupIndex: factRuleIndex,
+		FactDependencyIndex: factDepIndex,
 	}
-
-	for fact, rules := range factRuleIndex {
-		// NEW CODE: Append the fact name with length prefix
-		bytecode = append(bytecode, byte(len(fact)))
-		bytecode = append(bytecode, []byte(fact)...)
-
-		bytecode = append(bytecode, byte(len(rules)))
-		for _, rule := range rules {
-			// NEW CODE: Append the rule name with length prefix
-			bytecode = append(bytecode, byte(len(rule)))
-			bytecode = append(bytecode, []byte(rule)...)
-		}
-	}
-
-	for _, idx := range factDepIndex {
-		// NEW CODE: Append the rule name with length prefix
-		bytecode = append(bytecode, byte(len(idx.RuleName)))
-		bytecode = append(bytecode, []byte(idx.RuleName)...)
-
-		bytecode = append(bytecode, byte(len(idx.Facts)))
-		for _, fact := range idx.Facts {
-			// NEW CODE: Append the fact name with length prefix
-			bytecode = append(bytecode, byte(len(fact)))
-			bytecode = append(bytecode, []byte(fact)...)
-		}
-	}
-
-	log.Debug().Msg("Bytecode generation complete")
-	log.Debug().Msgf("Bytecode length: %v", len(bytecode))
-	log.Debug().Msgf("Bytecode: %v", bytecode)
-	return bytecode
 }
 
 // Helper functions for converting values to bytes
@@ -365,118 +331,124 @@ func boolToBytes(b bool) []byte {
 }
 
 // GenerateIndices generates the indices for the bytecode
-func GenerateIndices(ruleset *Ruleset, bytecode []byte) ([]RuleExecutionIndex, map[string][]string, []FactDependencyIndex) {
-	ruleExecIndex := make([]RuleExecutionIndex, 0)
+func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string, []FactDependencyIndex) {
+	log.Debug().Msg("Starting GenerateIndices")
+	ruleExecIndex := []RuleExecutionIndex{}
 	factRuleIndex := make(map[string][]string)
-	factDepIndex := make([]FactDependencyIndex, 0)
+	factDepIndex := []FactDependencyIndex{}
 
-	offset := 0
+	i := 0
+	for i < len(bytecode) {
+		opcode := Opcode(bytecode[i])
+		log.Debug().Int("index", i).Str("opcode", opcode.String()).Msg("Processing opcode")
+		if opcode == RULE_START {
+			ruleNameLength := int(bytecode[i+1])
+			ruleName := string(bytecode[i+2 : i+2+ruleNameLength])
+			ruleStartOffset := i
+			log.Debug().Str("ruleName", ruleName).Int("startOffset", ruleStartOffset).Msg("Found RULE_START")
 
-	for _, rule := range ruleset.Rules {
-		ruleStartOffset := offset
+			// Find the end of the rule using a state machine approach
+			for j := i + 2 + ruleNameLength; j < len(bytecode); j++ {
+				if Opcode(bytecode[j]) == RULE_END {
+					ruleEndOffset := j + 1 // Include the RULE_END byte
+					log.Debug().Str("ruleName", ruleName).Int("endOffset", ruleEndOffset).Msg("Found RULE_END")
 
-		// Skip past RULE_START and rule name length
-		offset += 1 + 1 + len(rule.Name)
+					// Add to rule execution index
+					ruleExecIndex = append(ruleExecIndex, RuleExecutionIndex{
+						RuleName:   ruleName,
+						ByteOffset: ruleStartOffset,
+					})
+					log.Debug().Str("ruleName", ruleName).Int("byteOffset", ruleStartOffset).Msg("Added to ruleExecIndex")
 
-		// Collect facts for dependency index
-		facts := collectFacts(rule.Conditions)
+					// Collect facts for dependency index
+					facts := collectFactsFromBytecode(bytecode[ruleStartOffset:ruleEndOffset])
+					factDepIndex = append(factDepIndex, FactDependencyIndex{
+						RuleName: ruleName,
+						Facts:    facts,
+					})
+					log.Debug().Str("ruleName", ruleName).Strs("facts", facts).Msg("Collected facts for dependency index")
 
-		// Update fact rule lookup index
-		for _, fact := range facts {
-			factRuleIndex[fact] = append(factRuleIndex[fact], rule.Name)
-		}
+					// Update fact rule lookup index
+					for _, fact := range facts {
+						factRuleIndex[fact] = append(factRuleIndex[fact], ruleName)
+					}
+					log.Debug().Str("ruleName", ruleName).Msg("Updated fact rule lookup index")
 
-		// Process conditions to find out the size of the condition section
-		conditionSize := 0
-		conditionNode := convertConditionGroupToNode(rule.Conditions)
-		instructions := generateInstructions(conditionNode, "L")
-		for _, instr := range instructions {
-			conditionSize += instr.Size()
-		}
-
-		// Update offset after conditions
-		offset += conditionSize
-
-		// Update rule execution index
-		ruleExecIndex = append(ruleExecIndex, RuleExecutionIndex{
-			RuleName:   rule.Name,
-			ByteOffset: ruleStartOffset,
-		})
-
-		// Process actions to find out the size of the action section
-		actionSize := 0
-		for _, action := range rule.Actions {
-			switch v := action.Value.(type) {
-			case int:
-				actionSize += 1 + 1 + 8
-			case float64:
-				actionSize += 1 + 1 + 8
-			case string:
-				actionSize += 1 + 1 + len(v)
-			case bool:
-				actionSize += 1 + 1 + 1
+					// Move the outer loop index to the end of the current rule
+					i = ruleEndOffset
+					break
+				}
 			}
-			actionSize += 1 + 1 + len(action.Type) + 1 + len(action.Target) + 1 // ACTION_END
+		} else {
+			if opcode.HasOperands() {
+				operandLength := determineOperandLength(opcode, bytecode[i+1:])
+				log.Debug().Str("opcode", opcode.String()).Int("operandLength", operandLength).Msg("Opcode has operands")
+				i += 1 + operandLength
+			} else {
+				i += 1
+			}
 		}
-
-		// Update offset after actions
-		offset += actionSize
-
-		// Update fact dependency index
-		factDepIndex = append(factDepIndex, FactDependencyIndex{
-			RuleName: rule.Name,
-			Facts:    facts,
-		})
-
-		// Skip past RULE_END
-		offset += 1
 	}
 
+	log.Debug().Msg("Completed GenerateIndices")
 	return ruleExecIndex, factRuleIndex, factDepIndex
 }
 
-// collectFacts collects all facts from the condition group
-func collectFacts(conditions ConditionGroup) []string {
+// Helper function to determine the length of operands for a given opcode
+func determineOperandLength(opcode Opcode, operands []byte) int {
+	switch opcode {
+	case LOAD_CONST_INT, LOAD_CONST_FLOAT, LOAD_FACT_INT, LOAD_FACT_FLOAT:
+		log.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 8")
+		return 8 // 8 bytes for int64 or float64
+	case LOAD_CONST_STRING, LOAD_FACT_STRING, LABEL, SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT, ACTION_START:
+		if len(operands) > 0 {
+			length := 1 + int(operands[0]) // 1 byte for length + length of the string
+			log.Debug().Str("opcode", opcode.String()).Int("length", length).Msg("Returning operand length")
+			return length
+		}
+	case LOAD_CONST_BOOL, LOAD_FACT_BOOL:
+		log.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 1")
+		return 1 // 1 byte for bool
+	case JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE:
+		log.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 4")
+		return 4 // 4 bytes for the jump offset
+	default:
+		log.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 0")
+		return 0
+	}
+	return 0
+}
+
+// collectFactsFromBytecode scans the bytecode to collect facts used in conditions
+func collectFactsFromBytecode(bytecode []byte) []string {
+	log.Debug().Msg("Starting collectFactsFromBytecode")
 	facts := make(map[string]struct{})
-	collectFactsRecursive(&conditions, facts)
+	for i := 0; i < len(bytecode); {
+		opcode := Opcode(bytecode[i])
+		switch opcode {
+		case LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL:
+			factLength := int(bytecode[i+1])
+			fact := string(bytecode[i+2 : i+2+factLength])
+			facts[fact] = struct{}{}
+			log.Debug().Str("fact", fact).Msg("Collected fact")
+			i += 2 + factLength
+		default:
+			if opcode.HasOperands() {
+				operandLength := determineOperandLength(opcode, bytecode[i+1:])
+				log.Debug().Str("opcode", opcode.String()).Int("operandLength", operandLength).Msg("Opcode has operands")
+				i += 1 + operandLength
+			} else {
+				i += 1
+			}
+		}
+	}
+
 	factList := make([]string, 0, len(facts))
 	for fact := range facts {
 		factList = append(factList, fact)
 	}
+	log.Debug().Int("factCount", len(factList)).Msg("Completed collectFactsFromBytecode")
 	return factList
-}
-
-// collectFactsRecursive is a helper function to collect facts from condition groups recursively
-func collectFactsRecursive(conditions *ConditionGroup, facts map[string]struct{}) {
-	for _, condOrGroup := range conditions.All {
-		if condOrGroup.Fact != "" {
-			facts[condOrGroup.Fact] = struct{}{}
-		}
-		if condOrGroup.All != nil {
-			collectFactsRecursive(&condOrGroup.ConditionGroup, facts)
-		}
-		if condOrGroup.Any != nil {
-			collectFactsRecursive(&condOrGroup.ConditionGroup, facts)
-		}
-	}
-}
-
-func collectFactsFromGroup(condOrGroup *ConditionOrGroup) []string {
-	facts := []string{}
-	if condOrGroup.Fact != "" {
-		facts = append(facts, condOrGroup.Fact)
-	}
-	if condOrGroup.All != nil {
-		for _, subCondOrGroup := range condOrGroup.All {
-			facts = append(facts, collectFactsFromGroup(subCondOrGroup)...)
-		}
-	}
-	if condOrGroup.Any != nil {
-		for _, subCondOrGroup := range condOrGroup.Any {
-			facts = append(facts, collectFactsFromGroup(subCondOrGroup)...)
-		}
-	}
-	return facts
 }
 
 func ReplaceLabelOffsets(bytecode []byte) []byte {

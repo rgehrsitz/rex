@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -290,18 +292,20 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 		return err
 	}
 
-	fmt.Printf("Successfully wrote bytecode file: %s\n", filename)
+	log.Info().Msgf("Successfully wrote bytecode file: %s", filename)
 	return nil
 }
 
 func writeString(buf *bytes.Buffer, s string) error {
 	length := uint32(len(s))
 	if err := binary.Write(buf, binary.LittleEndian, length); err != nil {
+		log.Error().Err(err).Msg("Error writing string length")
 		return err
 	}
 	if _, err := buf.WriteString(s); err != nil {
+		log.Error().Err(err).Msg("Error writing string")
 		return err
 	}
-	fmt.Printf("Writing string: %s with length: %d\n", s, length)
+	log.Info().Str("string", s).Uint32("length", length).Msg("Writing string")
 	return nil
 }

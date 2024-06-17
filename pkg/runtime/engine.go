@@ -5,7 +5,6 @@ package runtime
 import (
 	"encoding/binary"
 	"fmt"
-
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
 	"strconv"
@@ -14,210 +13,109 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-type Condition struct {
-	Fact      string
-	Operator  string
-	Value     interface{}
-	ValueType string
-}
-
 type Engine struct {
-	ruleset             *compiler.Ruleset
-	ruleExecutionIndex  []RuleExecutionIndex
-	factRuleIndex       map[string][]string
-	factDependencyIndex []FactDependencyIndex
 	bytecode            []byte
+	ruleExecutionIndex  []compiler.RuleExecutionIndex
+	factRuleIndex       map[string][]string
+	factDependencyIndex []compiler.FactDependencyIndex
 	Facts               map[string]interface{}
 }
 
-type RuleExecutionIndex struct {
-	RuleName   string
-	ByteOffset int
-}
+func NewEngineFromFile(filename string) (*Engine, error) {
+	bytecode, err := os.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
 
-type FactDependencyIndex struct {
-	RuleName string
-	Facts    []string
-}
-
-func NewEngine(bytecode []byte) *Engine {
 	engine := &Engine{
-		ruleset:             &compiler.Ruleset{},
-		ruleExecutionIndex:  []RuleExecutionIndex{},
-		factRuleIndex:       make(map[string][]string),
-		factDependencyIndex: []FactDependencyIndex{},
 		bytecode:            bytecode,
+		ruleExecutionIndex:  make([]compiler.RuleExecutionIndex, 0),
+		factRuleIndex:       make(map[string][]string),
+		factDependencyIndex: make([]compiler.FactDependencyIndex, 0),
 		Facts:               make(map[string]interface{}),
 	}
 
-	// Parse header and indices from bytecode
-	engine.parseHeaderAndIndices()
-
-	return engine
-}
-
-// Add this method to the Engine struct
-func (e *Engine) GetFacts() map[string]interface{} {
-	return e.Facts
-}
-
-func (e *Engine) parseHeaderAndIndices() {
-	log.Printf("Parsing header and indices\n")
 	offset := 0
 
-	version := binary.LittleEndian.Uint16(e.bytecode[offset:])
+	// Read header
+	version := binary.LittleEndian.Uint32(bytecode[offset:])
 	log.Printf("Version: %d\n", version)
-	offset += 2
-
-	checksum := binary.LittleEndian.Uint32(e.bytecode[offset:])
+	offset += 4
+	checksum := binary.LittleEndian.Uint32(bytecode[offset:])
 	log.Printf("Checksum: %d\n", checksum)
 	offset += 4
-
-	constPoolSize := binary.LittleEndian.Uint32(e.bytecode[offset:])
+	constPoolSize := binary.LittleEndian.Uint32(bytecode[offset:])
 	log.Printf("Constant pool size: %d\n", constPoolSize)
-	offset += 2
-
-	numRules := binary.LittleEndian.Uint32(e.bytecode[offset:])
+	offset += 4
+	numRules := binary.LittleEndian.Uint32(bytecode[offset:])
 	log.Printf("Number of rules: %d\n", numRules)
-	offset += 2
-
-	ruleExecIndexOffset := binary.LittleEndian.Uint32(e.bytecode[offset:])
-	log.Printf("Rule execution index offset: %d\n", ruleExecIndexOffset)
 	offset += 4
-
-	factRuleIndexOffset := binary.LittleEndian.Uint32(e.bytecode[offset:])
-	log.Printf("Fact rule lookup index offset: %d\n", factRuleIndexOffset)
+	ruleExecIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
 	offset += 4
-
-	factDepIndexOffset := binary.LittleEndian.Uint32(e.bytecode[offset:])
-	log.Printf("Fact dependency index offset: %d\n", factDepIndexOffset)
+	factRuleIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
 	offset += 4
-
-	log.Printf("Bytecode length: %d\n", len(e.bytecode))
+	factDepIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
+	offset += 4
 
 	// Read rule execution index
 	offset = int(ruleExecIndexOffset)
-	log.Printf("Reading rule execution index at offset: %d\n", offset)
 	for i := 0; i < int(numRules); i++ {
-		if offset+4 > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading name length at offset: %d\n", offset+4)
-		}
-		nameLen := int(binary.LittleEndian.Uint32(e.bytecode[offset:]))
-		log.Printf("Name length: %d\n", nameLen)
+		nameLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
-
-		if offset+nameLen > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading name at offset: %d\n", offset+nameLen)
-		}
-		name := string(e.bytecode[offset : offset+nameLen])
-		log.Printf("Name: %s\n", name)
+		name := string(bytecode[offset : offset+nameLen])
 		offset += nameLen
-
-		if offset+4 > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading byte offset at offset: %d\n", offset+4)
-		}
-		byteOffset := binary.LittleEndian.Uint32(e.bytecode[offset:])
-		log.Printf("Byte offset: %d\n", byteOffset)
+		byteOffset := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
-
-		e.ruleExecutionIndex = append(e.ruleExecutionIndex, RuleExecutionIndex{
+		engine.ruleExecutionIndex = append(engine.ruleExecutionIndex, compiler.RuleExecutionIndex{
 			RuleName:   name,
-			ByteOffset: int(byteOffset),
+			ByteOffset: byteOffset,
 		})
 	}
 
 	// Read fact rule index
 	offset = int(factRuleIndexOffset)
-	log.Printf("Reading fact rule index at offset: %d\n", offset)
 	for offset < int(factDepIndexOffset) {
-		if offset+4 > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading fact length at offset: %d\n", offset+4)
-		}
-		factLen := int(binary.LittleEndian.Uint32(e.bytecode[offset:]))
-		log.Printf("Fact length: %d\n", factLen)
+		factLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
-
-		if offset+factLen > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading fact at offset: %d\n", offset+factLen)
-		}
-		fact := string(e.bytecode[offset : offset+factLen])
-		log.Printf("Fact: %s\n", fact)
+		fact := string(bytecode[offset : offset+factLen])
 		offset += factLen
-
-		if offset+4 > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading rules count at offset: %d\n", offset+4)
-		}
-		rulesCount := int(binary.LittleEndian.Uint32(e.bytecode[offset:]))
-		log.Printf("Rules count: %d\n", rulesCount)
+		rulesCount := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
-
 		var rules []string
 		for j := 0; j < rulesCount; j++ {
-			if offset+4 > len(e.bytecode) {
-				log.Fatal().Msgf("Index out of range while reading rule length at offset: %d\n", offset+4)
-			}
-			ruleLen := int(binary.LittleEndian.Uint32(e.bytecode[offset:]))
-			log.Printf("Rule length: %d\n", ruleLen)
+			ruleLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 			offset += 4
-
-			if offset+ruleLen > len(e.bytecode) {
-				log.Fatal().Msgf("Index out of range while reading rule at offset: %d\n", offset+ruleLen)
-			}
-			rule := string(e.bytecode[offset : offset+ruleLen])
-			log.Printf("Rule: %s\n", rule)
+			rule := string(bytecode[offset : offset+ruleLen])
 			offset += ruleLen
 			rules = append(rules, rule)
 		}
-		e.factRuleIndex[fact] = rules
+		engine.factRuleIndex[fact] = rules
 	}
 
 	// Read fact dependency index
 	offset = int(factDepIndexOffset)
-	log.Printf("Reading fact dependency index at offset: %d\n", offset)
-	for offset < len(e.bytecode) {
-		if offset+4 > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading rule length at offset: %d\n", offset+4)
-		}
-		ruleLen := int(binary.LittleEndian.Uint32(e.bytecode[offset:]))
-		log.Printf("Rule length: %d\n", ruleLen)
+	for offset < len(bytecode) {
+		ruleLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
-
-		if offset+ruleLen > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading rule at offset: %d\n", offset+ruleLen)
-		}
-		rule := string(e.bytecode[offset : offset+ruleLen])
-		log.Printf("Rule: %s\n", rule)
+		rule := string(bytecode[offset : offset+ruleLen])
 		offset += ruleLen
-
-		if offset+4 > len(e.bytecode) {
-			log.Fatal().Msgf("Index out of range while reading facts count at offset: %d\n", offset+4)
-		}
-		factsCount := int(binary.LittleEndian.Uint32(e.bytecode[offset:]))
-		log.Printf("Facts count: %d\n", factsCount)
+		factsCount := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
-
 		var facts []string
 		for j := 0; j < factsCount; j++ {
-			if offset+4 > len(e.bytecode) {
-				log.Fatal().Msgf("Index out of range while reading fact length at offset: %d\n", offset+4)
-			}
-			factLen := int(binary.LittleEndian.Uint32(e.bytecode[offset:]))
-			log.Printf("Fact length: %d\n", factLen)
+			factLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 			offset += 4
-
-			if offset+factLen > len(e.bytecode) {
-				log.Fatal().Msgf("Index out of range while reading fact at offset: %d\n", offset+factLen)
-			}
-			fact := string(e.bytecode[offset : offset+factLen])
-			log.Printf("Fact: %s\n", fact)
+			fact := string(bytecode[offset : offset+factLen])
 			offset += factLen
 			facts = append(facts, fact)
 		}
-		e.factDependencyIndex = append(e.factDependencyIndex, FactDependencyIndex{
+		engine.factDependencyIndex = append(engine.factDependencyIndex, compiler.FactDependencyIndex{
 			RuleName: rule,
 			Facts:    facts,
 		})
 	}
+
+	return engine, nil
 }
 
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
@@ -471,118 +369,4 @@ func compareString(a, b string, operator string) bool {
 		fmt.Printf("Unsupported operator: %s\n", operator)
 		return false
 	}
-}
-
-func NewEngineFromFile(filename string) (*Engine, error) {
-	bytecode, err := os.ReadFile(filename)
-	if err != nil {
-		return nil, err
-	}
-
-	engine := &Engine{
-		bytecode:            bytecode,
-		ruleExecutionIndex:  make([]RuleExecutionIndex, 0),
-		factRuleIndex:       make(map[string][]string),
-		factDependencyIndex: make([]FactDependencyIndex, 0),
-		Facts:               make(map[string]interface{}),
-	}
-
-	offset := 0
-
-	// Read version
-	version := binary.LittleEndian.Uint16(bytecode[offset:])
-	log.Printf("Version: %d\n", version)
-	offset += 2
-
-	// Read checksum
-	checksum := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Checksum: %d\n", checksum)
-	offset += 4
-
-	// Read constant pool size
-	constPoolSize := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Constant pool size: %d\n", constPoolSize)
-	offset += 2
-
-	// Read number of rules
-	numRules := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Number of rules: %d\n", numRules)
-	offset += 2
-
-	// Read rule execution index offset
-	ruleExecIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Rule execution index offset: %d\n", ruleExecIndexOffset)
-	offset += 4
-
-	// Read fact rule lookup index offset
-	factRuleIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Fact rule lookup index offset: %d\n", factRuleIndexOffset)
-	offset += 4
-
-	// Read fact dependency index offset
-	factDepIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Fact dependency index offset: %d\n", factDepIndexOffset)
-	offset += 4
-
-	// Read rule execution index
-	offset = int(ruleExecIndexOffset)
-	for i := 0; i < int(numRules); i++ {
-		nameLen := int(bytecode[offset])
-		log.Printf("Name length: %d\n", nameLen)
-		offset++
-		name := string(bytecode[offset : offset+nameLen])
-		log.Printf("Name: %s\n", name)
-		offset += nameLen
-		byteOffset := binary.LittleEndian.Uint32(bytecode[offset:])
-		offset += 4
-		engine.ruleExecutionIndex = append(engine.ruleExecutionIndex, RuleExecutionIndex{
-			RuleName:   name,
-			ByteOffset: int(byteOffset),
-		})
-	}
-
-	// Read fact rule index
-	offset = int(factRuleIndexOffset)
-	for offset < int(factDepIndexOffset) {
-		factLen := int(bytecode[offset])
-		offset++
-		fact := string(bytecode[offset : offset+factLen])
-		offset += factLen
-		rulesCount := int(bytecode[offset])
-		offset++
-		var rules []string
-		for i := 0; i < rulesCount; i++ {
-			ruleLen := int(bytecode[offset])
-			offset++
-			rule := string(bytecode[offset : offset+ruleLen])
-			offset += ruleLen
-			rules = append(rules, rule)
-		}
-		engine.factRuleIndex[fact] = rules
-	}
-
-	// Read fact dependency index
-	offset = int(factDepIndexOffset)
-	for offset < len(bytecode) {
-		ruleLen := int(bytecode[offset])
-		offset++
-		rule := string(bytecode[offset : offset+ruleLen])
-		offset += ruleLen
-		factsCount := int(bytecode[offset])
-		offset++
-		var facts []string
-		for i := 0; i < factsCount; i++ {
-			factLen := int(bytecode[offset])
-			offset++
-			fact := string(bytecode[offset : offset+factLen])
-			offset += factLen
-			facts = append(facts, fact)
-		}
-		engine.factDependencyIndex = append(engine.factDependencyIndex, FactDependencyIndex{
-			RuleName: rule,
-			Facts:    facts,
-		})
-	}
-
-	return engine, nil
 }
