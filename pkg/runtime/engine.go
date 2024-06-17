@@ -4,11 +4,9 @@ package runtime
 
 import (
 	"encoding/binary"
-	"fmt"
+	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
-	"strconv"
-	"strings"
 
 	"github.com/rs/zerolog/log"
 )
@@ -39,22 +37,25 @@ func NewEngineFromFile(filename string) (*Engine, error) {
 
 	// Read header
 	version := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Version: %d\n", version)
+	log.Info().Uint32("version", version).Msg("Read bytecode version")
 	offset += 4
 	checksum := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Checksum: %d\n", checksum)
+	log.Info().Uint32("checksum", checksum).Msg("Read bytecode checksum")
 	offset += 4
 	constPoolSize := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Constant pool size: %d\n", constPoolSize)
+	log.Info().Uint32("constPoolSize", constPoolSize).Msg("Read constant pool size")
 	offset += 4
 	numRules := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Printf("Number of rules: %d\n", numRules)
+	log.Info().Uint32("numRules", numRules).Msg("Read number of rules")
 	offset += 4
 	ruleExecIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
+	log.Info().Uint32("ruleExecIndexOffset", ruleExecIndexOffset).Msg("Read rule execution index offset")
 	offset += 4
 	factRuleIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
+	log.Info().Uint32("factRuleIndexOffset", factRuleIndexOffset).Msg("Read fact rule index offset")
 	offset += 4
 	factDepIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
+	log.Info().Uint32("factDepIndexOffset", factDepIndexOffset).Msg("Read fact dependency index offset")
 	offset += 4
 
 	// Read rule execution index
@@ -66,10 +67,15 @@ func NewEngineFromFile(filename string) (*Engine, error) {
 		offset += nameLen
 		byteOffset := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
+
+		// Adjust the byte offset by adding the size of the header
+		adjustedByteOffset := byteOffset + compiler.HeaderSize
+
 		engine.ruleExecutionIndex = append(engine.ruleExecutionIndex, compiler.RuleExecutionIndex{
 			RuleName:   name,
-			ByteOffset: byteOffset,
+			ByteOffset: adjustedByteOffset,
 		})
+		log.Info().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Msg("Read rule execution index entry")
 	}
 
 	// Read fact rule index
@@ -90,6 +96,7 @@ func NewEngineFromFile(filename string) (*Engine, error) {
 			rules = append(rules, rule)
 		}
 		engine.factRuleIndex[fact] = rules
+		log.Info().Str("fact", fact).Strs("rules", rules).Msg("Read fact rule index entry")
 	}
 
 	// Read fact dependency index
@@ -113,20 +120,27 @@ func NewEngineFromFile(filename string) (*Engine, error) {
 			RuleName: rule,
 			Facts:    facts,
 		})
+		log.Info().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
 	}
 
+	log.Info().Msg("Engine initialized from bytecode")
 	return engine, nil
 }
 
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
+	log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
+
 	// Update the fact value in the store
 	e.Facts[factName] = factValue
 
 	// Find all rules that reference the updated fact
 	ruleNames, ok := e.factRuleIndex[factName]
 	if !ok {
+		log.Info().Str("factName", factName).Msg("No rules found for the updated fact")
 		return
 	}
+
+	log.Info().Str("factName", factName).Strs("ruleNames", ruleNames).Msg("Found rules referencing the updated fact")
 
 	// Evaluate each rule
 	for _, ruleName := range ruleNames {
@@ -135,7 +149,8 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 }
 
 func (e *Engine) evaluateRule(ruleName string) {
-	log.Printf("Evaluating rule: %s\n", ruleName)
+	log.Info().Str("ruleName", ruleName).Msg("Evaluating rule")
+
 	var ruleOffset int
 	found := false
 	for _, rule := range e.ruleExecutionIndex {
@@ -147,226 +162,180 @@ func (e *Engine) evaluateRule(ruleName string) {
 	}
 
 	if !found {
-		log.Printf("Rule %s not found in ruleExecutionIndex\n", ruleName)
+		log.Warn().Str("ruleName", ruleName).Msg("Rule not found in ruleExecutionIndex")
 		return
 	}
 
-	log.Printf("Rule %s found at offset %d\n", ruleName, ruleOffset)
+	log.Info().Str("ruleName", ruleName).Int("offset", ruleOffset).Msg("Found rule in ruleExecutionIndex")
+
 	offset := ruleOffset
 	var action compiler.Action
 
+	var factValue interface{}
+	var constValue interface{}
+	var comparisonResult bool
+
 	for offset < len(e.bytecode) {
-		opcode := e.bytecode[offset]
+		opcode := compiler.Opcode(e.bytecode[offset])
 		offset++
 
-		log.Printf("Executing opcode: %v at offset %d\n", opcode, offset-1)
+		log.Info().Uint8("opcode", uint8(opcode)).Int("offset", offset-1).Msg("Executing opcode")
 
 		switch opcode {
-		case byte(compiler.RULE_START):
-			log.Printf("RULE_START opcode encountered")
+		case compiler.RULE_START:
+			log.Info().Msg("Encountered RULE_START opcode")
+			offset++
+			ruleName := string(e.bytecode[offset : offset+4])
+			log.Info().Str("ruleName", ruleName).Msg("Encountered rule name")
 			continue
-		case byte(compiler.JUMP_IF_FALSE), byte(compiler.JUMP_IF_TRUE):
-			parts := strings.Split(string(e.bytecode[offset:offset+int(opcode)]), " ")
-			offset += int(opcode)
-			if len(parts) != 4 {
-				log.Printf("Invalid operands format for %v: %s\n", opcode, parts)
-				return
-			}
-
-			fact := parts[0]
-			operator := parts[1]
-			valueStr := parts[2]
-			offsetStr := parts[3]
-
-			var value interface{}
-			var valueType string
-
-			if i, err := strconv.Atoi(valueStr); err == nil {
-				value = i
-				valueType = "int"
-			} else if f, err := strconv.ParseFloat(valueStr, 64); err == nil {
-				value = f
-				valueType = "float"
-			} else if b, err := strconv.ParseBool(valueStr); err == nil {
-				value = b
-				valueType = "bool"
-			} else {
-				value = valueStr
-				valueType = "string"
-			}
-
-			factValue, ok := e.Facts[fact]
-			if !ok {
-				log.Printf("Fact %s not found\n", fact)
-				return
-			}
-
-			result := evaluate(factValue, operator, value, valueType)
-			log.Printf("Condition result: %v\n", result)
-
-			if (opcode == byte(compiler.JUMP_IF_FALSE) && !result) || (opcode == byte(compiler.JUMP_IF_TRUE) && result) {
-				jumpOffset, err := strconv.Atoi(offsetStr)
-				if err != nil {
-					log.Printf("Invalid jump offset: %s\n", offsetStr)
-					return
-				}
-				log.Printf("Jumping to offset: %d\n", jumpOffset)
+		case compiler.LOAD_FACT_INT:
+			nameLen := int(e.bytecode[offset])
+			offset++
+			factName := string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			factValue = e.Facts[factName]
+			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_INT opcode")
+		case compiler.LOAD_FACT_FLOAT:
+			nameLen := int(e.bytecode[offset])
+			offset++
+			factName := string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			factValue = e.Facts[factName]
+			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_FLOAT opcode")
+		case compiler.LOAD_FACT_STRING:
+			nameLen := int(e.bytecode[offset])
+			offset++
+			factName := string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			factValue = e.Facts[factName]
+			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_STRING opcode")
+		case compiler.LOAD_FACT_BOOL:
+			nameLen := int(e.bytecode[offset])
+			offset++
+			factName := string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			factValue = e.Facts[factName]
+			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_BOOL opcode")
+		case compiler.LOAD_CONST_INT:
+			constValue = int64(binary.LittleEndian.Uint64(e.bytecode[offset : offset+8]))
+			offset += 8
+			log.Info().Int64("constValue", constValue.(int64)).Msg("Encountered LOAD_CONST_INT opcode")
+		case compiler.LOAD_CONST_FLOAT:
+			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
+			constValue = math.Float64frombits(bits)
+			offset += 8
+			log.Info().Float64("constValue", constValue.(float64)).Msg("Encountered LOAD_CONST_FLOAT opcode")
+		case compiler.LOAD_CONST_STRING:
+			nameLen := int(e.bytecode[offset])
+			offset++
+			constValue = string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			log.Info().Str("constValue", constValue.(string)).Msg("Encountered LOAD_CONST_STRING opcode")
+		case compiler.LOAD_CONST_BOOL:
+			constValue = e.bytecode[offset] == 1
+			offset++
+			log.Info().Bool("constValue", constValue.(bool)).Msg("Encountered LOAD_CONST_BOOL opcode")
+		case compiler.EQ_INT, compiler.EQ_FLOAT, compiler.EQ_STRING, compiler.EQ_BOOL,
+			compiler.NEQ_INT, compiler.NEQ_FLOAT, compiler.NEQ_STRING, compiler.NEQ_BOOL,
+			compiler.LT_INT, compiler.LT_FLOAT,
+			compiler.LTE_INT, compiler.LTE_FLOAT,
+			compiler.GT_INT, compiler.GT_FLOAT,
+			compiler.GTE_INT, compiler.GTE_FLOAT:
+			comparisonResult = e.compare(factValue, constValue, opcode)
+			log.Info().Bool("comparisonResult", comparisonResult).Msg("Encountered comparison opcode")
+		case compiler.JUMP_IF_FALSE:
+			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
+			offset += 4
+			log.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_FALSE opcode")
+			if !comparisonResult {
 				offset = jumpOffset
 			}
-		case byte(compiler.ACTION_START):
-			log.Printf("Starting actions")
-			action = compiler.Action{}
-		case byte(compiler.LOAD_CONST_STRING):
-			action.Target = string(e.bytecode[offset : offset+int(opcode)])
-			offset += int(opcode)
-			log.Printf("Loaded constant string: %s\n", action.Target)
-		case byte(compiler.LOAD_CONST_BOOL):
-			if opcode != 1 {
-				log.Printf("Invalid operands length for LOAD_CONST_BOOL: %v\n", opcode)
-				return
+		case compiler.JUMP_IF_TRUE:
+			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
+			offset += 4
+			log.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_TRUE opcode")
+			if comparisonResult {
+				offset = jumpOffset
 			}
-			action.Value = e.bytecode[offset] == 1
+		case compiler.ACTION_VALUE_INT:
+			actionValue := int64(binary.LittleEndian.Uint64(e.bytecode[offset : offset+8]))
+			offset += 8
+			action.Value = actionValue
+			log.Info().Int64("actionValue", actionValue).Msg("Encountered ACTION_VALUE_INT opcode")
+		case compiler.ACTION_VALUE_FLOAT:
+			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
+			actionValue := math.Float64frombits(bits)
+			offset += 8
+			action.Value = actionValue
+			log.Info().Float64("actionValue", actionValue).Msg("Encountered ACTION_VALUE_FLOAT opcode")
+		case compiler.ACTION_VALUE_STRING:
+			nameLen := int(e.bytecode[offset])
 			offset++
-			log.Printf("Loaded constant bool: %v\n", action.Value)
-		// case byte(compiler.UPDATE_FACT):
-		// 	action.Type = "updateStore"
-		// 	log.Printf("Executing action: %v\n", action)
-		// 	e.executeAction(action)
-		case byte(compiler.ACTION_END):
-			log.Printf("Ending actions")
-		case byte(compiler.RULE_END):
-			log.Printf("End of rule: %s\n", ruleName)
-			return
+			actionValue := string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			action.Value = actionValue
+			log.Info().Str("actionValue", actionValue).Msg("Encountered ACTION_VALUE_STRING opcode")
+		case compiler.ACTION_VALUE_BOOL:
+			actionValue := e.bytecode[offset] == 1
+			offset++
+			action.Value = actionValue
+			log.Info().Bool("actionValue", actionValue).Msg("Encountered ACTION_VALUE_BOOL opcode")
+		case compiler.ACTION_END:
+			log.Info().Msg("Encountered ACTION_END opcode")
+			e.executeAction(action)
 		default:
-			log.Printf("Unknown opcode: %v\n", opcode)
+			log.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown opcode")
 		}
 	}
 }
 
-func evaluate(factValue interface{}, operator string, conditionValue interface{}, valueType string) bool {
-	log.Printf("Evaluating fact value: %v, operator: %s, condition value: %v, value type: %s\n", factValue, operator, conditionValue, valueType)
-	var result bool
-	switch valueType {
-	case "int":
-		if factValueFloat, ok := factValue.(float64); ok {
-			log.Printf("Comparing float fact value: %v with int condition value: %v", factValueFloat, conditionValue)
-			result = compareFloat(float64(factValueFloat), float64(conditionValue.(int)), operator)
-		} else if factValueInt, ok := factValue.(int); ok {
-			log.Printf("Comparing int fact value: %v with int condition value: %v", factValueInt, conditionValue)
-			result = compareInt(factValueInt, conditionValue.(int), operator)
-		}
-	case "float":
-		if factValueInt, ok := factValue.(int); ok {
-			log.Printf("Comparing int fact value: %v with float condition value: %v", factValueInt, conditionValue)
-			result = compareFloat(float64(factValueInt), conditionValue.(float64), operator)
-		} else if factValueFloat, ok := factValue.(float64); ok {
-			log.Printf("Comparing float fact value: %v with float condition value: %v", factValueFloat, conditionValue)
-			result = compareFloat(factValueFloat, conditionValue.(float64), operator)
-		}
-	case "bool":
-		factValueBool, ok := factValue.(bool)
-		if !ok {
-			log.Printf("Type mismatch: fact value is not a bool\n")
-			return false
-		}
-		conditionValueBool := conditionValue.(bool)
-		result = compareBool(factValueBool, conditionValueBool, operator)
-	case "string":
-		factValueStr, ok := factValue.(string)
-		if !ok {
-			log.Printf("Type mismatch: fact value is not a string\n")
-			return false
-		}
-		conditionValueStr := conditionValue.(string)
-		result = compareString(factValueStr, conditionValueStr, operator)
+func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opcode) bool {
+	switch opcode {
+	case compiler.EQ_INT:
+		return factValue.(int64) == constValue.(int64)
+	case compiler.EQ_FLOAT:
+		return factValue.(float64) == constValue.(float64)
+	case compiler.EQ_STRING:
+		return factValue.(string) == constValue.(string)
+	case compiler.EQ_BOOL:
+		return factValue.(bool) == constValue.(bool)
+	case compiler.NEQ_INT:
+		return factValue.(int64) != constValue.(int64)
+	case compiler.NEQ_FLOAT:
+		return factValue.(float64) != constValue.(float64)
+	case compiler.NEQ_STRING:
+		return factValue.(string) != constValue.(string)
+	case compiler.NEQ_BOOL:
+		return factValue.(bool) != constValue.(bool)
+	case compiler.LT_INT:
+		return factValue.(int64) < constValue.(int64)
+	case compiler.LT_FLOAT:
+		return factValue.(float64) < constValue.(float64)
+	case compiler.LTE_INT:
+		return factValue.(int64) <= constValue.(int64)
+	case compiler.LTE_FLOAT:
+		return factValue.(float64) <= constValue.(float64)
+	case compiler.GT_INT:
+		return factValue.(int64) > constValue.(int64)
+	case compiler.GT_FLOAT:
+		return factValue.(float64) > constValue.(float64)
+	case compiler.GTE_INT:
+		return factValue.(int64) >= constValue.(int64)
+	case compiler.GTE_FLOAT:
+		return factValue.(float64) >= constValue.(float64)
 	default:
-		log.Printf("Unsupported value type: %s\n", valueType)
-		return false
-	}
-	log.Printf("Evaluation result: %v\n", result)
-	return result
-}
-
-// func (e *Engine) executeAction(action compiler.Action) {
-// 	switch action.Type {
-// 	case "updateStore":
-// 		e.Facts[action.Target] = action.Value
-// 		log.Printf("Updating store: %s = %v\n", action.Target, action.Value)
-// 	case "sendMessage":
-// 		log.Printf("Sending message to %s: %v\n", action.Target, action.Value)
-// 	default:
-// 		log.Printf("Unknown action type: %s\n", action.Type)
-// 	}
-// }
-
-func compareInt(a, b int, operator string) bool {
-	switch operator {
-	case "EQ":
-		return a == b
-	case "NEQ":
-		return a != b
-	case "LT":
-		return a < b
-	case "LTE":
-		return a <= b
-	case "GT":
-		return a > b
-	case "GTE":
-		return a >= b
-	default:
-		fmt.Printf("Unsupported operator: %s\n", operator)
+		log.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown comparison opcode")
 		return false
 	}
 }
 
-func compareFloat(a, b float64, operator string) bool {
-	switch operator {
-	case "EQ":
-		return a == b
-	case "NEQ":
-		return a != b
-	case "LT":
-		return a < b
-	case "LTE":
-		return a <= b
-	case "GT":
-		return a > b
-	case "GTE":
-		return a >= b
+func (e *Engine) executeAction(action compiler.Action) {
+	switch action.Type {
+	case "updateFact":
+		e.Facts[action.Target] = action.Value
+		log.Info().Str("target", action.Target).Interface("value", action.Value).Msg("Updated fact")
+	// Add more action types as needed
 	default:
-		fmt.Printf("Unsupported operator: %s\n", operator)
-		return false
-	}
-}
-
-func compareBool(a, b bool, operator string) bool {
-	switch operator {
-	case "EQ":
-		return a == b
-	case "NEQ":
-		return a != b
-	default:
-		fmt.Printf("Unsupported operator: %s\n", operator)
-		return false
-	}
-}
-
-func compareString(a, b string, operator string) bool {
-	switch operator {
-	case "EQ":
-		return a == b
-	case "NEQ":
-		return a != b
-	case "LT":
-		return a < b
-	case "LTE":
-		return a <= b
-	case "GT":
-		return a > b
-	case "GTE":
-		return a >= b
-	default:
-		fmt.Printf("Unsupported operator: %s\n", operator)
-		return false
+		log.Warn().Str("type", action.Type).Msg("Unknown action type")
 	}
 }
