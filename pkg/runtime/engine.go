@@ -183,11 +183,16 @@ func (e *Engine) evaluateRule(ruleName string) {
 
 		switch opcode {
 		case compiler.RULE_START:
+			ruleNameLength := int(e.bytecode[offset])
 			log.Info().Msg("Encountered RULE_START opcode")
 			offset++
-			ruleName := string(e.bytecode[offset : offset+4])
+			ruleName := string(e.bytecode[offset : offset+ruleNameLength])
+			offset += ruleNameLength
 			log.Info().Str("ruleName", ruleName).Msg("Encountered rule name")
 			continue
+		case compiler.RULE_END:
+			log.Info().Msg("Encountered RULE_END opcode")
+			return
 		case compiler.LOAD_FACT_INT:
 			nameLen := int(e.bytecode[offset])
 			offset++
@@ -248,14 +253,14 @@ func (e *Engine) evaluateRule(ruleName string) {
 			offset += 4
 			log.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_FALSE opcode")
 			if !comparisonResult {
-				offset = jumpOffset
+				offset = offset + jumpOffset
 			}
 		case compiler.JUMP_IF_TRUE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
 			offset += 4
 			log.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_TRUE opcode")
 			if comparisonResult {
-				offset = jumpOffset
+				offset = offset + jumpOffset
 			}
 		case compiler.ACTION_VALUE_INT:
 			actionValue := int64(binary.LittleEndian.Uint64(e.bytecode[offset : offset+8]))
@@ -280,9 +285,25 @@ func (e *Engine) evaluateRule(ruleName string) {
 			offset++
 			action.Value = actionValue
 			log.Info().Bool("actionValue", actionValue).Msg("Encountered ACTION_VALUE_BOOL opcode")
+		case compiler.ACTION_START:
+			log.Info().Msg("Encountered ACTION_START opcode")
 		case compiler.ACTION_END:
 			log.Info().Msg("Encountered ACTION_END opcode")
 			e.executeAction(action)
+			// we can skip the end of the rule and return back to the calling fucntion
+			return
+		case compiler.ACTION_TYPE:
+			nameLen := int(e.bytecode[offset])
+			offset++
+			action.Type = string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			log.Info().Str("actionType", action.Type).Msg("Encountered ACTION_TYPE opcode")
+		case compiler.ACTION_TARGET:
+			nameLen := int(e.bytecode[offset])
+			offset++
+			action.Target = string(e.bytecode[offset : offset+nameLen])
+			offset += nameLen
+			log.Info().Str("actionTarget", action.Target).Msg("Encountered ACTION_TARGET opcode")
 		default:
 			log.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown opcode")
 		}
