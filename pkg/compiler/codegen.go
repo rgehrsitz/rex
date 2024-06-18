@@ -110,11 +110,7 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 					var valueBytes []byte
 					var comparisonOpcode Opcode
 
-					if intValue, err := strconv.Atoi(value); err == nil {
-						factOpcode = LOAD_FACT_INT
-						valueOpcode = LOAD_CONST_INT
-						valueBytes = intToBytes(intValue)
-					} else if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
+					if floatValue, err := strconv.ParseFloat(value, 64); err == nil {
 						factOpcode = LOAD_FACT_FLOAT
 						valueOpcode = LOAD_CONST_FLOAT
 						valueBytes = floatToBytes(floatValue)
@@ -131,15 +127,11 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 					switch operator {
 					case "GT":
 						switch factOpcode {
-						case LOAD_FACT_INT:
-							comparisonOpcode = GT_INT
 						case LOAD_FACT_FLOAT:
 							comparisonOpcode = GT_FLOAT
 						}
 					case "EQ":
 						switch factOpcode {
-						case LOAD_FACT_INT:
-							comparisonOpcode = EQ_INT
 						case LOAD_FACT_FLOAT:
 							comparisonOpcode = EQ_FLOAT
 						case LOAD_FACT_STRING:
@@ -149,8 +141,6 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 						}
 					case "NEQ":
 						switch factOpcode {
-						case LOAD_FACT_INT:
-							comparisonOpcode = NEQ_INT
 						case LOAD_FACT_FLOAT:
 							comparisonOpcode = NEQ_FLOAT
 						case LOAD_FACT_STRING:
@@ -160,22 +150,16 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 						}
 					case "LT":
 						switch factOpcode {
-						case LOAD_FACT_INT:
-							comparisonOpcode = LT_INT
 						case LOAD_FACT_FLOAT:
 							comparisonOpcode = LT_FLOAT
 						}
 					case "LTE":
 						switch factOpcode {
-						case LOAD_FACT_INT:
-							comparisonOpcode = LTE_INT
 						case LOAD_FACT_FLOAT:
 							comparisonOpcode = LTE_FLOAT
 						}
 					case "GTE":
 						switch factOpcode {
-						case LOAD_FACT_INT:
-							comparisonOpcode = GTE_INT
 						case LOAD_FACT_FLOAT:
 							comparisonOpcode = GTE_FLOAT
 						}
@@ -235,11 +219,6 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 
 			// Append the action value based on its type
 			switch v := action.Value.(type) {
-			case int:
-				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_INT))
-				intBytes := make([]byte, 8)
-				binary.Write(bytes.NewBuffer(intBytes), binary.LittleEndian, int64(v))
-				actionBytecode = append(actionBytecode, intBytes...)
 			case float64:
 				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_FLOAT))
 				floatBytes := make([]byte, 8)
@@ -308,13 +287,6 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 		FactRuleLookupIndex: factRuleIndex,
 		FactDependencyIndex: factDepIndex,
 	}
-}
-
-// Helper functions for converting values to bytes
-func intToBytes(n int) []byte {
-	b := make([]byte, 8)                        // Change to 8 bytes for int64
-	binary.LittleEndian.PutUint64(b, uint64(n)) // Change to PutUint64
-	return b
 }
 
 func floatToBytes(f float64) []byte {
@@ -397,7 +369,7 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 // Helper function to determine the length of operands for a given opcode
 func determineOperandLength(opcode Opcode, operands []byte) int {
 	switch opcode {
-	case LOAD_CONST_INT, LOAD_CONST_FLOAT, LOAD_FACT_INT, LOAD_FACT_FLOAT:
+	case LOAD_CONST_FLOAT, LOAD_FACT_FLOAT:
 		log.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 8")
 		return 8 // 8 bytes for int64 or float64
 	case LOAD_CONST_STRING, LOAD_FACT_STRING, LABEL, SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT, ACTION_START:
@@ -426,7 +398,7 @@ func collectFactsFromBytecode(bytecode []byte) []string {
 	for i := 0; i < len(bytecode); {
 		opcode := Opcode(bytecode[i])
 		switch opcode {
-		case LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL:
+		case LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL:
 			factLength := int(bytecode[i+1])
 			fact := string(bytecode[i+2 : i+2+factLength])
 			facts[fact] = struct{}{}

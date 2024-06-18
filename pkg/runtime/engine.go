@@ -131,7 +131,13 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
 	// Update the fact value in the store
-	e.Facts[factName] = factValue
+	if num, ok := factValue.(int); ok {
+		e.Facts[factName] = float64(num)
+	} else if num, ok := factValue.(float32); ok {
+		e.Facts[factName] = float64(num)
+	} else {
+		e.Facts[factName] = factValue
+	}
 
 	// Find all rules that reference the updated fact
 	ruleNames, ok := e.factRuleIndex[factName]
@@ -193,13 +199,6 @@ func (e *Engine) evaluateRule(ruleName string) {
 		case compiler.RULE_END:
 			log.Info().Msg("Encountered RULE_END opcode")
 			return
-		case compiler.LOAD_FACT_INT:
-			nameLen := int(e.bytecode[offset])
-			offset++
-			factName := string(e.bytecode[offset : offset+nameLen])
-			offset += nameLen
-			factValue = e.Facts[factName]
-			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_INT opcode")
 		case compiler.LOAD_FACT_FLOAT:
 			nameLen := int(e.bytecode[offset])
 			offset++
@@ -221,10 +220,6 @@ func (e *Engine) evaluateRule(ruleName string) {
 			offset += nameLen
 			factValue = e.Facts[factName]
 			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_BOOL opcode")
-		case compiler.LOAD_CONST_INT:
-			constValue = int64(binary.LittleEndian.Uint64(e.bytecode[offset : offset+8]))
-			offset += 8
-			log.Info().Int64("constValue", constValue.(int64)).Msg("Encountered LOAD_CONST_INT opcode")
 		case compiler.LOAD_CONST_FLOAT:
 			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
 			constValue = math.Float64frombits(bits)
@@ -240,12 +235,9 @@ func (e *Engine) evaluateRule(ruleName string) {
 			constValue = e.bytecode[offset] == 1
 			offset++
 			log.Info().Bool("constValue", constValue.(bool)).Msg("Encountered LOAD_CONST_BOOL opcode")
-		case compiler.EQ_INT, compiler.EQ_FLOAT, compiler.EQ_STRING, compiler.EQ_BOOL,
-			compiler.NEQ_INT, compiler.NEQ_FLOAT, compiler.NEQ_STRING, compiler.NEQ_BOOL,
-			compiler.LT_INT, compiler.LT_FLOAT,
-			compiler.LTE_INT, compiler.LTE_FLOAT,
-			compiler.GT_INT, compiler.GT_FLOAT,
-			compiler.GTE_INT, compiler.GTE_FLOAT:
+		case compiler.EQ_FLOAT, compiler.EQ_STRING, compiler.EQ_BOOL,
+			compiler.NEQ_FLOAT, compiler.NEQ_STRING, compiler.NEQ_BOOL,
+			compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT:
 			comparisonResult = e.compare(factValue, constValue, opcode)
 			log.Info().Bool("comparisonResult", comparisonResult).Msg("Encountered comparison opcode")
 		case compiler.JUMP_IF_FALSE:
@@ -262,11 +254,6 @@ func (e *Engine) evaluateRule(ruleName string) {
 			if comparisonResult {
 				offset = offset + jumpOffset
 			}
-		case compiler.ACTION_VALUE_INT:
-			actionValue := int64(binary.LittleEndian.Uint64(e.bytecode[offset : offset+8]))
-			offset += 8
-			action.Value = actionValue
-			log.Info().Int64("actionValue", actionValue).Msg("Encountered ACTION_VALUE_INT opcode")
 		case compiler.ACTION_VALUE_FLOAT:
 			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
 			actionValue := math.Float64frombits(bits)
@@ -312,36 +299,25 @@ func (e *Engine) evaluateRule(ruleName string) {
 
 func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opcode) bool {
 	switch opcode {
-	case compiler.EQ_INT:
-		return factValue.(int64) == constValue.(int64)
+
 	case compiler.EQ_FLOAT:
 		return factValue.(float64) == constValue.(float64)
 	case compiler.EQ_STRING:
 		return factValue.(string) == constValue.(string)
 	case compiler.EQ_BOOL:
 		return factValue.(bool) == constValue.(bool)
-	case compiler.NEQ_INT:
-		return factValue.(int64) != constValue.(int64)
 	case compiler.NEQ_FLOAT:
 		return factValue.(float64) != constValue.(float64)
 	case compiler.NEQ_STRING:
 		return factValue.(string) != constValue.(string)
 	case compiler.NEQ_BOOL:
 		return factValue.(bool) != constValue.(bool)
-	case compiler.LT_INT:
-		return factValue.(int64) < constValue.(int64)
 	case compiler.LT_FLOAT:
 		return factValue.(float64) < constValue.(float64)
-	case compiler.LTE_INT:
-		return factValue.(int64) <= constValue.(int64)
 	case compiler.LTE_FLOAT:
 		return factValue.(float64) <= constValue.(float64)
-	case compiler.GT_INT:
-		return factValue.(int64) > constValue.(int64)
 	case compiler.GT_FLOAT:
 		return factValue.(float64) > constValue.(float64)
-	case compiler.GTE_INT:
-		return factValue.(int64) >= constValue.(int64)
 	case compiler.GTE_FLOAT:
 		return factValue.(float64) >= constValue.(float64)
 	default:

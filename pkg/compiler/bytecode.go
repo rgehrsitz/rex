@@ -25,13 +25,7 @@ type Opcode byte
 // Bytecode instructions
 const (
 	// Comparison instructions
-	EQ_INT Opcode = iota
-	NEQ_INT
-	LT_INT
-	LTE_INT
-	GT_INT
-	GTE_INT
-	EQ_FLOAT
+	EQ_FLOAT Opcode = iota
 	NEQ_FLOAT
 	LT_FLOAT
 	LTE_FLOAT
@@ -50,14 +44,12 @@ const (
 	NOT
 
 	// Fact instructions
-	LOAD_FACT_INT
 	LOAD_FACT_FLOAT
 	LOAD_FACT_STRING
 	LOAD_FACT_BOOL
 	STORE_FACT
 
 	// Value instructions
-	LOAD_CONST_INT
 	LOAD_CONST_FLOAT
 	LOAD_CONST_STRING
 	LOAD_CONST_BOOL
@@ -97,7 +89,6 @@ const (
 	ACTION_END
 	ACTION_TYPE
 	ACTION_TARGET
-	ACTION_VALUE_INT
 	ACTION_VALUE_FLOAT
 	ACTION_VALUE_STRING
 	ACTION_VALUE_BOOL
@@ -116,8 +107,8 @@ const (
 // hasOperands returns true if the opcode requires operands.
 func (op Opcode) HasOperands() bool {
 	switch op {
-	case LOAD_CONST_INT, LOAD_CONST_FLOAT, LOAD_CONST_STRING, LOAD_CONST_BOOL,
-		LOAD_FACT_INT, LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL,
+	case LOAD_CONST_FLOAT, LOAD_CONST_STRING, LOAD_CONST_BOOL,
+		LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL,
 		JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, LABEL,
 		SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT,
 		ACTION_START:
@@ -140,13 +131,12 @@ func (instr Instruction) String() string {
 // String returns the string representation of an opcode.
 func (op Opcode) String() string {
 	names := [...]string{
-		"EQ_INT", "NEQ_INT", "LT_INT", "LTE_INT", "GT_INT", "GTE_INT",
 		"EQ_FLOAT", "NEQ_FLOAT", "LT_FLOAT", "LTE_FLOAT", "GT_FLOAT", "GTE_FLOAT",
 		"EQ_STRING", "NEQ_STRING", "CONTAINS_STRING", "NOT_CONTAINS_STRING",
 		"EQ_BOOL", "NEQ_BOOL",
 		"AND", "OR", "NOT",
-		"LOAD_FACT_INT", "LOAD_FACT_FLOAT", "LOAD_FACT_STRING", "LOAD_FACT_BOOL", "STORE_FACT",
-		"LOAD_CONST_INT", "LOAD_CONST_FLOAT", "LOAD_CONST_STRING", "LOAD_CONST_BOOL", "LOAD_VAR",
+		"LOAD_FACT_FLOAT", "LOAD_FACT_STRING", "LOAD_FACT_BOOL", "STORE_FACT",
+		"LOAD_CONST_FLOAT", "LOAD_CONST_STRING", "LOAD_CONST_BOOL", "LOAD_VAR",
 		"JUMP", "JUMP_IF_TRUE", "JUMP_IF_FALSE",
 		"TRIGGER_ACTION", "UPDATE_FACT", "SEND_MESSAGE",
 		"NOP", "HALT", "ERROR",
@@ -157,7 +147,7 @@ func (op Opcode) String() string {
 		"ACTION_START", "ACTION_END",
 		"HEADER_START", "HEADER_END", "CHECKSUM", "VERSION", "NUM_RULES", "CONST_POOL_SIZE",
 	}
-	if op < EQ_INT || op > CONST_POOL_SIZE {
+	if op < EQ_FLOAT || op > CONST_POOL_SIZE {
 		return fmt.Sprintf("Opcode(%d)", op)
 	}
 	return names[op]

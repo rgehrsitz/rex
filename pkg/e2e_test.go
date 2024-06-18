@@ -136,7 +136,7 @@ func TestEndToEndWithMultipleRules(t *testing.T) {
 	assert.NotNil(t, engine)
 
 	// Process fact update
-	engine.ProcessFactUpdate("humi", 50)
+	engine.ProcessFactUpdate("temp", 60.1)
 
 	// Verify the fact update
 	// facts := engine.GetFacts()
