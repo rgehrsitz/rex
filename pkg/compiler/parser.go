@@ -7,15 +7,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/rs/zerolog/log"
+	"rgehrsitz/rex/pkg/logging"
 )
 
 func Parse(jsonData []byte) (*Ruleset, error) {
-	log.Debug().Str("jsonData", string(jsonData)).Msg("Starting to parse JSON data")
+	logging.Logger.Debug().Str("jsonData", string(jsonData)).Msg("Starting to parse JSON data")
 	var ruleset Ruleset
 	err := json.Unmarshal(jsonData, &ruleset)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to unmarshal JSON data")
+		logging.Logger.Error().Err(err).Msg("Failed to unmarshal JSON data")
 		return nil, fmt.Errorf("invalid JSON format: %v", err)
 	}
 	if len(ruleset.Rules) == 0 {
@@ -23,7 +23,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	}
 	for i, rule := range ruleset.Rules {
 		if err := validateRule(&rule); err != nil {
-			log.Error().Err(err).Str("rule", rule.Name).Msg("Invalid rule")
+			logging.Logger.Error().Err(err).Str("rule", rule.Name).Msg("Invalid rule")
 			return nil, fmt.Errorf("invalid rule '%s': %v", rule.Name, err)
 		}
 		ruleset.Rules[i] = rule
@@ -31,7 +31,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 		// Add validation for actions
 		for j, action := range rule.Actions {
 			if err := validateAction(&action); err != nil {
-				log.Error().Err(err).Str("rule", rule.Name).Str("action", action.Type).Msg("Invalid action")
+				logging.Logger.Error().Err(err).Str("rule", rule.Name).Str("action", action.Type).Msg("Invalid action")
 				return nil, fmt.Errorf("invalid action '%s' in rule '%s': %v", action.Type, rule.Name, err)
 			}
 			rule.Actions[j] = action
@@ -39,13 +39,13 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	}
 
 	//print the parsed ruleset
-	log.Debug().Interface("ruleset", ruleset).Msg("Parsed JSON data")
+	logging.Logger.Debug().Interface("ruleset", ruleset).Msg("Parsed JSON data")
 	return &ruleset, nil
 }
 
 func validateRule(rule *Rule) error {
 	// Basic rule validations
-	log.Debug().Str("rule", rule.Name).Msg("Validating rule")
+	logging.Logger.Debug().Str("rule", rule.Name).Msg("Validating rule")
 	if rule.Name == "" {
 		return errors.New("rule name is required")
 	}
@@ -66,10 +66,10 @@ func validateRule(rule *Rule) error {
 
 func validateAndOrderConditionGroup(cg *ConditionGroup) error {
 	// Log for debugging
-	log.Debug().Interface("All", cg.All).Interface("Any", cg.Any).Msg("Validating and ordering condition group")
+	logging.Logger.Debug().Interface("All", cg.All).Interface("Any", cg.Any).Msg("Validating and ordering condition group")
 	// Check if the entire group is logically empty
 	if len(cg.All) == 0 && len(cg.Any) == 0 {
-		log.Error().Msg("Empty condition group detected")
+		logging.Logger.Error().Msg("Empty condition group detected")
 		return errors.New("empty condition group")
 	}
 
@@ -106,7 +106,7 @@ func isCondition(cog *ConditionOrGroup) bool {
 }
 
 func validateConditionOrGroup(cog *ConditionOrGroup) error {
-	log.Debug().Interface("ConditionOrGroup", cog).Msg("Validating condition or group")
+	logging.Logger.Debug().Interface("ConditionOrGroup", cog).Msg("Validating condition or group")
 	if cog == nil {
 		return errors.New("nil condition or group received")
 	}
@@ -151,7 +151,7 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 
 func validateAction(action *Action) error {
 	if action != nil {
-		log.Debug().Str("action", action.Type).Msg("Validating action")
+		logging.Logger.Debug().Str("action", action.Type).Msg("Validating action")
 	}
 	if action == nil {
 		return errors.New("nil action received")

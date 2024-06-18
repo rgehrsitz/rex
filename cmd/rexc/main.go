@@ -3,28 +3,34 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 
 	"rgehrsitz/rex/pkg/compiler"
 
-	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
+
+	"rgehrsitz/rex/pkg/logging"
 )
 
 func main() {
-	// Configure logger
-	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	// Setup command-line flags
+	jsonFilePath := flag.String("rules", "", "Path to the input JSON file")
+	logLevel := flag.String("loglevel", "info", "Set log level: panic, fatal, error, warn, info, debug, trace")
+	logOutput := flag.String("logoutput", "console", "Set log output: console or file")
 
-	if len(os.Args) < 2 {
-		log.Fatal().Msg("Usage: rexc <path_to_json_file>")
+	flag.Parse()
+
+	// Configure zerolog based on the flags
+	logging.ConfigureLogger(*logLevel, *logOutput)
+
+	if *jsonFilePath == "" {
+		log.Fatal().Msg("Input JSON file path is required")
 	}
 
-	jsonFilePath := os.Args[1]
-
 	// Read JSON file
-	jsonData, err := os.ReadFile(jsonFilePath)
+	jsonData, err := os.ReadFile(*jsonFilePath)
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to read JSON file")
 	}

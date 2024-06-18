@@ -7,7 +7,7 @@ import (
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
 
-	"github.com/rs/zerolog/log"
+	"rgehrsitz/rex/pkg/logging"
 )
 
 type Engine struct {
@@ -38,25 +38,25 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 
 	// Read header
 	version := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Info().Uint32("version", version).Msg("Read bytecode version")
+	logging.Logger.Info().Uint32("version", version).Msg("Read bytecode version")
 	offset += 4
 	checksum := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Info().Uint32("checksum", checksum).Msg("Read bytecode checksum")
+	logging.Logger.Info().Uint32("checksum", checksum).Msg("Read bytecode checksum")
 	offset += 4
 	constPoolSize := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Info().Uint32("constPoolSize", constPoolSize).Msg("Read constant pool size")
+	logging.Logger.Info().Uint32("constPoolSize", constPoolSize).Msg("Read constant pool size")
 	offset += 4
 	numRules := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Info().Uint32("numRules", numRules).Msg("Read number of rules")
+	logging.Logger.Info().Uint32("numRules", numRules).Msg("Read number of rules")
 	offset += 4
 	ruleExecIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Info().Uint32("ruleExecIndexOffset", ruleExecIndexOffset).Msg("Read rule execution index offset")
+	logging.Logger.Info().Uint32("ruleExecIndexOffset", ruleExecIndexOffset).Msg("Read rule execution index offset")
 	offset += 4
 	factRuleIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Info().Uint32("factRuleIndexOffset", factRuleIndexOffset).Msg("Read fact rule index offset")
+	logging.Logger.Info().Uint32("factRuleIndexOffset", factRuleIndexOffset).Msg("Read fact rule index offset")
 	offset += 4
 	factDepIndexOffset := binary.LittleEndian.Uint32(bytecode[offset:])
-	log.Info().Uint32("factDepIndexOffset", factDepIndexOffset).Msg("Read fact dependency index offset")
+	logging.Logger.Info().Uint32("factDepIndexOffset", factDepIndexOffset).Msg("Read fact dependency index offset")
 	offset += 4
 
 	// Read rule execution index
@@ -76,7 +76,7 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 			RuleName:   name,
 			ByteOffset: adjustedByteOffset,
 		})
-		log.Info().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Msg("Read rule execution index entry")
+		logging.Logger.Info().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Msg("Read rule execution index entry")
 	}
 
 	// Read fact rule index
@@ -97,7 +97,7 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 			rules = append(rules, rule)
 		}
 		engine.factRuleIndex[fact] = rules
-		log.Info().Str("fact", fact).Strs("rules", rules).Msg("Read fact rule index entry")
+		logging.Logger.Info().Str("fact", fact).Strs("rules", rules).Msg("Read fact rule index entry")
 	}
 
 	// Read fact dependency index
@@ -121,15 +121,15 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 			RuleName: rule,
 			Facts:    facts,
 		})
-		log.Info().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
+		logging.Logger.Info().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
 	}
 
-	log.Info().Msg("Engine initialized from bytecode")
+	logging.Logger.Info().Msg("Engine initialized from bytecode")
 	return engine, nil
 }
 
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
-	log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
+	logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
@@ -143,11 +143,11 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	// Find all rules that reference the updated fact
 	ruleNames, ok := e.factRuleIndex[factName]
 	if !ok {
-		log.Info().Str("factName", factName).Msg("No rules found for the updated fact")
+		logging.Logger.Info().Str("factName", factName).Msg("No rules found for the updated fact")
 		return
 	}
 
-	log.Info().Str("factName", factName).Strs("ruleNames", ruleNames).Msg("Found rules referencing the updated fact")
+	logging.Logger.Info().Str("factName", factName).Strs("ruleNames", ruleNames).Msg("Found rules referencing the updated fact")
 
 	// Create a set of all facts that need to be queried
 	factsToQuery := make(map[string]struct{})
@@ -170,7 +170,7 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	// Query the KV store for all the facts
 	factValues, err := e.store.MGetFacts(factKeys...)
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to retrieve facts from KV store")
+		logging.Logger.Error().Err(err).Msg("Failed to retrieve facts from KV store")
 		return
 	}
 
@@ -186,7 +186,7 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 }
 
 func (e *Engine) evaluateRule(ruleName string) {
-	log.Info().Str("ruleName", ruleName).Msg("Evaluating rule")
+	logging.Logger.Info().Str("ruleName", ruleName).Msg("Evaluating rule")
 
 	var ruleOffset int
 	found := false
@@ -199,11 +199,11 @@ func (e *Engine) evaluateRule(ruleName string) {
 	}
 
 	if !found {
-		log.Warn().Str("ruleName", ruleName).Msg("Rule not found in ruleExecutionIndex")
+		logging.Logger.Warn().Str("ruleName", ruleName).Msg("Rule not found in ruleExecutionIndex")
 		return
 	}
 
-	log.Info().Str("ruleName", ruleName).Int("offset", ruleOffset).Msg("Found rule in ruleExecutionIndex")
+	logging.Logger.Info().Str("ruleName", ruleName).Int("offset", ruleOffset).Msg("Found rule in ruleExecutionIndex")
 
 	offset := ruleOffset
 	var action compiler.Action
@@ -216,19 +216,19 @@ func (e *Engine) evaluateRule(ruleName string) {
 		opcode := compiler.Opcode(e.bytecode[offset])
 		offset++
 
-		log.Info().Uint8("opcode", uint8(opcode)).Int("offset", offset-1).Msg("Executing opcode")
+		logging.Logger.Info().Uint8("opcode", uint8(opcode)).Int("offset", offset-1).Msg("Executing opcode")
 
 		switch opcode {
 		case compiler.RULE_START:
 			ruleNameLength := int(e.bytecode[offset])
-			log.Info().Msg("Encountered RULE_START opcode")
+			logging.Logger.Info().Msg("Encountered RULE_START opcode")
 			offset++
 			ruleName := string(e.bytecode[offset : offset+ruleNameLength])
 			offset += ruleNameLength
-			log.Info().Str("ruleName", ruleName).Msg("Encountered rule name")
+			logging.Logger.Info().Str("ruleName", ruleName).Msg("Encountered rule name")
 			continue
 		case compiler.RULE_END:
-			log.Info().Msg("Encountered RULE_END opcode")
+			logging.Logger.Info().Msg("Encountered RULE_END opcode")
 			return
 		case compiler.LOAD_FACT_FLOAT:
 			nameLen := int(e.bytecode[offset])
@@ -236,52 +236,52 @@ func (e *Engine) evaluateRule(ruleName string) {
 			factName := string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			factValue = e.Facts[factName]
-			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_FLOAT opcode")
+			logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_FLOAT opcode")
 		case compiler.LOAD_FACT_STRING:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			factName := string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			factValue = e.Facts[factName]
-			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_STRING opcode")
+			logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_STRING opcode")
 		case compiler.LOAD_FACT_BOOL:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			factName := string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			factValue = e.Facts[factName]
-			log.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_BOOL opcode")
+			logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_BOOL opcode")
 		case compiler.LOAD_CONST_FLOAT:
 			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
 			constValue = math.Float64frombits(bits)
 			offset += 8
-			log.Info().Float64("constValue", constValue.(float64)).Msg("Encountered LOAD_CONST_FLOAT opcode")
+			logging.Logger.Info().Float64("constValue", constValue.(float64)).Msg("Encountered LOAD_CONST_FLOAT opcode")
 		case compiler.LOAD_CONST_STRING:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			constValue = string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
-			log.Info().Str("constValue", constValue.(string)).Msg("Encountered LOAD_CONST_STRING opcode")
+			logging.Logger.Info().Str("constValue", constValue.(string)).Msg("Encountered LOAD_CONST_STRING opcode")
 		case compiler.LOAD_CONST_BOOL:
 			constValue = e.bytecode[offset] == 1
 			offset++
-			log.Info().Bool("constValue", constValue.(bool)).Msg("Encountered LOAD_CONST_BOOL opcode")
+			logging.Logger.Info().Bool("constValue", constValue.(bool)).Msg("Encountered LOAD_CONST_BOOL opcode")
 		case compiler.EQ_FLOAT, compiler.EQ_STRING, compiler.EQ_BOOL,
 			compiler.NEQ_FLOAT, compiler.NEQ_STRING, compiler.NEQ_BOOL,
 			compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT:
 			comparisonResult = e.compare(factValue, constValue, opcode)
-			log.Info().Bool("comparisonResult", comparisonResult).Msg("Encountered comparison opcode")
+			logging.Logger.Info().Bool("comparisonResult", comparisonResult).Msg("Encountered comparison opcode")
 		case compiler.JUMP_IF_FALSE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
 			offset += 4
-			log.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_FALSE opcode")
+			logging.Logger.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_FALSE opcode")
 			if !comparisonResult {
 				offset = offset + jumpOffset
 			}
 		case compiler.JUMP_IF_TRUE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
 			offset += 4
-			log.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_TRUE opcode")
+			logging.Logger.Info().Int("jumpOffset", jumpOffset).Msg("Encountered JUMP_IF_TRUE opcode")
 			if comparisonResult {
 				offset = offset + jumpOffset
 			}
@@ -290,23 +290,23 @@ func (e *Engine) evaluateRule(ruleName string) {
 			actionValue := math.Float64frombits(bits)
 			offset += 8
 			action.Value = actionValue
-			log.Info().Float64("actionValue", actionValue).Msg("Encountered ACTION_VALUE_FLOAT opcode")
+			logging.Logger.Info().Float64("actionValue", actionValue).Msg("Encountered ACTION_VALUE_FLOAT opcode")
 		case compiler.ACTION_VALUE_STRING:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			actionValue := string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			action.Value = actionValue
-			log.Info().Str("actionValue", actionValue).Msg("Encountered ACTION_VALUE_STRING opcode")
+			logging.Logger.Info().Str("actionValue", actionValue).Msg("Encountered ACTION_VALUE_STRING opcode")
 		case compiler.ACTION_VALUE_BOOL:
 			actionValue := e.bytecode[offset] == 1
 			offset++
 			action.Value = actionValue
-			log.Info().Bool("actionValue", actionValue).Msg("Encountered ACTION_VALUE_BOOL opcode")
+			logging.Logger.Info().Bool("actionValue", actionValue).Msg("Encountered ACTION_VALUE_BOOL opcode")
 		case compiler.ACTION_START:
-			log.Info().Msg("Encountered ACTION_START opcode")
+			logging.Logger.Info().Msg("Encountered ACTION_START opcode")
 		case compiler.ACTION_END:
-			log.Info().Msg("Encountered ACTION_END opcode")
+			logging.Logger.Info().Msg("Encountered ACTION_END opcode")
 			e.executeAction(action)
 			// we can skip the end of the rule and return back to the calling function
 			return
@@ -315,15 +315,15 @@ func (e *Engine) evaluateRule(ruleName string) {
 			offset++
 			action.Type = string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
-			log.Info().Str("actionType", action.Type).Msg("Encountered ACTION_TYPE opcode")
+			logging.Logger.Info().Str("actionType", action.Type).Msg("Encountered ACTION_TYPE opcode")
 		case compiler.ACTION_TARGET:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			action.Target = string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
-			log.Info().Str("actionTarget", action.Target).Msg("Encountered ACTION_TARGET opcode")
+			logging.Logger.Info().Str("actionTarget", action.Target).Msg("Encountered ACTION_TARGET opcode")
 		default:
-			log.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown opcode")
+			logging.Logger.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown opcode")
 		}
 	}
 }
@@ -352,7 +352,7 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 	case compiler.GTE_FLOAT:
 		return factValue.(float64) >= constValue.(float64)
 	default:
-		log.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown comparison opcode")
+		logging.Logger.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown comparison opcode")
 		return false
 	}
 }
@@ -361,9 +361,9 @@ func (e *Engine) executeAction(action compiler.Action) {
 	switch action.Type {
 	case "updateFact":
 		e.Facts[action.Target] = action.Value
-		log.Info().Str("target", action.Target).Interface("value", action.Value).Msg("Updated fact")
+		logging.Logger.Info().Str("target", action.Target).Interface("value", action.Value).Msg("Updated fact")
 	// Add more action types as needed
 	default:
-		log.Warn().Str("type", action.Type).Msg("Unknown action type")
+		logging.Logger.Warn().Str("type", action.Type).Msg("Unknown action type")
 	}
 }

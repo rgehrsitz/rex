@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"rgehrsitz/rex/pkg/logging"
 )
 
 // Node represents a node in the condition tree for generating bytecode.
@@ -179,27 +179,6 @@ func OptimizeInstructions(instructions []Instruction) []Instruction {
 		optimizedInstructions = append(optimizedInstructions, instr)
 	}
 
-	// Third pass: remove unused labels
-	// usedLabels := make(map[string]bool)
-	// for _, instr := range optimizedInstructions {
-	// 	if instr.Opcode == JUMP_IF_FALSE || instr.Opcode == JUMP_IF_TRUE {
-	// 		label := string(instr.Operands)
-	// 		usedLabels[label] = true
-	// 	}
-	// }
-
-	// finalInstructions := []Instruction{}
-	// for _, instr := range optimizedInstructions {
-	// 	if instr.Opcode == LABEL {
-	// 		label := string(instr.Operands)
-	// 		if !usedLabels[label] {
-	// 			// Skip the label if it's not used by any jump instruction
-	// 			continue
-	// 		}
-	// 	}
-	// 	finalInstructions = append(finalInstructions, instr)
-	// }
-
 	finalInstructions := RemoveUnusedLabels(optimizedInstructions)
 
 	return finalInstructions
@@ -220,13 +199,13 @@ func CombineJIFJIT(instructions []Instruction) []Instruction {
 				combinedOperands := []byte(fmt.Sprintf("%s %s %s %s", parts[0], parts[1], parts[2], paddedLabel))
 				combinedInstructions = append(combinedInstructions, Instruction{Opcode: JUMP_IF_TRUE, Operands: combinedOperands})
 				i++ // Skip the next JUMP_IF_TRUE instruction
-				log.Debug().Msgf("Combined JIF and JIT instructions: %s", string(combinedOperands))
+				logging.Logger.Debug().Msgf("Combined JIF and JIT instructions: %s", string(combinedOperands))
 				continue
 			}
 		}
 		combinedInstructions = append(combinedInstructions, instr)
 	}
-	log.Debug().Msgf("Combined instructions: %+v", combinedInstructions)
+	logging.Logger.Debug().Msgf("Combined instructions: %+v", combinedInstructions)
 	return combinedInstructions
 }
 
@@ -244,21 +223,21 @@ func RemoveUnusedLabels(instructions []Instruction) []Instruction {
 		}
 	}
 
-	log.Debug().Msgf("Used labels: %+v", usedLabels)
+	logging.Logger.Debug().Msgf("Used labels: %+v", usedLabels)
 
 	// Second pass: remove unused labels while preserving existing label identifiers
 	for _, instr := range instructions {
 		if instr.Opcode == LABEL {
 			if !usedLabels[string(instr.Operands)] {
 				// Skip the label if it's not used by any jump instruction
-				log.Debug().Msgf("Removing unused label: %s", string(instr.Operands))
+				logging.Logger.Debug().Msgf("Removing unused label: %s", string(instr.Operands))
 				continue
 			}
 		}
 		finalInstructions = append(finalInstructions, instr)
 	}
 
-	log.Debug().Msgf("Final instructions: %+v", finalInstructions)
+	logging.Logger.Debug().Msgf("Final instructions: %+v", finalInstructions)
 
 	return finalInstructions
 }

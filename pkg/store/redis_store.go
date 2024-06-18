@@ -5,7 +5,7 @@ package store
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"rgehrsitz/rex/pkg/logging"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -25,7 +25,7 @@ func NewRedisStore(addr, password string, db int) *RedisStore {
 
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		logging.Logger.Fatal().Err(err).Msg("Failed to connect to Redis: %v")
 	}
 
 	return &RedisStore{client: client}

@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/rs/zerolog/log"
+	"rgehrsitz/rex/pkg/logging"
 )
 
 const (
@@ -282,20 +282,20 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 		return err
 	}
 
-	log.Info().Msgf("Successfully wrote bytecode file: %s", filename)
+	logging.Logger.Info().Msgf("Successfully wrote bytecode file: %s", filename)
 	return nil
 }
 
 func writeString(buf *bytes.Buffer, s string) error {
 	length := uint32(len(s))
 	if err := binary.Write(buf, binary.LittleEndian, length); err != nil {
-		log.Error().Err(err).Msg("Error writing string length")
+		logging.Logger.Error().Err(err).Msg("Error writing string length")
 		return err
 	}
 	if _, err := buf.WriteString(s); err != nil {
-		log.Error().Err(err).Msg("Error writing string")
+		logging.Logger.Error().Err(err).Msg("Error writing string")
 		return err
 	}
-	log.Info().Str("string", s).Uint32("length", length).Msg("Writing string")
+	logging.Logger.Info().Str("string", s).Uint32("length", length).Msg("Writing string")
 	return nil
 }
