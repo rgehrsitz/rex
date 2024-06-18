@@ -7,6 +7,7 @@ import (
 
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/runtime"
+	"rgehrsitz/rex/pkg/store"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -55,8 +56,9 @@ func TestEndToEnd(t *testing.T) {
 	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)
 	assert.NoError(t, err)
 
+	redisStore := store.NewRedisStore("localhost:6379", "", 0)
 	// Create runtime engine from bytecode file
-	engine, err := runtime.NewEngineFromFile(filename)
+	engine, err := runtime.NewEngineFromFile(filename, redisStore)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
 
@@ -130,8 +132,10 @@ func TestEndToEndWithMultipleRules(t *testing.T) {
 	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)
 	assert.NoError(t, err)
 
+	redisStore := store.NewRedisStore("localhost:6379", "", 0)
 	// Create runtime engine from bytecode file
-	engine, err := runtime.NewEngineFromFile(filename)
+	engine, err := runtime.NewEngineFromFile(filename, redisStore)
+
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
 

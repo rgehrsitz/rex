@@ -1,5 +1,3 @@
-// rex/pkg/runtime/engine.go
-
 package runtime
 
 import (
@@ -7,6 +5,7 @@ import (
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/store"
 
 	"github.com/rs/zerolog/log"
 )
@@ -17,9 +16,10 @@ type Engine struct {
 	factRuleIndex       map[string][]string
 	factDependencyIndex []compiler.FactDependencyIndex
 	Facts               map[string]interface{}
+	store               store.Store
 }
 
-func NewEngineFromFile(filename string) (*Engine, error) {
+func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	bytecode, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, err
@@ -31,6 +31,7 @@ func NewEngineFromFile(filename string) (*Engine, error) {
 		factRuleIndex:       make(map[string][]string),
 		factDependencyIndex: make([]compiler.FactDependencyIndex, 0),
 		Facts:               make(map[string]interface{}),
+		store:               store,
 	}
 
 	offset := 0
@@ -147,6 +148,36 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	}
 
 	log.Info().Str("factName", factName).Strs("ruleNames", ruleNames).Msg("Found rules referencing the updated fact")
+
+	// Create a set of all facts that need to be queried
+	factsToQuery := make(map[string]struct{})
+	for _, ruleName := range ruleNames {
+		for _, dep := range e.factDependencyIndex {
+			if dep.RuleName == ruleName {
+				for _, fact := range dep.Facts {
+					factsToQuery[fact] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// Convert the set to a slice
+	var factKeys []string
+	for fact := range factsToQuery {
+		factKeys = append(factKeys, fact)
+	}
+
+	// Query the KV store for all the facts
+	factValues, err := e.store.MGetFacts(factKeys...)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to retrieve facts from KV store")
+		return
+	}
+
+	// Update local fact store with retrieved facts
+	for fact, value := range factValues {
+		e.Facts[fact] = value
+	}
 
 	// Evaluate each rule
 	for _, ruleName := range ruleNames {
@@ -277,7 +308,7 @@ func (e *Engine) evaluateRule(ruleName string) {
 		case compiler.ACTION_END:
 			log.Info().Msg("Encountered ACTION_END opcode")
 			e.executeAction(action)
-			// we can skip the end of the rule and return back to the calling fucntion
+			// we can skip the end of the rule and return back to the calling function
 			return
 		case compiler.ACTION_TYPE:
 			nameLen := int(e.bytecode[offset])
