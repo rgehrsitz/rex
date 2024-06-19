@@ -372,7 +372,7 @@ func determineOperandLength(opcode Opcode, operands []byte) int {
 	case LOAD_CONST_FLOAT, LOAD_FACT_FLOAT:
 		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 8")
 		return 8 // 8 bytes for int64 or float64
-	case LOAD_CONST_STRING, LOAD_FACT_STRING, LABEL, SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT, ACTION_START:
+	case LOAD_CONST_STRING, LOAD_FACT_STRING, LABEL, SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT, ACTION_START, RULE_START:
 		if len(operands) > 0 {
 			length := 1 + int(operands[0]) // 1 byte for length + length of the string
 			logging.Logger.Debug().Str("opcode", opcode.String()).Int("length", length).Msg("Returning operand length")
@@ -395,22 +395,53 @@ func determineOperandLength(opcode Opcode, operands []byte) int {
 func collectFactsFromBytecode(bytecode []byte) []string {
 	logging.Logger.Debug().Msg("Starting collectFactsFromBytecode")
 	facts := make(map[string]struct{})
+	maxFactNameLength := 64 // Define a maximum length for fact names
+
 	for i := 0; i < len(bytecode); {
 		opcode := Opcode(bytecode[i])
-		switch opcode {
-		case LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL:
+
+		if opcode == LOAD_FACT_FLOAT || opcode == LOAD_FACT_STRING || opcode == LOAD_FACT_BOOL {
+			if i+1 >= len(bytecode) {
+				break
+			}
 			factLength := int(bytecode[i+1])
-			fact := string(bytecode[i+2 : i+2+factLength])
-			facts[fact] = struct{}{}
-			logging.Logger.Debug().Str("fact", fact).Msg("Collected fact")
+
+			// Check if the fact name length is within the allowed limit
+			if factLength <= 0 || factLength > maxFactNameLength {
+				i++
+				continue
+			}
+
+			if i+2+factLength > len(bytecode) {
+				break
+			}
+			factName := string(bytecode[i+2 : i+2+factLength])
+
+			// Verify if the fact name consists of allowed characters
+			if !isValidFactName(factName) {
+				i += 2 + factLength
+				continue
+			}
+
+			// Check if the subsequent opcodes form a valid sequence
+			if i+2+factLength < len(bytecode) {
+				nextOpcode := Opcode(bytecode[i+2+factLength])
+				if !isValidFactLoadingSequence(nextOpcode) {
+					i += 2 + factLength
+					continue
+				}
+			}
+
+			facts[factName] = struct{}{}
+			logging.Logger.Debug().Str("fact", factName).Msg("Collected fact")
 			i += 2 + factLength
-		default:
+		} else {
 			if opcode.HasOperands() {
 				operandLength := determineOperandLength(opcode, bytecode[i+1:])
 				logging.Logger.Debug().Str("opcode", opcode.String()).Int("operandLength", operandLength).Msg("Opcode has operands")
 				i += 1 + operandLength
 			} else {
-				i += 1
+				i++
 			}
 		}
 	}
@@ -421,6 +452,26 @@ func collectFactsFromBytecode(bytecode []byte) []string {
 	}
 	logging.Logger.Debug().Int("factCount", len(factList)).Msg("Completed collectFactsFromBytecode")
 	return factList
+}
+
+func isValidFactName(name string) bool {
+	// Check if the fact name consists of allowed characters
+	for _, char := range name {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidFactLoadingSequence(opcode Opcode) bool {
+	// Check if the opcode is a valid one that can follow a fact loading instruction
+	switch opcode {
+	case LOAD_CONST_FLOAT, LOAD_CONST_STRING, LOAD_CONST_BOOL:
+		return true
+	default:
+		return false
+	}
 }
 
 func ReplaceLabelOffsets(bytecode []byte) []byte {

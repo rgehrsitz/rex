@@ -111,7 +111,7 @@ func (op Opcode) HasOperands() bool {
 		LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL,
 		JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, LABEL,
 		SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT,
-		ACTION_START:
+		ACTION_START, RULE_START:
 		return true
 	default:
 		return false

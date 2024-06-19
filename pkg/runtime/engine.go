@@ -169,11 +169,14 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 		factKeys = append(factKeys, fact)
 	}
 
+	factValues := make(map[string]interface{})
+	var err error
 	// Query the KV store for the required facts
-	factValues, err := e.store.MGetFacts(factKeys...)
-	if err != nil {
-		logging.Logger.Error().Err(err).Msg("Failed to retrieve facts from KV store")
-		return
+	if len(factKeys) > 0 {
+		factValues, err = e.store.MGetFacts(factKeys...)
+		if err != nil {
+			logging.Logger.Error().Err(err).Msg("Failed to retrieve facts from KV store")
+		}
 	}
 
 	// Update local fact store with retrieved facts
@@ -344,8 +347,6 @@ func (e *Engine) evaluateRule(ruleName string) {
 		case compiler.ACTION_END:
 			logging.Logger.Info().Msg("Encountered ACTION_END opcode")
 			e.executeAction(action)
-			// we can skip the end of the rule and return back to the calling function
-			return
 		case compiler.ACTION_TYPE:
 			nameLen := int(e.bytecode[offset])
 			offset++
@@ -411,8 +412,11 @@ func (e *Engine) executeAction(action compiler.Action) {
 
 		logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in store")
 
+		// ****************************************
+		//  If we want to automaticaly trigger a cascading rule(s)
+		//  then this is where we would do it
 		// Trigger the fact update processing
-		e.ProcessFactUpdate(factName, factValue)
+		// e.ProcessFactUpdate(factName, factValue)
 
 	// Add more action types as needed
 	default:
