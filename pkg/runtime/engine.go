@@ -149,13 +149,15 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 
 	logging.Logger.Info().Str("factName", factName).Strs("ruleNames", ruleNames).Msg("Found rules referencing the updated fact")
 
-	// Create a set of all facts that need to be queried
+	// Create a set of all facts that need to be queried (excluding the fact that triggered the update)
 	factsToQuery := make(map[string]struct{})
 	for _, ruleName := range ruleNames {
 		for _, dep := range e.factDependencyIndex {
 			if dep.RuleName == ruleName {
 				for _, fact := range dep.Facts {
-					factsToQuery[fact] = struct{}{}
+					if fact != factName {
+						factsToQuery[fact] = struct{}{}
+					}
 				}
 			}
 		}
@@ -167,7 +169,7 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 		factKeys = append(factKeys, fact)
 	}
 
-	// Query the KV store for all the facts
+	// Query the KV store for the required facts
 	factValues, err := e.store.MGetFacts(factKeys...)
 	if err != nil {
 		logging.Logger.Error().Err(err).Msg("Failed to retrieve facts from KV store")
@@ -175,8 +177,42 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	}
 
 	// Update local fact store with retrieved facts
+	var missingFacts []string
 	for fact, value := range factValues {
-		e.Facts[fact] = value
+		if value != nil {
+			e.Facts[fact] = value
+		} else {
+			// Fact does not exist in the store
+			logging.Logger.Warn().Str("fact", fact).Msg("Fact not found in store")
+			delete(e.Facts, fact)
+			missingFacts = append(missingFacts, fact)
+		}
+	}
+
+	// Remove rules that depend on missing facts from ruleNames
+	for _, missingFact := range missingFacts {
+		for i := 0; i < len(ruleNames); i++ {
+			ruleName := ruleNames[i]
+			for _, dep := range e.factDependencyIndex {
+				if dep.RuleName == ruleName {
+					for _, fact := range dep.Facts {
+						if fact == missingFact {
+							// Remove the rule from ruleNames
+							ruleNames = append(ruleNames[:i], ruleNames[i+1:]...)
+							i--
+							logging.Logger.Warn().
+								Str("ruleName", ruleName).
+								Str("missingFact", missingFact).
+								Msg("Removing rule due to missing fact")
+							break
+						}
+					}
+					if len(ruleNames) == 0 {
+						break
+					}
+				}
+			}
+		}
 	}
 
 	// Evaluate each rule
@@ -359,9 +395,25 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 
 func (e *Engine) executeAction(action compiler.Action) {
 	switch action.Type {
-	case "updateFact":
-		e.Facts[action.Target] = action.Value
-		logging.Logger.Info().Str("target", action.Target).Interface("value", action.Value).Msg("Updated fact")
+	case "updateStore":
+		factName := action.Target
+		factValue := action.Value
+
+		// Update the fact value in the local fact store
+		e.Facts[factName] = factValue
+
+		// Send the fact update to the store
+		err := e.store.SetFact(factName, factValue)
+		if err != nil {
+			logging.Logger.Error().Err(err).Str("factName", factName).Interface("factValue", factValue).Msg("Failed to update fact in store")
+			return
+		}
+
+		logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in store")
+
+		// Trigger the fact update processing
+		e.ProcessFactUpdate(factName, factValue)
+
 	// Add more action types as needed
 	default:
 		logging.Logger.Warn().Str("type", action.Type).Msg("Unknown action type")

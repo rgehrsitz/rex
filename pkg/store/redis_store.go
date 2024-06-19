@@ -41,7 +41,9 @@ func (s *RedisStore) SetFact(key string, value interface{}) error {
 
 func (s *RedisStore) GetFact(key string) (interface{}, error) {
 	data, err := s.client.Get(ctx, key).Result()
-	if err != nil {
+	if err == redis.Nil {
+		return nil, nil
+	} else if err != nil {
 		return nil, err
 	}
 
@@ -61,11 +63,22 @@ func (s *RedisStore) MGetFacts(keys ...string) (map[string]interface{}, error) {
 	facts := make(map[string]interface{})
 	for i, result := range results {
 		if result == nil {
+			facts[keys[i]] = nil
 			continue
 		}
+
 		var value interface{}
-		if err := json.Unmarshal([]byte(result.(string)), &value); err != nil {
-			return nil, err
+		switch v := result.(type) {
+		case string:
+			if err := json.Unmarshal([]byte(v), &value); err != nil {
+				return nil, err
+			}
+		case []byte:
+			if err := json.Unmarshal(v, &value); err != nil {
+				return nil, err
+			}
+		default:
+			value = v
 		}
 		facts[keys[i]] = value
 	}

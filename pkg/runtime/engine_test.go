@@ -27,7 +27,7 @@ func TestProcessFactUpdate(t *testing.T) {
 				},
 				Actions: []compiler.Action{
 					{
-						Type:   "updateFact",
+						Type:   "updateStore",
 						Target: "alert",
 						Value:  true,
 					},
