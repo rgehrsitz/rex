@@ -84,3 +84,17 @@ func (s *RedisStore) MGetFacts(keys ...string) (map[string]interface{}, error) {
 	}
 	return facts, nil
 }
+
+func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
+	pubsub := s.client.Subscribe(ctx, channels...)
+
+	// Verify the subscription was successful
+	_, err := pubsub.Receive(ctx)
+	if err != nil {
+		logging.Logger.Error().Err(err).Msg("Failed to subscribe to Redis channels")
+		return nil
+	}
+
+	logging.Logger.Info().Strs("channels", channels).Msg("Successfully subscribed to Redis channels")
+	return pubsub
+}

@@ -1,0 +1,20 @@
+{
+  "bytecode_file": "c:/code/json/output.bin",
+  "logging": {
+    "level": "info",
+    "destination": "console"
+  },
+  "redis": {
+    "address": "localhost:6379",
+    "password": "",
+    "database": 0,
+    "channels": ["weather", "system"]
+  },
+  "engine": {
+    "update_interval": 5
+  },
+  "dashboard": {
+    "enabled": true,
+    "port": 8080
+  }
+}
