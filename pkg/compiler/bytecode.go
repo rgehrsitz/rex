@@ -145,9 +145,11 @@ func (op Opcode) String() string {
 		"RULE_START", "RULE_END",
 		"COND_START", "COND_END",
 		"ACTION_START", "ACTION_END",
+		"ACTION_TYPE", "ACTION_TARGET", "ACTION_VALUE_FLOAT", "ACTION_VALUE_STRING", "ACTION_VALUE_BOOL", "ACTION_VALUE_ARRAY", "ACTION_VALUE_OBJECT", "ACTION_COMMAND",
 		"HEADER_START", "HEADER_END", "CHECKSUM", "VERSION", "NUM_RULES", "CONST_POOL_SIZE",
 	}
-	if op < EQ_FLOAT || op > CONST_POOL_SIZE {
+	if op < EQ_FLOAT || op >= Opcode(len(names)) {
+		logging.Logger.Warn().Uint8("opcode", uint8(op)).Msg("Unknown opcode")
 		return fmt.Sprintf("Opcode(%d)", op)
 	}
 	return names[op]

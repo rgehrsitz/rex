@@ -24,3 +24,5 @@ pkg/compiler/test_bytecode.bin
 cmd/rexc/output.bytecode
 .tmp.driveupload/*
 .gitignore
+pkg/runtime/test_engine_bytecode.bin
+

@@ -13,7 +13,7 @@ REX is a rules engine designed to process complex conditions and actions using a
 
 ### Prerequisites
 
-- Go 1.16 or higher
+- Go 1.20 or higher
 
 ### Installation
 
@@ -29,10 +29,18 @@ Navigate to the project directory:
 cd rex
 ```
 
-Build the project:
+#### Build the project:
+
+Compiler:
 
 ```bash
-go build ./cmd/rex
+go build ./cmd/rexc
+```
+
+Runtime Engine:
+
+```bash
+go build ./cmd/rexd
 ```
 
 Usage
@@ -46,15 +54,37 @@ Rules are defined in a JSON format. Each rule consists of conditions and actions
       "name": "rule-1",
       "conditions": {
         "all": [
-          { "fact": "temperature", "operator": "greaterThan", "value": 30 },
-          { "fact": "humidity", "operator": "lessThan", "value": 40 }
+          { "fact": "temperature", "operator": "GT", "value": 30 },
+          { "fact": "humidity", "operator": "LT", "value": 40.01 }
         ]
       },
       "actions": [
         {
           "type": "updateStore",
-          "target": "temperature_status",
+          "target": "temperature_warning",
           "value": "high"
+        }
+      ]
+    },
+    {
+      "name": "rule_unique_name_bob",
+      "conditions": {
+        "all": [
+          { "fact": "age", "operator": "LTE", "value": 60 },
+          { "fact": "iq", "operator": "EQ", "value": 40.01 },
+          {
+            "any": [
+              { "fact": "name", "operator": "CONTAINS", "value": "bob" },
+              { "fact": "handsome", "operator": "EQ", "value": true }
+            ]
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "updateStore",
+          "target": "bob_alert",
+          "value": "true"
         }
       ]
     }
@@ -91,12 +121,10 @@ The rules are defined in a JSON file with the following structure:
 A rule object has the following properties:
 
 - name: a unique string identifying the rule
-- priority: an integer indicating the rule's priority (default: 10)
+- priority: optional integer indicating the rule's priority (default: 10)
 - conditions: an object containing a single property:
   - ANY or ALL: an array of condition groups
 - actions: an array of action objects
-- producedFacts: an array of strings representing the facts produced by this rule (optional)
-- consumedFacts: an array of strings representing the facts consumed by this rule (optional)
 
 ### Condition Group
 
@@ -110,14 +138,16 @@ A condition group is an object containing:
 A condition object has the following properties:
 
 - fact: a string identifying the fact to evaluate
-- operator: a string indicating the comparison operator (EQ, NEQ, LT, LTE, GT, GTE, CONTAINS, NOT_CONTAINS, TRUE, FALSE)
+- operator: a string indicating the comparison operator (EQ, NEQ, LT, LTE, GT, GTE, CONTAINS, NOT_CONTAINS)
 - value: the value to compare against
+
+\*\*All condition objects not part of a grouping MUST be defined prior to any nested condition groups.
 
 ### Action Object
 
 An action object has the following properties:
 
-- type: a string indicating the action type ("updateStore" or "sendMessage")
+- type: a string indicating the action type ("updateStore" or "sendMessage") (sendMessage is not yet implemented)
 - fact: a string identifying the fact to update or send
 - value: the value to update or send
 - customProperty: an optional object containing custom properties for the action
@@ -128,7 +158,7 @@ Actions will be executed in the order they are defined in the rule.
 
 ### Fact and Value Data Types
 
-Facts are strings. Values can be strings, bools, ints (numbers without decimal points), or floats (numbers with decimal points).
+Facts are strings. Values can be strings surrounded by quotation marks (e.g. "fact_a"), bools (e.g. true or false), or numbers with or without decimal points (e.g. 30.01, 30, -12.123).
 
 ### Priority Ties
 
