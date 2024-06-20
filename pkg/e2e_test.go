@@ -33,7 +33,7 @@ func setupEngine(t *testing.T, jsonData []byte) *runtime.Engine {
 	return engine
 }
 
-func setupPreconditions(t *testing.T) *store.RedisStore {
+func setupPreconditions() *store.RedisStore {
 	redisStore := store.NewRedisStore("localhost:6379", "", 0)
 	redisStore.SetFact("temperature_status", false)
 	redisStore.SetFact("humidity_status", false)
@@ -231,7 +231,7 @@ func TestComplexConditions(t *testing.T) {
 }
 	`)
 
-	redisStore := setupPreconditions(t)
+	redisStore := setupPreconditions()
 	engine := setupEngine(t, jsonData)
 
 	// Set initial values for the facts
@@ -282,7 +282,7 @@ func TestDifferentActions(t *testing.T) {
 		}
 	`)
 
-	redisStore := setupPreconditions(t)
+	redisStore := setupPreconditions()
 	engine := setupEngine(t, jsonData)
 
 	// Set initial values for the facts
@@ -299,6 +299,8 @@ func TestDifferentActions(t *testing.T) {
 	assert.Equal(t, "high temperature", alert)
 }
 
+// This test is intentionally failing for now due to the chaining of rules being turned off
+// until we decide if we want that behavior or not
 func TestRuleChaining(t *testing.T) {
 	jsonData := []byte(`
 		{
@@ -404,7 +406,7 @@ func TestNoRulesMatching(t *testing.T) {
 		}
 	`)
 
-	redisStore := setupPreconditions(t)
+	redisStore := setupPreconditions()
 	engine := setupEngine(t, jsonData)
 
 	// Set initial values for the facts
@@ -466,7 +468,7 @@ func TestMultipleRulesMatching(t *testing.T) {
 		}
 	`)
 
-	redisStore := setupPreconditions(t)
+	redisStore := setupPreconditions()
 	engine := setupEngine(t, jsonData)
 
 	// Set initial values for the facts

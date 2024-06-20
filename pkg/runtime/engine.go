@@ -347,6 +347,9 @@ func (e *Engine) evaluateRule(ruleName string) {
 		case compiler.ACTION_END:
 			logging.Logger.Info().Msg("Encountered ACTION_END opcode")
 			e.executeAction(action)
+		case compiler.LABEL:
+			offset += 4
+			logging.Logger.Info().Msg("Encountered LABEL opcode")
 		case compiler.ACTION_TYPE:
 			nameLen := int(e.bytecode[offset])
 			offset++
