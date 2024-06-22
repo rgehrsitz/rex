@@ -12,6 +12,7 @@ import (
 
 var Logger zerolog.Logger
 
+// init initializes the logger by configuring the log level and setting up the logger instance.
 func init() {
 	logLevel := zerolog.InfoLevel // Default log level
 	// Configure logger
@@ -29,6 +30,21 @@ func init() {
 	Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
 }
 
+// ConfigureLogger configures the logger with the specified log level and output.
+// The log level determines the verbosity of the logs, while the log output specifies
+// where the logs should be written to (console or file).
+//
+// Parameters:
+//   - logLevel: The log level to set for the logger. Valid values are "debug", "info",
+//     "warn", "error", and "fatal".
+//   - logOutput: The log output option. Valid values are "console" and "file".
+//
+// Example usage:
+//
+//	ConfigureLogger("info", "console")
+//	ConfigureLogger("debug", "file")
+//
+// Note: This function will modify the global logger instance.
 func ConfigureLogger(logLevel, logOutput string) {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack

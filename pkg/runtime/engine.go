@@ -6,6 +6,8 @@ import (
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
+	"sync"
+	"time"
 
 	"rgehrsitz/rex/pkg/logging"
 )
@@ -17,8 +19,35 @@ type Engine struct {
 	factDependencyIndex []compiler.FactDependencyIndex
 	Facts               map[string]interface{}
 	store               store.Store
+	Stats               struct {
+		TotalFactsProcessed int64
+		TotalRulesProcessed int64
+		TotalFactsUpdated   int64
+		LastUpdateTime      time.Time
+	}
+	statsMutex sync.RWMutex
 }
 
+func (e *Engine) GetStats() map[string]interface{} {
+	e.statsMutex.RLock()
+	defer e.statsMutex.RUnlock()
+	return map[string]interface{}{
+		"TotalFactsProcessed": e.Stats.TotalFactsProcessed,
+		"TotalRulesProcessed": e.Stats.TotalRulesProcessed,
+		"TotalFactsUpdated":   e.Stats.TotalFactsUpdated,
+		"LastUpdateTime":      e.Stats.LastUpdateTime.Format(time.RFC3339),
+		"LastPageRefresh":     time.Now().Format(time.RFC3339),
+		"TotalRules":          len(e.ruleExecutionIndex),
+		"TotalFacts":          len(e.Facts),
+	}
+}
+
+// NewEngineFromFile creates a new Engine instance by reading bytecode from a file.
+// It takes the filename of the bytecode file and a store.Store instance as parameters.
+// The function returns a pointer to the Engine and an error, if any.
+// The Engine is initialized with the bytecode, rule execution index, fact rule index,
+// fact dependency index, and an empty Facts map.
+// The store.Store parameter is used to provide access to external data during rule execution.
 func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	bytecode, err := os.ReadFile(filename)
 	if err != nil {
@@ -128,8 +157,18 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	return engine, nil
 }
 
+// ProcessFactUpdate updates the fact value in the engine's store and evaluates rules that reference the updated fact.
+// It takes the fact name and the new fact value as parameters.
+// If the fact value is an integer or float32, it is converted to float64 before updating the store.
+// If the fact value is of any other type, it is stored as is.
+// The function also retrieves any dependent facts from the KV store and updates the local fact store accordingly.
+// If any dependent facts are missing from the store, the corresponding rules are removed from the evaluation process.
+// Finally, the function evaluates each remaining rule that references the updated fact.
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
+
+	e.Stats.TotalFactsProcessed++
+	e.Stats.LastUpdateTime = time.Now()
 
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
@@ -225,8 +264,16 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	}
 }
 
+// evaluateRule evaluates a rule with the given ruleName.
+// It searches for the rule in the ruleExecutionIndex and executes the corresponding bytecode instructions.
+// The function logs debug messages for each opcode encountered during execution.
+// If the rule is not found in the ruleExecutionIndex, a warning message is logged and the function returns.
+// The function takes into account facts and constants loaded from the bytecode and performs comparisons and jumps based on the opcode instructions.
+// When an ACTION_END opcode is encountered, the function executes the action associated with the rule.
 func (e *Engine) evaluateRule(ruleName string) {
 	logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
+
+	e.Stats.TotalRulesProcessed++
 
 	var ruleOffset int
 	found := false
@@ -369,6 +416,8 @@ func (e *Engine) evaluateRule(ruleName string) {
 	}
 }
 
+// compare compares the given `factValue` and `constValue` based on the provided `opcode`.
+// It returns true if the comparison is successful, otherwise false.
 func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opcode) bool {
 	switch opcode {
 
@@ -398,6 +447,11 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 	}
 }
 
+// executeAction executes the given action on the Engine.
+// It updates the fact value in the local fact store and sends the fact update to the store via a publish command.
+// If an error occurs during the update, it logs the error and returns.
+// After updating the fact, it triggers the fact update processing.
+// The function supports different action types and logs a warning for unknown action types.
 func (e *Engine) executeAction(action compiler.Action) {
 	switch action.Type {
 	case "updateStore":
@@ -407,8 +461,11 @@ func (e *Engine) executeAction(action compiler.Action) {
 		// Update the fact value in the local fact store
 		e.Facts[factName] = factValue
 
-		// Send the fact update to the store
-		err := e.store.SetFact(factName, factValue)
+		e.Stats.TotalFactsUpdated++
+
+		// Send the fact update to the store via a publish command
+		// instead of a set command.
+		err := e.store.PublishFact(factName, factValue)
 		if err != nil {
 			logging.Logger.Error().Err(err).Str("factName", factName).Interface("factValue", factValue).Msg("Failed to update fact in store")
 			return

@@ -12,12 +12,24 @@ import (
 	"rgehrsitz/rex/pkg/logging"
 )
 
+// Header information.
 const (
 	Version       = 1
 	Checksum      = 0
 	ConstPoolSize = 0
 	HeaderSize    = 28
 )
+
+// BytecodeFile represents a bytecode file that contains the compiled instructions
+// for executing a set of rules. It includes the file header, the instructions,
+// the rule execution index, the fact rule lookup index, and the fact dependency index.
+type BytecodeFile struct {
+	Header              Header
+	Instructions        []byte
+	RuleExecIndex       []RuleExecutionIndex
+	FactRuleLookupIndex map[string][]string
+	FactDependencyIndex []FactDependencyIndex
+}
 
 // Opcode represents the type of a bytecode instruction.
 type Opcode byte
@@ -168,14 +180,9 @@ func formatOperands(operands []byte) string {
 	return sb.String()
 }
 
-type BytecodeFile struct {
-	Header              Header
-	Instructions        []byte
-	RuleExecIndex       []RuleExecutionIndex
-	FactRuleLookupIndex map[string][]string
-	FactDependencyIndex []FactDependencyIndex
-}
-
+// WriteBytecodeToFile writes the given bytecode file to the specified filename.
+// It serializes the bytecode file into a buffer and then writes the buffer to the file.
+// The function returns an error if any write operation fails.
 func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 	buf := new(bytes.Buffer)
 
@@ -288,6 +295,10 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 	return nil
 }
 
+// writeString writes a string to the given buffer.
+// It first writes the length of the string as a 32-bit unsigned integer in little-endian format,
+// followed by the string itself.
+// Returns an error if there was an error writing the string or its length.
 func writeString(buf *bytes.Buffer, s string) error {
 	length := uint32(len(s))
 	if err := binary.Write(buf, binary.LittleEndian, length); err != nil {

@@ -36,6 +36,7 @@ func main() {
 	viper.SetDefault("engine.update_interval", 5)
 	viper.SetDefault("dashboard.enabled", false)
 	viper.SetDefault("dashboard.port", 8080)
+	viper.SetDefault("dashboard.update_interval", 5)
 
 	// Try to read the default config file if no config file is specified
 	if *configFile == "" {
@@ -59,8 +60,7 @@ func main() {
 		}
 	}
 
-	// Now you can use viper.GetString(), viper.GetInt(), etc. to get configuration values
-
+	// Now we can use viper.GetString(), viper.GetInt(), etc. to get configuration values
 	bytecodeFile := viper.GetString("bytecode_file")
 	logLevel := viper.GetString("logging.level")
 	logDest := viper.GetString("logging.destination")
@@ -69,11 +69,6 @@ func main() {
 	redisPassword := viper.GetString("redis.password")
 	redisDB := viper.GetInt("redis.database")
 	redisChannels := viper.GetStringSlice("redis.channels")
-
-	// Todo: enable the following when dash functionaility is ready
-	// updateInterval := viper.GetInt("engine.update_interval")
-	// dashboardEnabled := viper.GetBool("dashboard.enabled")
-	// dashboardPort := viper.GetInt("dashboard.port")
 
 	// Set up logging
 	setUpLogging(logLevel, logDest, logTimeFormat)
@@ -94,10 +89,11 @@ func main() {
 	}
 	defer pubsub.Close()
 
-	// // Todo: Start dashboard if enabled
-	// if dashboardEnabled {
-	// 	go startStatusDashboard(dashboardPort)
-	// }
+	// Todo: enable the following when dash functionaility is ready
+	if viper.GetBool("dashboard.enabled") {
+		dashboard := runtime.NewDashboard(engine, viper.GetInt("dashboard.port"), time.Duration(viper.GetInt("engine.update_interval"))*time.Second)
+		dashboard.Start()
+	}
 
 	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
@@ -151,6 +147,7 @@ func main() {
 			log.Debug().Msg("Performing periodic tasks")
 		}
 	}
+
 }
 
 func setUpLogging(level, dest, logTimeFormat string) {

@@ -10,6 +10,7 @@ import (
 	"rgehrsitz/rex/pkg/logging"
 )
 
+// Parse parses the provided JSON data and returns a pointer to a Ruleset and an error.
 func Parse(jsonData []byte) (*Ruleset, error) {
 	logging.Logger.Debug().Str("jsonData", string(jsonData)).Msg("Starting to parse JSON data")
 	var ruleset Ruleset
@@ -43,6 +44,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	return &ruleset, nil
 }
 
+// validateRule validates a rule and returns an error if any validation fails.
 func validateRule(rule *Rule) error {
 	// Basic rule validations
 	logging.Logger.Debug().Str("rule", rule.Name).Msg("Validating rule")
@@ -64,6 +66,11 @@ func validateRule(rule *Rule) error {
 	return nil
 }
 
+// validateAndOrderConditionGroup validates and orders a condition group.
+// It checks if the entire group is logically empty and separates conditions
+// and nested groups. It recursively validates and orders nested groups.
+// Finally, it reassigns the ordered conditions and nested groups to the
+// original condition group.
 func validateAndOrderConditionGroup(cg *ConditionGroup) error {
 	// Log for debugging
 	logging.Logger.Debug().Interface("All", cg.All).Interface("Any", cg.Any).Msg("Validating and ordering condition group")
@@ -101,10 +108,17 @@ func validateAndOrderConditionGroup(cg *ConditionGroup) error {
 	return nil
 }
 
+// isCondition checks if the given ConditionOrGroup is a valid condition.
+// This is just a plceholder for additional validation logic.
 func isCondition(cog *ConditionOrGroup) bool {
 	return cog.Fact != "" && cog.Operator != "" && cog.Value != nil
 }
 
+// validateConditionOrGroup validates a ConditionOrGroup object.
+// It checks if the object is nil, and if not, it validates the fact, operator, and value fields.
+// If the fact, operator, or value fields are missing or invalid, an error is returned.
+// If the object contains nested groups, it recursively validates each subgroup.
+// Returns nil if the object is valid, otherwise returns an error.
 func validateConditionOrGroup(cog *ConditionOrGroup) error {
 	logging.Logger.Debug().Interface("ConditionOrGroup", cog).Msg("Validating condition or group")
 	if cog == nil {
@@ -149,6 +163,11 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 	return nil
 }
 
+// validateAction validates the given action.
+// It checks if the action is nil, if the type field is empty or missing,
+// if the target field is empty or missing, and if the value field is empty or missing.
+// If any of these conditions are met, it returns an error.
+// Otherwise, it returns nil.
 func validateAction(action *Action) error {
 	if action != nil {
 		logging.Logger.Debug().Str("action", action.Type).Msg("Validating action")
@@ -175,6 +194,8 @@ func isFactValid(fact string) bool {
 	return fact != ""
 }
 
+// isOperatorValid checks if the given operator is valid.
+// It returns true if the operator is valid, otherwise false.
 func isOperatorValid(operator string) bool {
 	validOperators := []string{
 		"EQ", "NEQ", "LT", "LTE", "GT", "GTE", "CONTAINS", "NOT_CONTAINS",
@@ -189,6 +210,6 @@ func isOperatorValid(operator string) bool {
 
 func isValueValid(value interface{}) bool {
 	// Placeholder implementation
-	// Return true for now, as there are no specific criteria defined
+	// Return true for now, as there are no specific criteria defined yet
 	return value != nil
 }

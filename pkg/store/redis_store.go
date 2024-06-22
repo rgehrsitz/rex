@@ -16,6 +16,8 @@ type RedisStore struct {
 	client *redis.Client
 }
 
+// NewRedisStore creates a new instance of RedisStore with the given address, password, and database number.
+// It establishes a connection to the Redis server and returns a pointer to the RedisStore.
 func NewRedisStore(addr, password string, db int) *RedisStore {
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
@@ -31,6 +33,9 @@ func NewRedisStore(addr, password string, db int) *RedisStore {
 	return &RedisStore{client: client}
 }
 
+// SetFact sets a fact in the Redis store with the specified key and value.
+// The value is serialized to JSON before being stored.
+// Returns an error if there was a problem serializing the value or setting it in the store.
 func (s *RedisStore) SetFact(key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -101,4 +106,12 @@ func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
 
 func (s *RedisStore) ReceiveFacts() <-chan *redis.Message {
 	return s.client.Subscribe(ctx).Channel()
+}
+
+func (s *RedisStore) PublishFact(key string, value interface{}) error {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	return s.client.Publish(ctx, key, data).Err()
 }
