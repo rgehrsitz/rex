@@ -336,9 +336,9 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 				if Opcode(bytecode[j]) == RULE_END {
 					// Check that the next opcode is either another RULE_START or the end of the bytecode
 					if j+1 < len(bytecode) && Opcode(bytecode[j+1]) != RULE_START {
-						logging.Logger.Error().Msg("Expected RULE_START or end of bytecode after RULE_END")
-						return nil, nil, nil
+						continue
 					}
+
 					ruleEndOffset := j + 1 // Include the RULE_END byte
 					logging.Logger.Debug().Str("ruleName", ruleName).Int("endOffset", ruleEndOffset).Msg("Found RULE_END")
 
