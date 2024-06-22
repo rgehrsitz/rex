@@ -477,7 +477,7 @@ func collectFactsFromBytecode(bytecode []byte) []string {
 func isValidFactName(name string) bool {
 	// Check if the fact name consists of allowed characters
 	for _, char := range name {
-		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_') {
+		if !((char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '_' || char == ':') {
 			return false
 		}
 	}
