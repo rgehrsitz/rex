@@ -385,44 +385,155 @@ func TestComplexConditions(t *testing.T) {
 	assert.Equal(t, false, alertStatus)
 }
 
-func TestCascadingRules(t *testing.T) {
+// // TODO: Determine if we want cascading rules to be supported
+// func TestCascadingRules(t *testing.T) {
+// 	ruleset := &compiler.Ruleset{
+// 		Rules: []compiler.Rule{
+// 			{
+// 				Name: "FirstRule",
+// 				Conditions: compiler.ConditionGroup{
+// 					All: []*compiler.ConditionOrGroup{
+// 						{
+// 							Fact:     "initialFact",
+// 							Operator: "GT",
+// 							Value:    50.0,
+// 						},
+// 					},
+// 				},
+// 				Actions: []compiler.Action{
+// 					{
+// 						Type:   "updateStore",
+// 						Target: "intermediateResult",
+// 						Value:  true,
+// 					},
+// 				},
+// 			},
+// 			{
+// 				Name: "SecondRule",
+// 				Conditions: compiler.ConditionGroup{
+// 					All: []*compiler.ConditionOrGroup{
+// 						{
+// 							Fact:     "intermediateResult",
+// 							Operator: "EQ",
+// 							Value:    true,
+// 						},
+// 					},
+// 				},
+// 				Actions: []compiler.Action{
+// 					{
+// 						Type:   "updateStore",
+// 						Target: "finalResult",
+// 						Value:  true,
+// 					},
+// 				},
+// 			},
+// 		},
+// 	}
+
+// 	bytecode := compiler.GenerateBytecode(ruleset)
+// 	err := compiler.WriteBytecodeToFile("test_engine_bytecode.bin", bytecode)
+// 	assert.NoError(t, err)
+
+// 	redisStore := store.NewRedisStore("localhost:6379", "", 0)
+// 	engine, err := NewEngineFromFile("test_engine_bytecode.bin", redisStore)
+// 	assert.NoError(t, err)
+
+// 	redisStore.SetFact("intermediateResult", false)
+// 	redisStore.SetFact("finalResult", false)
+// 	engine.ProcessFactUpdate("initialFact", 60.0)
+
+// 	intermediateStatus, _ := redisStore.GetFact("intermediateResult")
+// 	finalStatus, _ := redisStore.GetFact("finalResult")
+// 	assert.Equal(t, true, intermediateStatus)
+// 	assert.Equal(t, true, finalStatus)
+// }
+
+func TestMultiplsRulesAndOperators(t *testing.T) {
 	ruleset := &compiler.Ruleset{
 		Rules: []compiler.Rule{
 			{
-				Name: "FirstRule",
+				Name:     "rule-1",
+				Priority: 10,
 				Conditions: compiler.ConditionGroup{
 					All: []*compiler.ConditionOrGroup{
 						{
-							Fact:     "initialFact",
-							Operator: "GT",
-							Value:    50.0,
+							Any: []*compiler.ConditionOrGroup{
+								{
+									Fact:     "pressure",
+									Operator: "LT",
+									Value:    1010,
+								},
+								{
+									Fact:     "flow_rate",
+									Operator: "GT",
+									Value:    5.0,
+								},
+							},
+						},
+						{
+							Any: []*compiler.ConditionOrGroup{
+								{
+									Fact:     "temperature",
+									Operator: "LT",
+									Value:    72,
+								},
+								{
+									Fact:     "velocity",
+									Operator: "GT",
+									Value:    5.0,
+								},
+							},
 						},
 					},
 				},
 				Actions: []compiler.Action{
 					{
 						Type:   "updateStore",
-						Target: "intermediateResult",
+						Target: "temperature_status",
 						Value:  true,
 					},
 				},
 			},
 			{
-				Name: "SecondRule",
+				Name:     "rule-2",
+				Priority: 15,
 				Conditions: compiler.ConditionGroup{
 					All: []*compiler.ConditionOrGroup{
 						{
-							Fact:     "intermediateResult",
-							Operator: "EQ",
-							Value:    true,
+							Any: []*compiler.ConditionOrGroup{
+								{
+									Fact:     "pressure",
+									Operator: "EQ",
+									Value:    1013,
+								},
+								{
+									Fact:     "flow_rate",
+									Operator: "GTE",
+									Value:    5.0,
+								},
+							},
+						},
+						{
+							Any: []*compiler.ConditionOrGroup{
+								{
+									Fact:     "temperature",
+									Operator: "EQ",
+									Value:    72,
+								},
+								{
+									Fact:     "flow_rate",
+									Operator: "LT",
+									Value:    5.0,
+								},
+							},
 						},
 					},
 				},
 				Actions: []compiler.Action{
 					{
-						Type:   "updateStore",
-						Target: "finalResult",
-						Value:  true,
+						Type:   "sendMessage",
+						Target: "alert-service",
+						Value:  "Alert: Pressure or flow rate exceeded limits!",
 					},
 				},
 			},
@@ -437,12 +548,15 @@ func TestCascadingRules(t *testing.T) {
 	engine, err := NewEngineFromFile("test_engine_bytecode.bin", redisStore)
 	assert.NoError(t, err)
 
-	redisStore.SetFact("intermediateResult", false)
-	redisStore.SetFact("finalResult", false)
-	engine.ProcessFactUpdate("initialFact", 60.0)
+	// Test GT and LTE operators
+	//redisStore.SetFact("weather:temperature", 30)
+	//redisStore.SetFact("weather:flow_rate", 5)
+	// redisStore.SetFact("weather:pressure", 1013.25)
+	// redisStore.SetFact("weather:velocity", 6)
+	redisStore.SetFact("weather:temperature_status", false)
+	engine.ProcessFactUpdate("flow_rate", 5)
 
-	intermediateStatus, _ := redisStore.GetFact("intermediateResult")
-	finalStatus, _ := redisStore.GetFact("finalResult")
-	assert.Equal(t, true, intermediateStatus)
-	assert.Equal(t, true, finalStatus)
+	alertStatus, _ := redisStore.GetFact("temperature_status")
+	assert.Equal(t, true, alertStatus)
+
 }

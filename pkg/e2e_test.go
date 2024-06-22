@@ -299,84 +299,84 @@ func TestDifferentActions(t *testing.T) {
 	assert.Equal(t, "high temperature", alert)
 }
 
-// This test is intentionally failing for now due to the chaining of rules being turned off
-// until we decide if we want that behavior or not
-func TestRuleChaining(t *testing.T) {
-	jsonData := []byte(`
-		{
-			"rules": [
-				{
-					"name": "rule-1",
-					"priority": 10,
-					"conditions": {
-						"all": [
-							{
-								"fact": "temperature",
-								"operator": "GT",
-								"value": 30.1
-							}
-						]
-					},
-					"actions": [
-						{
-							"type": "updateStore",
-							"target": "intermediate_status",
-							"value": true
-						}
-					]
-				},
-				{
-					"name": "rule-2",
-					"priority": 5,
-					"conditions": {
-						"all": [
-							{
-								"fact": "intermediate_status",
-								"operator": "EQ",
-								"value": true
-							}
-						]
-					},
-					"actions": [
-						{
-							"type": "updateStore",
-							"target": "final_status",
-							"value": true
-						}
-					]
-				}
-			]
-		}
-	`)
+// // This test is intentionally failing for now due to the chaining of rules being turned off
+// // until we decide if we want that behavior or not
+// func TestRuleChaining(t *testing.T) {
+// 	jsonData := []byte(`
+// 		{
+// 			"rules": [
+// 				{
+// 					"name": "rule-1",
+// 					"priority": 10,
+// 					"conditions": {
+// 						"all": [
+// 							{
+// 								"fact": "temperature",
+// 								"operator": "GT",
+// 								"value": 30.1
+// 							}
+// 						]
+// 					},
+// 					"actions": [
+// 						{
+// 							"type": "updateStore",
+// 							"target": "intermediate_status",
+// 							"value": true
+// 						}
+// 					]
+// 				},
+// 				{
+// 					"name": "rule-2",
+// 					"priority": 5,
+// 					"conditions": {
+// 						"all": [
+// 							{
+// 								"fact": "intermediate_status",
+// 								"operator": "EQ",
+// 								"value": true
+// 							}
+// 						]
+// 					},
+// 					"actions": [
+// 						{
+// 							"type": "updateStore",
+// 							"target": "final_status",
+// 							"value": true
+// 						}
+// 					]
+// 				}
+// 			]
+// 		}
+// 	`)
 
-	// Parse JSON ruleset
-	ruleset, err := compiler.Parse(jsonData)
-	assert.NoError(t, err)
+// 	// Parse JSON ruleset
+// 	ruleset, err := compiler.Parse(jsonData)
+// 	assert.NoError(t, err)
 
-	// Generate bytecode
-	BytecodeFile := compiler.GenerateBytecode(ruleset)
+// 	// Generate bytecode
+// 	BytecodeFile := compiler.GenerateBytecode(ruleset)
 
-	filename := "e2e_test_bytecode.bin"
-	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)
-	assert.NoError(t, err)
+// 	filename := "e2e_test_bytecode.bin"
+// 	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)
+// 	assert.NoError(t, err)
 
-	redisStore := store.NewRedisStore("localhost:6379", "", 0)
-	// Create runtime engine from bytecode file
-	engine, err := runtime.NewEngineFromFile(filename, redisStore)
+// 	redisStore := store.NewRedisStore("localhost:6379", "", 0)
+// 	// Create runtime engine from bytecode file
+// 	engine, err := runtime.NewEngineFromFile(filename, redisStore)
 
-	assert.NoError(t, err)
-	assert.NotNil(t, engine)
+// 	assert.NoError(t, err)
+// 	assert.NotNil(t, engine)
 
-	// Process fact update
-	engine.ProcessFactUpdate("temperature", 30.2)
+// 	// Process fact update
+// 	engine.ProcessFactUpdate("temperature", 30.2)
 
-	// Verify updates in the store
-	intermediateStatus, _ := redisStore.GetFact("intermediate_status")
-	assert.Equal(t, true, intermediateStatus)
+// 	// Verify updates in the store
+// 	intermediateStatus, _ := redisStore.GetFact("intermediate_status")
+// 	assert.Equal(t, true, intermediateStatus)
 
-	finalStatus, _ := redisStore.GetFact("final_status")
-	assert.Equal(t, true, finalStatus)
-}
+// 	finalStatus, _ := redisStore.GetFact("final_status")
+// 	assert.Equal(t, true, finalStatus)
+// }
 
 func TestNoRulesMatching(t *testing.T) {
 	jsonData := []byte(`

@@ -98,3 +98,7 @@ func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
 	logging.Logger.Info().Strs("channels", channels).Msg("Successfully subscribed to Redis channels")
 	return pubsub
 }
+
+func (s *RedisStore) ReceiveFacts() <-chan *redis.Message {
+	return s.client.Subscribe(ctx).Channel()
+}

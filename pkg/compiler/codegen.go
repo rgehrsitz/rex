@@ -26,7 +26,7 @@ func (instr *Instruction) Size() int {
 
 // ReplaceLabels replaces labels with the corresponding byte offsets.
 func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPositions map[string]int) []Instruction {
-	logging.Logger.Info().Msg("Replacing labels")
+	logging.Logger.Debug().Msg("Replacing labels")
 	finalInstructions := []Instruction{}
 
 	for i, instr := range instructions {
@@ -41,7 +41,7 @@ func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPosi
 				offsetBytes := make([]byte, 4)
 				binary.LittleEndian.PutUint32(offsetBytes, uint32(offset))
 				copy(instr.Operands[len(instr.Operands)-4:], offsetBytes)
-				logging.Logger.Info().Msgf("Replaced label %s with offset %d in instruction %d", label, offset, i)
+				logging.Logger.Debug().Msgf("Replaced label %s with offset %d in instruction %d", label, offset, i)
 			}
 		}
 		finalInstructions = append(finalInstructions, instr)
@@ -50,7 +50,7 @@ func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPosi
 	// Log final instructions with their offsets
 	for i, instr := range finalInstructions {
 		position := offsets[fmt.Sprintf("%v %v", instr.Opcode, instr.Operands)]
-		logging.Logger.Info().Msgf("Final Instruction %d: Opcode %v, Operands %v, Position %d", i, instr.Opcode, instr.Operands, position)
+		logging.Logger.Debug().Msgf("Final Instruction %d: Opcode %v, Operands %v, Position %d", i, instr.Opcode, instr.Operands, position)
 	}
 
 	return finalInstructions
@@ -309,11 +309,23 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 	factRuleIndex := make(map[string][]string)
 	factDepIndex := []FactDependencyIndex{}
 
+	opcode := Opcode(bytecode[0])
+	if opcode != RULE_START {
+		logging.Logger.Error().Msg("Expected RULE_START as the first opcode")
+		return nil, nil, nil
+	}
+
 	i := 0
 	for i < len(bytecode) {
 		opcode := Opcode(bytecode[i])
 		logging.Logger.Debug().Int("index", i).Str("opcode", opcode.String()).Msg("Processing opcode")
 		if opcode == RULE_START {
+			// Check that the next opcode is not another RULE_START
+			if i+1 < len(bytecode) && Opcode(bytecode[i+1]) == RULE_START {
+				logging.Logger.Error().Msg("Unexpected RULE_START after another RULE_START")
+				return nil, nil, nil
+			}
+
 			ruleNameLength := int(bytecode[i+1])
 			ruleName := string(bytecode[i+2 : i+2+ruleNameLength])
 			ruleStartOffset := i
@@ -322,6 +334,11 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 			// Find the end of the rule using a state machine approach
 			for j := i + 2 + ruleNameLength; j < len(bytecode); j++ {
 				if Opcode(bytecode[j]) == RULE_END {
+					// Check that the next opcode is either another RULE_START or the end of the bytecode
+					if j+1 < len(bytecode) && Opcode(bytecode[j+1]) != RULE_START {
+						logging.Logger.Error().Msg("Expected RULE_START or end of bytecode after RULE_END")
+						return nil, nil, nil
+					}
 					ruleEndOffset := j + 1 // Include the RULE_END byte
 					logging.Logger.Debug().Str("ruleName", ruleName).Int("endOffset", ruleEndOffset).Msg("Found RULE_END")
 
@@ -372,7 +389,7 @@ func determineOperandLength(opcode Opcode, operands []byte) int {
 	case LOAD_CONST_FLOAT, LOAD_FACT_FLOAT:
 		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 8")
 		return 8 // 8 bytes for int64 or float64
-	case LOAD_CONST_STRING, LOAD_FACT_STRING, LABEL, SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT, ACTION_START, RULE_START:
+	case LOAD_CONST_STRING, LOAD_FACT_STRING, SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT, ACTION_START, RULE_START:
 		if len(operands) > 0 {
 			length := 1 + int(operands[0]) // 1 byte for length + length of the string
 			logging.Logger.Debug().Str("opcode", opcode.String()).Int("length", length).Msg("Returning operand length")
@@ -384,6 +401,9 @@ func determineOperandLength(opcode Opcode, operands []byte) int {
 	case JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE:
 		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 4")
 		return 4 // 4 bytes for the jump offset
+	case LABEL:
+		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 4")
+		return 4 // 4 bytes for the fixed label widths
 	default:
 		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 0")
 		return 0

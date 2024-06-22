@@ -1,8 +1,9 @@
 {
-  "bytecode_file": "c:/code/json/output.bin",
+  "bytecode_file": "output.bytecode",
   "logging": {
     "level": "info",
-    "destination": "console"
+    "destination": "console",
+    "timeFormat": "unixnano"
   },
   "redis": {
     "address": "localhost:6379",

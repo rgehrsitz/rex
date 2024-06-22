@@ -298,6 +298,6 @@ func writeString(buf *bytes.Buffer, s string) error {
 		logging.Logger.Error().Err(err).Msg("Error writing string")
 		return err
 	}
-	logging.Logger.Info().Str("string", s).Uint32("length", length).Msg("Writing string")
+	logging.Logger.Debug().Str("string", s).Uint32("length", length).Msg("Writing string")
 	return nil
 }

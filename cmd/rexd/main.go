@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -27,6 +29,7 @@ func main() {
 	viper.SetConfigType("json")
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.destination", "console")
+	viper.SetDefault("logging.timeFormat", "Unix")
 	viper.SetDefault("redis.address", "localhost:6379")
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
@@ -61,6 +64,7 @@ func main() {
 	bytecodeFile := viper.GetString("bytecode_file")
 	logLevel := viper.GetString("logging.level")
 	logDest := viper.GetString("logging.destination")
+	logTimeFormat := viper.GetString("logging.timeFormat")
 	redisAddr := viper.GetString("redis.address")
 	redisPassword := viper.GetString("redis.password")
 	redisDB := viper.GetInt("redis.database")
@@ -72,7 +76,7 @@ func main() {
 	// dashboardPort := viper.GetInt("dashboard.port")
 
 	// Set up logging
-	setUpLogging(logLevel, logDest)
+	setUpLogging(logLevel, logDest, logTimeFormat)
 
 	// Initialize Redis store
 	redisStore := store.NewRedisStore(redisAddr, redisPassword, redisDB)
@@ -106,8 +110,38 @@ func main() {
 		case msg := <-pubsub.Channel():
 			log.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
 			// Process the message and update facts
-			// This is a placeholder - you'll need to implement the actual message processing logic
-			engine.ProcessFactUpdate(msg.Channel, msg.Payload)
+			// This is a placeholder - we need to implement the actual message processing logic
+			// depending on how we want to handle channels and naming conventions
+			parts := strings.Split(msg.Payload, ":")
+			if len(parts) != 2 {
+				log.Fatal().Msgf("Invalid payload format: %s", msg.Payload)
+			}
+
+			// For now, we will keep the channel and key concatinated with a colon
+			channel := parts[0]
+			keyValue := strings.Split(parts[1], "=")
+			if len(keyValue) != 2 {
+				log.Fatal().Msgf("Invalid key-value format: %s", parts[1])
+			}
+
+			key := channel + ":" + keyValue[0]
+			value := keyValue[1]
+
+			var typedValue interface{}
+
+			// Check if the value is a boolean
+			if value == "true" || value == "false" {
+				typedValue = value == "true"
+			} else if num, err := strconv.ParseFloat(value, 64); err == nil {
+				// It's a valid number
+				typedValue = num
+			} else {
+				// Treat it as a string
+				typedValue = value
+			}
+
+			engine.ProcessFactUpdate(key, typedValue)
+
 		case <-sigChan:
 			log.Info().Msg("Shutting down REX runtime engine")
 			pubsub.Close()
@@ -119,7 +153,7 @@ func main() {
 	}
 }
 
-func setUpLogging(level, dest string) {
+func setUpLogging(level, dest, logTimeFormat string) {
 	// Set log level
 	switch level {
 	case "debug":
@@ -146,5 +180,13 @@ func setUpLogging(level, dest string) {
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
 	default:
 		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+	}
+
+	// Set log time format
+	switch logTimeFormat {
+	case "unix":
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
+	case "unixnano":
+		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMicro
 	}
 }

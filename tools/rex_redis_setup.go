@@ -34,9 +34,8 @@ func initializeRedis(rdb *redis.Client) {
 			"pressure":    "1013.25",
 		},
 		"system": {
-			"cpu_usage":    "30",
-			"memory_usage": "45",
-			"disk_space":   "500",
+			"flow_rate": "30",
+			"velocity":  "45",
 		},
 	}
 

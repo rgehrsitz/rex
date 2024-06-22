@@ -9,9 +9,9 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "program": "${fileDirname}",
+            "program": ".\\cmd\\rexd\\main.go",
             "args": [
-                ".\\..\\preprocessor\\bytecode.bin"
+                "output.bytecode"
             ]
         },
         {
@@ -21,6 +21,7 @@
             "mode": "auto",
             "program": ".\\cmd\\rexc\\main.go",
             "args": [
+                "-rules",
                 "c:\\code\\json\\rules2.json",
                 "-loglevel",
                 "trace"
