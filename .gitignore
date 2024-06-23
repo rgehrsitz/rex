@@ -10,6 +10,9 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+*.bytecode
+*.bin
+*.html
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
@@ -22,8 +25,6 @@ pkg/e2e_test_bytecode.bin
 pkg/runtime/test_bytecode.bin
 pkg/compiler/test_bytecode.bin
 cmd/rexc/output.bytecode
-.tmp.driveupload/*
-.gitignore
 pkg/runtime/test_engine_bytecode.bin
 
 coverage.html
@@ -33,3 +34,5 @@ tools/rule_gen/generated_ruleset.json
 cmd/rexd/output.bytecode
 tools/rule_gen/rule_gen
 pkg/runtime/test_engine_bytecode.bin
+pkg/runtime/test_engine_bytecode.bin
+cmd/rexd/output.bytecode
