@@ -1,5 +1,9 @@
 // rex/tools/rex_redis_setup.go
 
+//  This program initializes the Redis database with default values
+//  for the rex system. This includes groups, keys, and values for
+//  each group. It also starts a CLI for modifying values when debugging.
+
 package main
 
 import (
