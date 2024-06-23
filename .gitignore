@@ -29,3 +29,7 @@ pkg/runtime/test_engine_bytecode.bin
 coverage.html
 coverage
 pkg/runtime/test_engine_bytecode.bin
+tools/rule_gen/generated_ruleset.json
+cmd/rexd/output.bytecode
+tools/rule_gen/rule_gen
+pkg/runtime/test_engine_bytecode.bin

@@ -3,6 +3,7 @@ module rgehrsitz/rex
 go 1.22.2
 
 require (
+	github.com/brianvoe/gofakeit/v7 v7.0.4
 	github.com/redis/go-redis/v9 v9.5.3
 	github.com/rs/zerolog v1.32.0
 	github.com/spf13/viper v1.19.0

@@ -1,4 +1,4 @@
-// rex/tools/rex_redis_setup.go
+// rex/tools/redis_setup_cli/redis_setup.go
 
 //  This program initializes the Redis database with default values
 //  for the rex system. This includes groups, keys, and values for

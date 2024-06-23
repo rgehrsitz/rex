@@ -67,10 +67,6 @@ func validateRule(rule *Rule) error {
 }
 
 // validateAndOrderConditionGroup validates and orders a condition group.
-// It checks if the entire group is logically empty and separates conditions
-// and nested groups. It recursively validates and orders nested groups.
-// Finally, it reassigns the ordered conditions and nested groups to the
-// original condition group.
 func validateAndOrderConditionGroup(cg *ConditionGroup) error {
 	// Log for debugging
 	logging.Logger.Debug().Interface("All", cg.All).Interface("Any", cg.Any).Msg("Validating and ordering condition group")
@@ -80,45 +76,52 @@ func validateAndOrderConditionGroup(cg *ConditionGroup) error {
 		return errors.New("empty condition group")
 	}
 
-	// Separate conditions and nested groups
-	var conditions []*ConditionOrGroup
-	var nestedGroups []*ConditionOrGroup
-
-	for _, item := range cg.All {
-		if isCondition(item) {
-			if err := validateConditionOrGroup(item); err != nil {
-				return err
-			}
-			conditions = append(conditions, item)
-		} else {
-			nestedGroups = append(nestedGroups, item)
-		}
+	// Validate and order the conditions and nested groups
+	orderedAll, err := orderConditionsAndGroups(cg.All)
+	if err != nil {
+		return err
 	}
+	cg.All = orderedAll
 
-	// Recursively validate and order nested groups
-	for _, subgroup := range nestedGroups {
-		if err := validateConditionOrGroup(subgroup); err != nil {
-			return err
-		}
+	orderedAny, err := orderConditionsAndGroups(cg.Any)
+	if err != nil {
+		return err
 	}
-
-	// Reassign ordered conditions and nested groups
-	cg.All = append(conditions, nestedGroups...)
+	cg.Any = orderedAny
 
 	return nil
 }
 
+// orderConditionsAndGroups orders conditions and nested groups and returns an error if any condition or group is invalid.
+// Conditions appear before nested groups.
+func orderConditionsAndGroups(cogs []*ConditionOrGroup) ([]*ConditionOrGroup, error) {
+	var conditions []*ConditionOrGroup
+	var nestedGroups []*ConditionOrGroup
+
+	for _, item := range cogs {
+		if isCondition(item) {
+			if err := validateConditionOrGroup(item); err != nil {
+				return nil, err
+			}
+			conditions = append(conditions, item)
+		} else {
+			if err := validateConditionOrGroup(item); err != nil {
+				return nil, err
+			}
+			nestedGroups = append(nestedGroups, item)
+		}
+	}
+
+	// Return ordered list with conditions first, followed by nested groups
+	return append(conditions, nestedGroups...), nil
+}
+
 // isCondition checks if the given ConditionOrGroup is a valid condition.
-// This is just a plceholder for additional validation logic.
 func isCondition(cog *ConditionOrGroup) bool {
 	return cog.Fact != "" && cog.Operator != "" && cog.Value != nil
 }
 
 // validateConditionOrGroup validates a ConditionOrGroup object.
-// It checks if the object is nil, and if not, it validates the fact, operator, and value fields.
-// If the fact, operator, or value fields are missing or invalid, an error is returned.
-// If the object contains nested groups, it recursively validates each subgroup.
-// Returns nil if the object is valid, otherwise returns an error.
 func validateConditionOrGroup(cog *ConditionOrGroup) error {
 	logging.Logger.Debug().Interface("ConditionOrGroup", cog).Msg("Validating condition or group")
 	if cog == nil {
@@ -164,10 +167,6 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 }
 
 // validateAction validates the given action.
-// It checks if the action is nil, if the type field is empty or missing,
-// if the target field is empty or missing, and if the value field is empty or missing.
-// If any of these conditions are met, it returns an error.
-// Otherwise, it returns nil.
 func validateAction(action *Action) error {
 	if action != nil {
 		logging.Logger.Debug().Str("action", action.Type).Msg("Validating action")
@@ -195,7 +194,6 @@ func isFactValid(fact string) bool {
 }
 
 // isOperatorValid checks if the given operator is valid.
-// It returns true if the operator is valid, otherwise false.
 func isOperatorValid(operator string) bool {
 	validOperators := []string{
 		"EQ", "NEQ", "LT", "LTE", "GT", "GTE", "CONTAINS", "NOT_CONTAINS",
