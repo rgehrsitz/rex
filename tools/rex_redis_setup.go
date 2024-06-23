@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 
@@ -81,6 +82,8 @@ func startCLI(rdb *redis.Client) {
 			// Publish update to the group channel
 			group := strings.Split(key, ":")[0]
 			rdb.Publish(ctx, group, fmt.Sprintf("%s=%s", key, value))
+			log.Printf("Published update to group %s: %s=%s", group, key, value)
+			log.Printf("context: %v", ctx)
 		}
 	}
 }

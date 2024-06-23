@@ -463,9 +463,9 @@ func (e *Engine) executeAction(action compiler.Action) {
 
 		e.Stats.TotalFactsUpdated++
 
-		// Send the fact update to the store via a publish command
-		// instead of a set command.
-		err := e.store.PublishFact(factName, factValue)
+		// Send the fact update to the store via a set and publish command
+		// instead of just a set command.
+		err := e.store.SetAndPublishFact(factName, factValue)
 		if err != nil {
 			logging.Logger.Error().Err(err).Str("factName", factName).Interface("factValue", factValue).Msg("Failed to update fact in store")
 			return

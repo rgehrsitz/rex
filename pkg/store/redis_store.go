@@ -5,7 +5,10 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"log"
 	"rgehrsitz/rex/pkg/logging"
+	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -108,10 +111,22 @@ func (s *RedisStore) ReceiveFacts() <-chan *redis.Message {
 	return s.client.Subscribe(ctx).Channel()
 }
 
-func (s *RedisStore) PublishFact(key string, value interface{}) error {
+func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
 	}
-	return s.client.Publish(ctx, key, data).Err()
+	// Set the value in Redis
+	err = s.client.Set(ctx, key, data, 0).Err()
+	if err != nil {
+		return err
+	}
+
+	// Need to break apart the key to get the group
+	group := strings.Split(key, ":")[0]
+	// Publish the value to a channel
+	err = s.client.Publish(ctx, group, fmt.Sprintf("%s=%s", key, data)).Err()
+	log.Printf("Published update to group %s: %s=%s", group, key, data)
+	log.Printf("context: %v", ctx)
+	return err
 }

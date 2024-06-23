@@ -3,7 +3,6 @@
 package compiler
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -227,7 +226,7 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 			case float64:
 				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_FLOAT))
 				floatBytes := make([]byte, 8)
-				binary.Write(bytes.NewBuffer(floatBytes), binary.LittleEndian, v)
+				binary.LittleEndian.PutUint64(floatBytes, math.Float64bits(v))
 				actionBytecode = append(actionBytecode, floatBytes...)
 			case string:
 				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_STRING))
