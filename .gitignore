@@ -26,3 +26,6 @@ cmd/rexc/output.bytecode
 .gitignore
 pkg/runtime/test_engine_bytecode.bin
 
+coverage.html
+coverage
+pkg/runtime/test_engine_bytecode.bin
