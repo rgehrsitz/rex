@@ -1,5 +1,8 @@
 # REX - Rules Engine eXtended
 
+[![License](https://img.shields.io/badge/License-MIT-blue)](#license)
+[![Auto Wiki](https://img.shields.io/badge/Auto_Wiki-Mutable.ai-blue)](https://wiki.mutable.ai/rgehrsitz/rex)
+
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that can be executed as bytecode instructions.
 
 ## Features
