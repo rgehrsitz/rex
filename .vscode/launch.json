@@ -22,7 +22,8 @@
             "program": ".\\cmd\\rexc\\main.go",
             "args": [
                 "-rules",
-                "c:\\code\\json\\rules2.json",
+                //"c:\\code\\json\\rules2.json",
+                "c:\\code\\rex\\tools\\rule_gen\\generated_ruleset.json",
                 "-loglevel",
                 "trace"
             ]

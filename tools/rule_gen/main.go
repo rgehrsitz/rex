@@ -64,11 +64,13 @@ var channelFacts = map[string][]string{
 	},
 }
 
-var operators = []string{
-	"EQ", "NEQ", "LT", "LTE", "GT", "GTE", "CONTAINS", "NOT_CONTAINS",
+var operators = map[string][]string{
+	"numeric": {"EQ", "NEQ", "LT", "LTE", "GT", "GTE"},
+	"boolean": {"EQ", "NEQ"},
+	"string":  {"EQ", "NEQ", "CONTAINS", "NOT_CONTAINS"},
 }
 
-func getRandomFact() string {
+func getRandomFact() (string, string) {
 	channels := make([]string, 0, len(channelFacts))
 	for channel := range channelFacts {
 		channels = append(channels, channel)
@@ -78,26 +80,50 @@ func getRandomFact() string {
 	facts := channelFacts[channel]
 	fact := facts[rand.Intn(len(facts))]
 
-	return fmt.Sprintf("%s:%s", channel, fact)
+	return channel, fact
 }
 
-func generateValue() interface{} {
-	switch rand.Intn(3) {
-	case 0:
+func generateValue(factType string) interface{} {
+	switch factType {
+	case "numeric":
 		return gofakeit.Float64Range(-100, 100)
-	case 1:
+	case "boolean":
 		return gofakeit.Bool()
 	default:
 		return gofakeit.Word()
 	}
 }
 
+func getFactType(fact string) string {
+	numericFacts := []string{"temperature", "humidity", "pressure", "wind_speed", "rainfall", "solar_radiation",
+		"speed", "capacity", "latency", "packet_loss", "bandwidth_usage", "connection_count",
+		"cpu_usage", "memory_usage", "disk_space", "process_count", "uptime", "load_average", "fan_speed",
+		"voltage", "current", "power", "energy_consumption", "power_factor", "frequency", "harmonic_distortion",
+		"ph", "conductivity", "turbidity", "dissolved_oxygen", "flow_rate"}
+
+	booleanFacts := []string{"temperature_warning", "humidity_warning", "fault_status"}
+
+	for _, f := range numericFacts {
+		if f == fact {
+			return "numeric"
+		}
+	}
+	for _, f := range booleanFacts {
+		if f == fact {
+			return "boolean"
+		}
+	}
+	return "string"
+}
+
 func generateCondition(depth int) Condition {
 	if depth > 2 || rand.Float32() < 0.7 {
+		channel, fact := getRandomFact()
+		factType := getFactType(fact)
 		return Condition{
-			Fact:     getRandomFact(),
-			Operator: operators[rand.Intn(len(operators))],
-			Value:    generateValue(),
+			Fact:     fmt.Sprintf("%s:%s", channel, fact),
+			Operator: operators[factType][rand.Intn(len(operators[factType]))],
+			Value:    generateValue(factType),
 		}
 	}
 
@@ -120,10 +146,13 @@ func generateAction() Action {
 		actionType = "sendMessage"
 	}
 
+	channel, fact := getRandomFact()
+	factType := getFactType(fact)
+
 	return Action{
 		Type:   actionType,
-		Target: getRandomFact(),
-		Value:  generateValue(),
+		Target: fmt.Sprintf("%s:%s", channel, fact),
+		Value:  generateValue(factType),
 	}
 }
 

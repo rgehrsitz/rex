@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"rgehrsitz/rex/pkg/logging"
 )
@@ -143,8 +144,8 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 
 		if cog.Value == "" {
 			return fmt.Errorf("invalid condition value '%v'", cog.Value)
-		} else if !isValueValid(cog.Value) {
-			return fmt.Errorf("invalid condition value '%v'", cog.Value)
+		} else if !isValueValid(cog.Operator, cog.Value) {
+			return fmt.Errorf("invalid condition value '%v' for operator '%s'", cog.Value, cog.Operator)
 		}
 	}
 
@@ -181,8 +182,8 @@ func validateAction(action *Action) error {
 	if action.Target == "" {
 		return errors.New("empty or missing target field")
 	}
-	if action.Value == "" {
-		return errors.New("empty or missing value field")
+	if !isActionValueValid(action.Type, action.Value) {
+		return fmt.Errorf("invalid action value '%v' for action type '%s'", action.Value, action.Type)
 	}
 	return nil
 }
@@ -190,6 +191,7 @@ func validateAction(action *Action) error {
 func isFactValid(fact string) bool {
 	// Placeholder implementation
 	// Update this function when the listing of facts is available
+	// from spec
 	return fact != ""
 }
 
@@ -206,8 +208,60 @@ func isOperatorValid(operator string) bool {
 	return false
 }
 
-func isValueValid(value interface{}) bool {
-	// Placeholder implementation
-	// Return true for now, as there are no specific criteria defined yet
-	return value != nil
+func isValueValid(operator string, value interface{}) bool {
+	switch operator {
+	case "EQ", "NEQ":
+		// EQ and NEQ can have any value type
+		return true
+	case "LT", "LTE", "GT", "GTE":
+		// For these operators, the value must be a number
+		return isNumeric(value)
+	case "CONTAINS", "NOT_CONTAINS":
+		// For these operators, the value must be a string or list
+		return isStringOrList(value)
+	default:
+		return false
+	}
+}
+
+func isNumeric(value interface{}) bool {
+	switch v := value.(type) {
+	case float64, float32, int, int64, int32:
+		return true
+	case string:
+		_, err := strconv.ParseFloat(v, 64)
+		return err == nil
+	default:
+		return false
+	}
+}
+
+func isStringOrList(value interface{}) bool {
+	switch value.(type) {
+	case string:
+		return true
+	case []interface{}:
+		return true
+	default:
+		return false
+	}
+}
+
+func isActionValueValid(actionType string, value interface{}) bool {
+	// Placeholder for more complex validation logic based on action type
+	switch actionType {
+	case "sendMessage", "updateStore":
+		switch value.(type) {
+		case float64, float32, int, int64, int32:
+			return true
+		case string:
+			return true
+		case bool:
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
 }

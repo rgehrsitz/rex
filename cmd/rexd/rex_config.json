@@ -1,7 +1,7 @@
 {
   "bytecode_file": "output.bytecode",
   "logging": {
-    "level": "info",
+    "level": "debug",
     "destination": "console",
     "timeFormat": "unixnano"
   },
@@ -9,7 +9,7 @@
     "address": "localhost:6379",
     "password": "",
     "database": 0,
-    "channels": ["weather", "system"]
+    "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
     "update_interval": 5

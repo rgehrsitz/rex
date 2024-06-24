@@ -42,8 +42,9 @@ type Header struct {
 }
 
 type RuleExecutionIndex struct {
-	RuleName   string
-	ByteOffset int
+	RuleNameLength uint32
+	RuleName       string
+	ByteOffset     int
 }
 
 type FactRuleLookupIndex struct {
@@ -52,6 +53,7 @@ type FactRuleLookupIndex struct {
 }
 
 type FactDependencyIndex struct {
-	RuleName string
-	Facts    []string
+	RuleNameLength uint32
+	RuleName       string
+	Facts          []string
 }

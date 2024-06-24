@@ -360,16 +360,18 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 
 					// Add to rule execution index
 					ruleExecIndex = append(ruleExecIndex, RuleExecutionIndex{
-						RuleName:   ruleName,
-						ByteOffset: ruleStartOffset,
+						RuleNameLength: uint32(ruleNameLength),
+						RuleName:       ruleName,
+						ByteOffset:     ruleStartOffset,
 					})
 					logging.Logger.Debug().Str("ruleName", ruleName).Int("byteOffset", ruleStartOffset).Msg("Added to ruleExecIndex")
 
 					// Collect facts for dependency index
 					facts := collectFactsFromBytecode(bytecode[ruleStartOffset:ruleEndOffset])
 					factDepIndex = append(factDepIndex, FactDependencyIndex{
-						RuleName: ruleName,
-						Facts:    facts,
+						RuleNameLength: uint32(ruleNameLength),
+						RuleName:       ruleName,
+						Facts:          facts,
 					})
 					logging.Logger.Debug().Str("ruleName", ruleName).Strs("facts", facts).Msg("Collected facts for dependency index")
 
