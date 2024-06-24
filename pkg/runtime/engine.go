@@ -6,6 +6,7 @@ import (
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
+	"strings"
 	"sync"
 	"time"
 
@@ -355,7 +356,8 @@ func (e *Engine) evaluateRule(ruleName string) {
 			logging.Logger.Debug().Bool("constValue", constValue.(bool)).Msg("Encountered LOAD_CONST_BOOL opcode")
 		case compiler.EQ_FLOAT, compiler.EQ_STRING, compiler.EQ_BOOL,
 			compiler.NEQ_FLOAT, compiler.NEQ_STRING, compiler.NEQ_BOOL,
-			compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT:
+			compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT,
+			compiler.CONTAINS_STRING, compiler.NOT_CONTAINS_STRING:
 			comparisonResult = e.compare(factValue, constValue, opcode)
 			logging.Logger.Debug().Bool("comparisonResult", comparisonResult).Msg("Encountered comparison opcode")
 		case compiler.JUMP_IF_FALSE:
@@ -441,6 +443,10 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 		return factValue.(float64) > constValue.(float64)
 	case compiler.GTE_FLOAT:
 		return factValue.(float64) >= constValue.(float64)
+	case compiler.CONTAINS_STRING:
+		return strings.Contains(factValue.(string), constValue.(string))
+	case compiler.NOT_CONTAINS_STRING:
+		return !strings.Contains(factValue.(string), constValue.(string))
 	default:
 		logging.Logger.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown comparison opcode")
 		return false
