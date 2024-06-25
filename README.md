@@ -33,7 +33,8 @@ Navigate to the project directory:
 cd rex
 ```
 
-Running the Executables
+### Running the Executables
+
 The REX repository includes four main executables: rexc, rexd, redis_setup, and rule_gen. Below are the details on how to build, run, and understand the purpose of each executable.
 
 ### 1. Compiler
@@ -85,7 +86,7 @@ Example:
 ### 3. Redis Setup
 
 Purpose:
-The redis_setup executable initializes the Redis database with default values necessary for the REX system. It also provides a CLI for modifying values during debugging.
+The redis_setup executable initializes the Redis database with default values necessary for some testing of the REX system. It also provides a CLI for modifying values during debugging.
 
 How to Build:
 
