@@ -230,6 +230,7 @@ A condition object has the following properties:
 - value: the value to compare against
 
 \*\*All condition objects not part of a grouping MUST be defined prior to any nested condition groups.
+\*\*The characters is a string must NOT include the colon ':' due to how Redis parses channels/keys
 
 ### Action Object
 
@@ -335,7 +336,7 @@ Due to concurrent evaluations and other factors, no guarantees can be made regar
         {
           "type": "sendMessage",
           "target": "alert-service",
-          "value": "Alert: Pressure or flow rate exceeded limits!"
+          "value": "Alert - Pressure or flow rate exceeded limits!"
         }
       ]
     }
