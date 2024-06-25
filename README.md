@@ -346,3 +346,7 @@ Due to concurrent evaluations and other factors, no guarantees can be made regar
 This example JSON ruleset defines two rules, "rule-1" and "rule-2", with conditions and actions. The conditions are grouped using the "all" and "any" operators, and the actions are defined with the "updateStore" and "sendMessage" types.
 
 Note that the rule spec allows for nested condition groups, as seen in the example, where an "any" group is inside an "all" group. This allows for complex logical combinations of conditions.
+
+## Unit Testing
+
+Prior to running the full unit test suite, ensure that a Redis instance is up and running using the standar Redis port 6379.
