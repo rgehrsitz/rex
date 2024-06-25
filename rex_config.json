@@ -1,0 +1,22 @@
+{
+  "bytecode_file": "output.bytecode",
+  "logging": {
+    "level": "debug",
+    "destination": "console",
+    "timeFormat": "unixnano"
+  },
+  "redis": {
+    "address": "localhost:6379",
+    "password": "",
+    "database": 0,
+    "channels": ["weather", "system", "network", "energy", "water", "people"]
+  },
+  "engine": {
+    "update_interval": 5
+  },
+  "dashboard": {
+    "enabled": true,
+    "port": 8080,
+    "update_interval": 1
+  }
+}

@@ -142,14 +142,14 @@ Rules are defined in a JSON format. Each rule consists of conditions and actions
       "name": "rule-1",
       "conditions": {
         "all": [
-          { "fact": "temperature", "operator": "GT", "value": 30 },
-          { "fact": "humidity", "operator": "LT", "value": 40.01 }
+          { "fact": "weather:temperature", "operator": "GT", "value": 30 },
+          { "fact": "weather:humidity", "operator": "LT", "value": 40.01 }
         ]
       },
       "actions": [
         {
           "type": "updateStore",
-          "target": "temperature_warning",
+          "target": "weather:temperature_warning",
           "value": "high"
         }
       ]
@@ -158,12 +158,12 @@ Rules are defined in a JSON format. Each rule consists of conditions and actions
       "name": "rule_unique_name_bob",
       "conditions": {
         "all": [
-          { "fact": "age", "operator": "LTE", "value": 60 },
-          { "fact": "iq", "operator": "EQ", "value": 40.01 },
+          { "fact": "people:age", "operator": "LTE", "value": 60 },
+          { "fact": "people:iq", "operator": "EQ", "value": 40.01 },
           {
             "any": [
-              { "fact": "name", "operator": "CONTAINS", "value": "bob" },
-              { "fact": "handsome", "operator": "EQ", "value": true }
+              { "fact": "people:name", "operator": "CONTAINS", "value": "bob" },
+              { "fact": "people:handsome", "operator": "EQ", "value": true }
             ]
           }
         ]
@@ -171,7 +171,7 @@ Rules are defined in a JSON format. Each rule consists of conditions and actions
       "actions": [
         {
           "type": "updateStore",
-          "target": "bob_alert",
+          "target": "people:bob_alert",
           "value": "true"
         }
       ]
@@ -218,28 +218,28 @@ A rule object has the following properties:
 
 A condition group is an object containing:
 
-- conditions: an array of condition objects
-- operator: a string indicating the logical operator (ANY or ALL)
+- conditions: an array of condition objects.
+- operator: a string indicating the logical operator (ANY or ALL).
 
 ### Condition Object
 
 A condition object has the following properties:
 
-- fact: a string identifying the fact to evaluate
-- operator: a string indicating the comparison operator (EQ, NEQ, LT, LTE, GT, GTE, CONTAINS, NOT_CONTAINS)
-- value: the value to compare against
+- fact: a string identifying the fact to evaluate. Based on the way Redis works, the recommendation is 'channel:key' for the naming of facts.
+- operator: a string indicating the comparison operator (EQ, NEQ, LT, LTE, GT, GTE, CONTAINS, NOT_CONTAINS).
+- value: the value to compare against.
 
 \*\*All condition objects not part of a grouping MUST be defined prior to any nested condition groups.
-\*\*The characters is a string must NOT include the colon ':' due to how Redis parses channels/keys
+\*\*The characters is a string must NOT include a colon ':' due to how Redis parses channels/keys
 
 ### Action Object
 
 An action object has the following properties:
 
-- type: a string indicating the action type ("updateStore" or "sendMessage") (sendMessage is not yet implemented)
-- fact: a string identifying the fact to update or send
-- value: the value to update or send
-- customProperty: an optional object containing custom properties for the action
+- type: a string indicating the action type ("updateStore" or "sendMessage") (sendMessage is not yet implemented).
+- fact: a string identifying the fact to update or send. Based on the way Redis works, the recommendation is 'channel:key' for the naming of facts.
+- value: the value to update or send.
+- customProperty: an optional object containing custom properties for the action.
 
 ### Execution Order
 
