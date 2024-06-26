@@ -1,0 +1,44 @@
+{
+  "rules": [
+    {
+      "name": "rule-1",
+      "priority": 10,
+      "conditions": {
+        "all": [
+          {
+            "fact": "weather:temperature",
+            "operator": "GT",
+            "value": 30.0
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "updateStore",
+          "target": "weather:temperature_status",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "rule-2",
+      "priority": 10,
+      "conditions": {
+        "all": [
+          {
+            "fact": "weather:temperature",
+            "operator": "GT",
+            "value": 30.0
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "updateStore",
+          "target": "weather:temperature_status",
+          "value": true
+        }
+      ]
+    }
+  ]
+}

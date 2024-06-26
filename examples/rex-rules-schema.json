@@ -1,99 +1,129 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "REX Rules Schema",
   "type": "object",
   "properties": {
     "rules": {
       "type": "array",
+      "uniqueItems": true,
       "items": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
+        "allOf": [
+          {
+            "$ref": "#/definitions/ruleWithUniqueName"
           },
-          "priority": {
-            "type": "integer",
-            "default": 10
-          },
-          "conditions": {
+          {
             "type": "object",
             "properties": {
-              "all": {
-                "type": "array",
-                "items": { "$ref": "#/definitions/conditionGroup" }
+              "name": {
+                "description": "The name of the rule.  Must be unique.",
+                "type": "string"
               },
-              "any": {
+              "priority": {
+                "type": "integer",
+                "description": "The priority of the rule.  The lower the number, the higher the priority.  Defaults to 10.",
+                "minimum": 1,
+                "default": 10
+              },
+              "conditions": {
+                "type": "object",
+                "properties": {
+                  "all": {
+                    "$ref": "#/definitions/conditionGroup"
+                  },
+                  "any": {
+                    "$ref": "#/definitions/conditionGroup"
+                  }
+                },
+                "oneOf": [{ "required": ["all"] }, { "required": ["any"] }]
+              },
+              "actions": {
                 "type": "array",
-                "items": { "$ref": "#/definitions/conditionGroup" }
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "enum": ["updateStore", "sendMessage"]
+                    },
+                    "target": {
+                      "type": "string",
+                      "pattern": "^[^:]+:[^:]+$"
+                    },
+                    "value": {
+                      "type": ["string", "number", "boolean"]
+                    },
+                    "customProperty": {
+                      "type": "object"
+                    }
+                  },
+                  "required": ["type", "target", "value"],
+                  "additionalProperties": false
+                }
               }
             },
-            "oneOf": [{ "required": ["all"] }, { "required": ["any"] }]
-          },
-          "actions": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "enum": ["updateStore", "sendMessage"]
-                },
-                "target": {
-                  "type": "string"
-                },
-                "value": {
-                  "type": ["string", "boolean", "number"]
-                },
-                "customProperty": {
-                  "type": "object"
-                }
-              },
-              "required": ["type", "target", "value"]
-            }
+            "required": ["name", "conditions", "actions"],
+            "additionalProperties": false
           }
-        },
-        "required": ["name", "conditions", "actions"]
+        ]
       }
     }
   },
+  "required": ["rules"],
   "definitions": {
-    "conditionGroup": {
+    "ruleWithUniqueName": {
       "type": "object",
+      "required": ["name"],
       "properties": {
-        "fact": {
-          "type": "string",
-          "pattern": "^[^:]+:[^:]+$"
-        },
-        "operator": {
-          "type": "string",
-          "enum": [
-            "EQ",
-            "NEQ",
-            "LT",
-            "LTE",
-            "GT",
-            "GTE",
-            "CONTAINS",
-            "NOT_CONTAINS"
-          ]
-        },
-        "value": {
-          "type": ["string", "number", "boolean"]
-        },
-        "all": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/conditionGroup" }
-        },
-        "any": {
-          "type": "array",
-          "items": { "$ref": "#/definitions/conditionGroup" }
+        "name": {
+          "type": "string"
         }
-      },
-      "oneOf": [
-        { "required": ["fact", "operator", "value"] },
-        { "required": ["all"] },
-        { "required": ["any"] }
-      ]
+      }
+    },
+    "conditionGroup": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "fact": {
+                "type": "string",
+                "pattern": "^[^:]+:[^:]+$"
+              },
+              "operator": {
+                "type": "string",
+                "enum": [
+                  "EQ",
+                  "NEQ",
+                  "LT",
+                  "LTE",
+                  "GT",
+                  "GTE",
+                  "CONTAINS",
+                  "NOT_CONTAINS"
+                ]
+              },
+              "value": {
+                "type": ["string", "number", "boolean"]
+              }
+            },
+            "required": ["fact", "operator", "value"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "all": {
+                "$ref": "#/definitions/conditionGroup"
+              },
+              "any": {
+                "$ref": "#/definitions/conditionGroup"
+              }
+            },
+            "oneOf": [{ "required": ["all"] }, { "required": ["any"] }],
+            "additionalProperties": false
+          }
+        ]
+      }
     }
   }
 }
