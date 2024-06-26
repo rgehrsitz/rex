@@ -553,3 +553,264 @@ func BenchmarkParseLargeRuleset(b *testing.B) {
 		}
 	}
 }
+
+func TestValidateRule(t *testing.T) {
+	tests := []struct {
+		name        string
+		rule        Rule
+		expectedErr string
+	}{
+		{
+			name: "Valid Rule",
+			rule: Rule{
+				Name:     "ValidRule",
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "",
+		},
+		{
+			name: "Missing Name",
+			rule: Rule{
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "rule name is required",
+		},
+		{
+			name: "Negative Priority",
+			rule: Rule{
+				Name:     "NegativePriority",
+				Priority: -1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "rule priority must be non-negative",
+		},
+		{
+			name: "Empty Conditions",
+			rule: Rule{
+				Name:       "EmptyConditions",
+				Priority:   1,
+				Conditions: ConditionGroup{},
+				Actions:    []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "invalid condition group: empty condition group",
+		},
+		{
+			name: "No Actions",
+			rule: Rule{
+				Name:     "NoActions",
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{},
+			},
+			expectedErr: "at least one action is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateRule(&tt.rule)
+			if tt.expectedErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.expectedErr)
+			}
+		})
+	}
+}
+
+func TestValidateConditionOrGroup(t *testing.T) {
+	tests := []struct {
+		name        string
+		cog         *ConditionOrGroup
+		expectedErr string
+	}{
+		{
+			name:        "Valid Condition",
+			cog:         &ConditionOrGroup{Fact: "temperature", Operator: "GT", Value: 30},
+			expectedErr: "",
+		},
+		{
+			name:        "Missing Fact",
+			cog:         &ConditionOrGroup{Operator: "GT", Value: 30},
+			expectedErr: "empty or missing fact field",
+		},
+		{
+			name:        "Invalid Operator",
+			cog:         &ConditionOrGroup{Fact: "temperature", Operator: "INVALID", Value: 30},
+			expectedErr: "invalid condition operator 'INVALID'",
+		},
+		{
+			name:        "Missing Value",
+			cog:         &ConditionOrGroup{Fact: "temperature", Operator: "GT"},
+			expectedErr: "invalid condition value '<nil>' for operator 'GT'",
+		},
+		{
+			name:        "Invalid Value Type",
+			cog:         &ConditionOrGroup{Fact: "temperature", Operator: "GT", Value: "not a number"},
+			expectedErr: "invalid condition value 'not a number' for operator 'GT'",
+		},
+		{
+			name: "Valid Nested All",
+			cog: &ConditionOrGroup{
+				All: []*ConditionOrGroup{
+					{Fact: "temperature", Operator: "GT", Value: 30},
+					{Fact: "humidity", Operator: "LT", Value: 50},
+				},
+			},
+			expectedErr: "",
+		},
+		{
+			name: "Valid Nested Any",
+			cog: &ConditionOrGroup{
+				Any: []*ConditionOrGroup{
+					{Fact: "temperature", Operator: "GT", Value: 30},
+					{Fact: "humidity", Operator: "LT", Value: 50},
+				},
+			},
+			expectedErr: "",
+		},
+		{
+			name:        "Nil Condition",
+			cog:         nil,
+			expectedErr: "nil condition or group received",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateConditionOrGroup(tt.cog)
+			if tt.expectedErr == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.EqualError(t, err, tt.expectedErr)
+			}
+		})
+	}
+}
+
+func TestValidateAction(t *testing.T) {
+	tests := []struct {
+		name           string
+		action         *Action
+		expectedErrMsg string
+	}{
+		{
+			name:           "Valid Action",
+			action:         &Action{Type: "updateStore", Target: "alarm", Value: true},
+			expectedErrMsg: "",
+		},
+		{
+			name:           "Nil Action",
+			action:         nil,
+			expectedErrMsg: "nil action received",
+		},
+		{
+			name:           "Missing Type",
+			action:         &Action{Target: "alarm", Value: true},
+			expectedErrMsg: "empty or missing type field",
+		},
+		{
+			name:           "Missing Target",
+			action:         &Action{Type: "updateStore", Value: true},
+			expectedErrMsg: "empty or missing target field",
+		},
+		{
+			name:           "Invalid Value Type",
+			action:         &Action{Type: "updateStore", Target: "alarm", Value: make(chan int)},
+			expectedErrMsg: "invalid action value",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateAction(tt.action)
+			if tt.expectedErrMsg == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedErrMsg)
+			}
+		})
+	}
+}
+
+func TestIsFactValid(t *testing.T) {
+	tests := []struct {
+		fact     string
+		expected bool
+	}{
+		{"temperature", true},
+		{"humidity", true},
+		{"", false},
+		{"invalid fact", true}, // Note: This function always returns true in the current implementation
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.fact, func(t *testing.T) {
+			result := isFactValid(tt.fact)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsOperatorValid(t *testing.T) {
+	tests := []struct {
+		operator string
+		expected bool
+	}{
+		{"EQ", true},
+		{"NEQ", true},
+		{"LT", true},
+		{"LTE", true},
+		{"GT", true},
+		{"GTE", true},
+		{"CONTAINS", true},
+		{"NOT_CONTAINS", true},
+		{"INVALID", false},
+		{"", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.operator, func(t *testing.T) {
+			result := isOperatorValid(tt.operator)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsActionValueValid(t *testing.T) {
+	tests := []struct {
+		name       string
+		actionType string
+		value      interface{}
+		expected   bool
+	}{
+		{"Valid Float", "updateStore", 3.14, true},
+		{"Valid Integer", "updateStore", 42, true},
+		{"Valid String", "updateStore", "test", true},
+		{"Valid Boolean", "updateStore", true, true},
+		{"Invalid Type", "updateStore", make(chan int), false},
+		{"Invalid Action Type", "invalidType", "test", false},
+		{"Valid sendMessage", "sendMessage", "test message", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isActionValueValid(tt.actionType, tt.value)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

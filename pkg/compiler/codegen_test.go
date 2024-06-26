@@ -394,3 +394,23 @@ func TestGenerateIndices(t *testing.T) {
 	assert.Equal(t, "Rule1", factDepIndex[0].RuleName)
 	assert.Equal(t, []string{"temp"}, factDepIndex[0].Facts)
 }
+
+func TestFloatToBytes(t *testing.T) {
+	testCases := []float64{0, 1, -1, 3.14159, -3.14159, math.MaxFloat64, math.SmallestNonzeroFloat64}
+
+	for _, tc := range testCases {
+		bytes := floatToBytes(tc)
+		assert.Len(t, bytes, 8)
+
+		// Convert bytes back to float64
+		bits := binary.LittleEndian.Uint64(bytes)
+		result := math.Float64frombits(bits)
+
+		assert.Equal(t, tc, result)
+	}
+}
+
+func TestBoolToBytes(t *testing.T) {
+	assert.Equal(t, []byte{1}, boolToBytes(true))
+	assert.Equal(t, []byte{0}, boolToBytes(false))
+}

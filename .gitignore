@@ -36,3 +36,4 @@ tools/rule_gen/rule_gen
 pkg/runtime/test_engine_bytecode.bin
 pkg/runtime/test_engine_bytecode.bin
 cmd/rexd/output.bytecode
+pkg/logging/logs.txt

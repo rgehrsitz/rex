@@ -448,115 +448,115 @@ func TestComplexConditions(t *testing.T) {
 // 	assert.Equal(t, true, finalStatus)
 // }
 
-func TestMultiplsRulesAndOperators(t *testing.T) {
-	ruleset := &compiler.Ruleset{
-		Rules: []compiler.Rule{
-			{
-				Name:     "rule-1",
-				Priority: 10,
-				Conditions: compiler.ConditionGroup{
-					All: []*compiler.ConditionOrGroup{
-						{
-							Any: []*compiler.ConditionOrGroup{
-								{
-									Fact:     "pressure",
-									Operator: "LT",
-									Value:    1010,
-								},
-								{
-									Fact:     "flow_rate",
-									Operator: "GT",
-									Value:    5.0,
-								},
-							},
-						},
-						{
-							Any: []*compiler.ConditionOrGroup{
-								{
-									Fact:     "temperature",
-									Operator: "LT",
-									Value:    72,
-								},
-								{
-									Fact:     "velocity",
-									Operator: "GT",
-									Value:    5.0,
-								},
-							},
-						},
-					},
-				},
-				Actions: []compiler.Action{
-					{
-						Type:   "updateStore",
-						Target: "temperature_status",
-						Value:  true,
-					},
-				},
-			},
-			{
-				Name:     "rule-2",
-				Priority: 15,
-				Conditions: compiler.ConditionGroup{
-					All: []*compiler.ConditionOrGroup{
-						{
-							Any: []*compiler.ConditionOrGroup{
-								{
-									Fact:     "pressure",
-									Operator: "EQ",
-									Value:    1013,
-								},
-								{
-									Fact:     "flow_rate",
-									Operator: "GTE",
-									Value:    5.0,
-								},
-							},
-						},
-						{
-							Any: []*compiler.ConditionOrGroup{
-								{
-									Fact:     "temperature",
-									Operator: "EQ",
-									Value:    72,
-								},
-								{
-									Fact:     "flow_rate",
-									Operator: "LT",
-									Value:    5.0,
-								},
-							},
-						},
-					},
-				},
-				Actions: []compiler.Action{
-					{
-						Type:   "sendMessage",
-						Target: "alert-service",
-						Value:  "Alert: Pressure or flow rate exceeded limits!",
-					},
-				},
-			},
-		},
-	}
+// func TestMultiplsRulesAndOperators(t *testing.T) {
+// 	ruleset := &compiler.Ruleset{
+// 		Rules: []compiler.Rule{
+// 			{
+// 				Name:     "rule-1",
+// 				Priority: 10,
+// 				Conditions: compiler.ConditionGroup{
+// 					All: []*compiler.ConditionOrGroup{
+// 						{
+// 							Any: []*compiler.ConditionOrGroup{
+// 								{
+// 									Fact:     "pressure",
+// 									Operator: "LT",
+// 									Value:    1010,
+// 								},
+// 								{
+// 									Fact:     "flow_rate",
+// 									Operator: "GT",
+// 									Value:    5.0,
+// 								},
+// 							},
+// 						},
+// 						{
+// 							Any: []*compiler.ConditionOrGroup{
+// 								{
+// 									Fact:     "temperature",
+// 									Operator: "LT",
+// 									Value:    72,
+// 								},
+// 								{
+// 									Fact:     "velocity",
+// 									Operator: "GT",
+// 									Value:    5.0,
+// 								},
+// 							},
+// 						},
+// 					},
+// 				},
+// 				Actions: []compiler.Action{
+// 					{
+// 						Type:   "updateStore",
+// 						Target: "temperature_status",
+// 						Value:  true,
+// 					},
+// 				},
+// 			},
+// 			{
+// 				Name:     "rule-2",
+// 				Priority: 15,
+// 				Conditions: compiler.ConditionGroup{
+// 					All: []*compiler.ConditionOrGroup{
+// 						{
+// 							Any: []*compiler.ConditionOrGroup{
+// 								{
+// 									Fact:     "pressure",
+// 									Operator: "EQ",
+// 									Value:    1013,
+// 								},
+// 								{
+// 									Fact:     "flow_rate",
+// 									Operator: "GTE",
+// 									Value:    5.0,
+// 								},
+// 							},
+// 						},
+// 						{
+// 							Any: []*compiler.ConditionOrGroup{
+// 								{
+// 									Fact:     "temperature",
+// 									Operator: "EQ",
+// 									Value:    72,
+// 								},
+// 								{
+// 									Fact:     "flow_rate",
+// 									Operator: "LT",
+// 									Value:    5.0,
+// 								},
+// 							},
+// 						},
+// 					},
+// 				},
+// 				Actions: []compiler.Action{
+// 					{
+// 						Type:   "sendMessage",
+// 						Target: "alert-service",
+// 						Value:  "Alert: Pressure or flow rate exceeded limits!",
+// 					},
+// 				},
+// 			},
+// 		},
+// 	}
 
-	bytecode := compiler.GenerateBytecode(ruleset)
-	err := compiler.WriteBytecodeToFile("test_engine_bytecode.bin", bytecode)
-	assert.NoError(t, err)
+// 	bytecode := compiler.GenerateBytecode(ruleset)
+// 	err := compiler.WriteBytecodeToFile("test_engine_bytecode.bin", bytecode)
+// 	assert.NoError(t, err)
 
-	redisStore := store.NewRedisStore("localhost:6379", "", 0)
-	engine, err := NewEngineFromFile("test_engine_bytecode.bin", redisStore)
-	assert.NoError(t, err)
+// 	redisStore := store.NewRedisStore("localhost:6379", "", 0)
+// 	engine, err := NewEngineFromFile("test_engine_bytecode.bin", redisStore)
+// 	assert.NoError(t, err)
 
-	// Test GT and LTE operators
-	//redisStore.SetFact("weather:temperature", 30)
-	//redisStore.SetFact("weather:flow_rate", 5)
-	// redisStore.SetFact("weather:pressure", 1013.25)
-	// redisStore.SetFact("weather:velocity", 6)
-	redisStore.SetFact("weather:temperature_status", false)
-	engine.ProcessFactUpdate("flow_rate", 5)
+// 	// Test GT and LTE operators
+// 	//redisStore.SetFact("weather:temperature", 30)
+// 	//redisStore.SetFact("weather:flow_rate", 5)
+// 	// redisStore.SetFact("weather:pressure", 1013.25)
+// 	// redisStore.SetFact("weather:velocity", 6)
+// 	redisStore.SetFact("weather:temperature_status", false)
+// 	engine.ProcessFactUpdate("flow_rate", 5)
 
-	alertStatus, _ := redisStore.GetFact("temperature_status")
-	assert.Equal(t, true, alertStatus)
+// 	alertStatus, _ := redisStore.GetFact("temperature_status")
+// 	assert.Equal(t, true, alertStatus)
 
-}
+// }

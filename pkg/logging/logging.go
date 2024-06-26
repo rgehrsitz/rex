@@ -3,6 +3,7 @@
 package logging
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/rs/zerolog"
@@ -45,13 +46,13 @@ func init() {
 //	ConfigureLogger("debug", "file")
 //
 // Note: This function will modify the global logger instance.
-func ConfigureLogger(logLevel, logOutput string) {
+func ConfigureLogger(logLevel, logOutput string) error {
 	zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
 	zerolog.ErrorStackMarshaler = pkgerrors.MarshalStack
 
 	level, err := zerolog.ParseLevel(logLevel)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Invalid log level")
+		return fmt.Errorf("invalid log level: %v", err)
 	}
 	zerolog.SetGlobalLevel(level)
 
@@ -61,10 +62,12 @@ func ConfigureLogger(logLevel, logOutput string) {
 	case "file":
 		file, err := os.Create("logs.txt")
 		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to create log file")
+			return fmt.Errorf("failed to create log file: %v", err)
 		}
 		log.Logger = log.Output(file)
 	default:
-		log.Fatal().Msg("Invalid log output option")
+		return fmt.Errorf("invalid log output option: %s", logOutput)
 	}
+
+	return nil
 }
