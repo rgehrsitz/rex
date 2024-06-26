@@ -96,10 +96,10 @@ func convertConditionOrGroupToNode(cog *ConditionOrGroup) Node {
 func convertValue(value interface{}) interface{} {
 	switch v := value.(type) {
 	case float64:
-		if v == float64(int(v)) {
-			return int(v)
-		}
 		return v
+	case int:
+		//convert int to float
+		return float64(v)
 	case string:
 		return v
 	case bool:

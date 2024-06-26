@@ -4,6 +4,8 @@ package compiler
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -402,4 +404,152 @@ func TestInvalidActionTarget(t *testing.T) {
     }`)
 	_, err := Parse(jsonData)
 	assert.Error(t, err)
+}
+
+func TestAllOperators(t *testing.T) {
+	operators := []string{"EQ", "NEQ", "LT", "LTE", "GT", "GTE"}
+	for _, op := range operators {
+		jsonData := []byte(fmt.Sprintf(`{
+            "rules": [{
+                "name": "test-%s",
+                "conditions": {
+                    "all": [{
+                        "fact": "test",
+                        "operator": "%s",
+                        "value": 10
+                    }]
+                },
+                "actions": [{
+                    "type": "updateStore",
+                    "target": "result",
+                    "value": true
+                }]
+            }]
+        }`, op, op))
+
+		ruleset, err := Parse(jsonData)
+		assert.NoError(t, err)
+		assert.Len(t, ruleset.Rules, 1)
+		assert.Equal(t, op, ruleset.Rules[0].Conditions.All[0].Operator)
+	}
+}
+
+func TestComplexNestedConditions(t *testing.T) {
+	jsonData := []byte(`{
+        "rules": [{
+            "name": "complex-nested",
+            "conditions": {
+                "all": [{
+                    "any": [{
+                        "all": [{
+                            "fact": "a",
+                            "operator": "EQ",
+                            "value": 1
+                        }, {
+                            "fact": "b",
+                            "operator": "GT",
+                            "value": 2
+                        }]
+                    }, {
+                        "any": [{
+                            "fact": "c",
+                            "operator": "LT",
+                            "value": 3
+                        }, {
+                            "fact": "d",
+                            "operator": "CONTAINS",
+                            "value": "test"
+                        }]
+                    }]
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "result",
+                "value": true
+            }]
+        }]
+    }`)
+
+	ruleset, err := Parse(jsonData)
+	assert.NoError(t, err)
+	assert.Len(t, ruleset.Rules, 1)
+	// Add more specific assertions to verify the nested structure
+}
+
+func TestMultipleRules(t *testing.T) {
+	jsonData := []byte(`{
+        "rules": [{
+            "name": "rule1",
+            "priority": 1,
+            "conditions": {
+                "all": [{
+                    "fact": "a",
+                    "operator": "EQ",
+                    "value": 1
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "result1",
+                "value": true
+            }]
+        }, {
+            "name": "rule2",
+            "priority": 2,
+            "conditions": {
+                "all": [{
+                    "fact": "b",
+                    "operator": "GT",
+                    "value": 2
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "result2",
+                "value": true
+            }]
+        }]
+    }`)
+
+	ruleset, err := Parse(jsonData)
+	assert.NoError(t, err)
+	assert.Len(t, ruleset.Rules, 2)
+	assert.Equal(t, "rule1", ruleset.Rules[0].Name)
+	assert.Equal(t, "rule2", ruleset.Rules[1].Name)
+	assert.Equal(t, 1, ruleset.Rules[0].Priority)
+	assert.Equal(t, 2, ruleset.Rules[1].Priority)
+}
+
+func BenchmarkParseLargeRuleset(b *testing.B) {
+	// Generate a large ruleset JSON
+	var rules []string
+	for i := 0; i < 1000; i++ {
+		rule := fmt.Sprintf(`{
+            "name": "rule%d",
+            "priority": %d,
+            "conditions": {
+                "all": [{
+                    "fact": "fact%d",
+                    "operator": "EQ",
+                    "value": %d
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "result%d",
+                "value": true
+            }]
+        }`, i, i, i, i, i)
+		rules = append(rules, rule)
+	}
+	jsonData := []byte(fmt.Sprintf(`{"rules": [%s]}`, strings.Join(rules, ",")))
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := Parse(jsonData)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }
