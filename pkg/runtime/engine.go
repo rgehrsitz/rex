@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
@@ -56,6 +57,7 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
+	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 
 	engine := &Engine{
 		bytecode:            bytecode,
@@ -69,6 +71,10 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	offset := 0
 
 	// Read header
+	if offset+28 > len(bytecode) {
+		return nil, fmt.Errorf("bytecode file too short for header")
+	}
+
 	version := binary.LittleEndian.Uint32(bytecode[offset:])
 	logging.Logger.Debug().Uint32("version", version).Msg("Read bytecode version")
 	offset += 4
@@ -93,9 +99,16 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 
 	// Read rule execution index
 	offset = int(ruleExecIndexOffset)
+	logging.Logger.Debug().Int("offset", offset).Msg("Starting to read rule execution index")
 	for i := 0; i < int(numRules); i++ {
+		if offset+4 > len(bytecode) {
+			return nil, fmt.Errorf("unexpected end of bytecode while reading rule execution index")
+		}
 		nameLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
+		if offset+nameLen+4 > len(bytecode) {
+			return nil, fmt.Errorf("unexpected end of bytecode while reading rule name")
+		}
 		name := string(bytecode[offset : offset+nameLen])
 		offset += nameLen
 		byteOffset := int(binary.LittleEndian.Uint32(bytecode[offset:]))
@@ -168,7 +181,7 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 // If any dependent facts are missing from the store, the corresponding rules are removed from the evaluation process.
 // Finally, the function evaluates each remaining rule that references the updated fact.
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
-	logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
+	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
 	e.Stats.TotalFactsProcessed++
 	e.Stats.LastUpdateTime = time.Now()
@@ -185,7 +198,7 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	// Find all rules that reference the updated fact
 	ruleNames, ok := e.factRuleIndex[factName]
 	if !ok {
-		logging.Logger.Info().Str("factName", factName).Msg("No rules found for the updated fact")
+		logging.Logger.Debug().Str("factName", factName).Msg("No rules found for the updated fact")
 		return
 	}
 
@@ -423,8 +436,12 @@ func (e *Engine) evaluateRule(ruleName string) {
 // compare compares the given `factValue` and `constValue` based on the provided `opcode`.
 // It returns true if the comparison is successful, otherwise false.
 func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opcode) bool {
-	switch opcode {
+	if factValue == nil || constValue == nil {
+		logging.Logger.Warn().Msgf("Nil value encountered in comparison: factValue=%v, constValue=%v", factValue, constValue)
+		return false
+	}
 
+	switch opcode {
 	case compiler.EQ_FLOAT:
 		return factValue.(float64) == constValue.(float64)
 	case compiler.EQ_STRING:
@@ -479,7 +496,7 @@ func (e *Engine) executeAction(action compiler.Action) {
 			return
 		}
 
-		logging.Logger.Info().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in store")
+		logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in store")
 
 		// ****************************************
 		//  If we want to automaticaly trigger a cascading rule(s)
