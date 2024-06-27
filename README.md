@@ -1,4 +1,4 @@
-# REX - Rules Engine eXtended ![REX Logo](rex_logo.svg){: height="50px"}
+# REX - Rules Engine eXtended <img src="rex_logo.svg" height="75px">
 
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 [![Auto Wiki](https://img.shields.io/badge/Auto_Wiki-Mutable.ai-blue)](https://wiki.mutable.ai/rgehrsitz/rex)
