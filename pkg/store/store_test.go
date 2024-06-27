@@ -1,3 +1,5 @@
+// rex/pkg/store/store_test.go
+
 package store
 
 import (
@@ -100,4 +102,65 @@ func TestRedisStoreMGetFacts(t *testing.T) {
 	assert.Equal(t, "example", facts["fact2"].(string))
 	assert.Equal(t, true, facts["fact3"].(bool))
 	assert.Nil(t, facts["non_existent_fact"])
+}
+
+func TestSubscribe(t *testing.T) {
+	store := NewRedisStore("localhost:6379", "", 0)
+
+	pubsub := store.Subscribe("test_channel")
+	assert.NotNil(t, pubsub)
+
+	// Clean up
+	pubsub.Close()
+}
+
+func TestReceiveFacts(t *testing.T) {
+	store := NewRedisStore("localhost:6379", "", 0)
+
+	ch := store.ReceiveFacts()
+	assert.NotNil(t, ch)
+
+	// Clean up
+	store.client.Close()
+}
+
+func TestSetAndPublishFact(t *testing.T) {
+	store := NewRedisStore("localhost:6379", "", 0)
+
+	key := "test:key"
+	value := "test_value"
+
+	err := store.SetAndPublishFact(key, value)
+	assert.NoError(t, err)
+
+	// Verify the fact was set
+	result, err := store.GetFact(key)
+	assert.NoError(t, err)
+	assert.Equal(t, value, result)
+}
+
+func TestSetAndPublishFactWithDifferentTypes(t *testing.T) {
+	store := NewRedisStore("localhost:6379", "", 0)
+
+	testCases := []struct {
+		name  string
+		key   string
+		value interface{}
+	}{
+		{"String", "test:string", "hello"},
+		{"Float", "test:float", 3.14},
+		{"Boolean", "test:bool", true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := store.SetAndPublishFact(tc.key, tc.value)
+			assert.NoError(t, err)
+
+			// Verify the fact was set
+			result, err := store.GetFact(tc.key)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.value, result)
+		})
+	}
 }
