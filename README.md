@@ -384,8 +384,6 @@ Note that the rule spec allows for nested condition groups, as seen in the examp
 
 ## Testing
 
-Prior to running the full unit test suite, ensure that a Redis instance is up and running using the standard Redis port 6379.
-
 To run the tests:
 
 ```bash
