@@ -2,6 +2,7 @@
 
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 [![Auto Wiki](https://img.shields.io/badge/Auto_Wiki-Mutable.ai-blue)](https://wiki.mutable.ai/rgehrsitz/rex)
+[![codecov](https://codecov.io/gh/rgehrsitz/rex/branch/main/graph/badge.svg?token=YOURTOKEN)](https://codecov.io/gh/rgehrsitz/rex)
 
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
 REX is designed to be used in conjunction with a key/value store such as Redis or NATS, where REX subscribes to and receives updates from the key/value store, evaluates the updated value, then updates and publishes applicable results back to the store.
