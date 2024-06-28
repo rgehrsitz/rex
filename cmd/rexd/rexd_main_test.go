@@ -4,11 +4,13 @@ package main
 
 import (
 	"encoding/binary"
-	"io/ioutil"
+	"fmt"
+	"io"
 	"os"
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -54,13 +56,18 @@ func createMockBytecodeFile(filename string) error {
 }
 
 func TestMain(t *testing.T) {
+	// Set up miniredis
+	s, err := miniredis.Run()
+	assert.NoError(t, err)
+	defer s.Close()
+
 	// Create a temporary config file for testing
-	tempFile, err := ioutil.TempFile("", "test_config*.json")
+	tempFile, err := os.CreateTemp("", "test_config*.json")
 	assert.NoError(t, err)
 	defer os.Remove(tempFile.Name())
 
-	// Write some test config data
-	testConfig := `{
+	// Write test config data with miniredis address
+	testConfig := fmt.Sprintf(`{
 		"bytecode_file": "test_bytecode.bin",
 		"logging": {
 			"level": "debug",
@@ -68,7 +75,7 @@ func TestMain(t *testing.T) {
 			"timeFormat": "Unix"
 		},
 		"redis": {
-			"address": "localhost:6379",
+			"address": "%s",
 			"password": "",
 			"database": 0,
 			"channels": ["test_channel"]
@@ -81,7 +88,7 @@ func TestMain(t *testing.T) {
 			"port": 8080,
 			"update_interval": 1
 		}
-	}`
+	}`, s.Addr())
 	_, err = tempFile.Write([]byte(testConfig))
 	assert.NoError(t, err)
 	tempFile.Close()
@@ -123,10 +130,9 @@ func TestMain(t *testing.T) {
 	os.Stderr = oldStderr
 
 	// Read the output
-	out, _ := ioutil.ReadAll(r)
+	out, _ := io.ReadAll(r)
 	output := string(out)
 
 	// Check if the output contains expected messages
 	assert.Contains(t, output, "REX runtime engine started")
-
 }
