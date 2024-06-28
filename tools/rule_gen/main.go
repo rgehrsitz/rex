@@ -70,50 +70,54 @@ var operators = map[string][]string{
 	"string":  {"EQ", "NEQ", "CONTAINS", "NOT_CONTAINS"},
 }
 
-func getRandomFact() (string, string) {
-	channels := make([]string, 0, len(channelFacts))
-	for channel := range channelFacts {
-		channels = append(channels, channel)
+func main() {
+	numRules, outputFile := parseFlags(os.Args[1:])
+	ruleset := generateRuleset(numRules)
+	err := writeRulesetToFile(ruleset, outputFile)
+	if err != nil {
+		fmt.Printf("Error writing ruleset to file: %v\n", err)
+		os.Exit(1)
 	}
-
-	channel := channels[rand.Intn(len(channels))]
-	facts := channelFacts[channel]
-	fact := facts[rand.Intn(len(facts))]
-
-	return channel, fact
+	fmt.Printf("Generated ruleset with %d rules. Saved to %s\n", numRules, outputFile)
 }
 
-func generateValue(factType string) interface{} {
-	switch factType {
-	case "numeric":
-		return gofakeit.Float64Range(-100, 100)
-	case "boolean":
-		return gofakeit.Bool()
-	default:
-		return gofakeit.Word()
-	}
+func parseFlags(args []string) (int, string) {
+	fs := flag.NewFlagSet("rule_gen", flag.ExitOnError)
+	numRules := fs.Int("rules", 1000, "Number of rules to generate")
+	outputFile := fs.String("output", "generated_ruleset.json", "Output file name")
+	fs.Parse(args)
+	return *numRules, *outputFile
 }
 
-func getFactType(fact string) string {
-	numericFacts := []string{"temperature", "humidity", "pressure", "wind_speed", "rainfall", "solar_radiation",
-		"speed", "capacity", "latency", "packet_loss", "bandwidth_usage", "connection_count",
-		"cpu_usage", "memory_usage", "disk_space", "process_count", "uptime", "load_average", "fan_speed",
-		"voltage", "current", "power", "energy_consumption", "power_factor", "frequency", "harmonic_distortion",
-		"ph", "conductivity", "turbidity", "dissolved_oxygen", "flow_rate"}
-
-	booleanFacts := []string{"temperature_warning", "humidity_warning", "fault_status"}
-
-	for _, f := range numericFacts {
-		if f == fact {
-			return "numeric"
-		}
+func generateRuleset(numRules int) Ruleset {
+	gofakeit.Seed(time.Now().UnixNano())
+	ruleset := Ruleset{Rules: make([]Rule, numRules)}
+	for i := range ruleset.Rules {
+		ruleset.Rules[i] = generateRule(i + 1)
 	}
-	for _, f := range booleanFacts {
-		if f == fact {
-			return "boolean"
-		}
+	return ruleset
+}
+
+func generateRule(index int) Rule {
+	var conditions ConditionGroup
+	if rand.Float32() < 0.5 {
+		conditions.All = []Condition{generateCondition(0)}
+	} else {
+		conditions.Any = []Condition{generateCondition(0)}
 	}
-	return "string"
+
+	numActions := rand.Intn(2) + 1
+	actions := make([]Action, numActions)
+	for i := range actions {
+		actions[i] = generateAction()
+	}
+
+	return Rule{
+		Name:       fmt.Sprintf("rule-%d", index),
+		Priority:   rand.Intn(20) + 1,
+		Conditions: conditions,
+		Actions:    actions,
+	}
 }
 
 func generateCondition(depth int) Condition {
@@ -156,53 +160,63 @@ func generateAction() Action {
 	}
 }
 
-func generateRule(index int) Rule {
-	var conditions ConditionGroup
-	if rand.Float32() < 0.5 {
-		conditions.All = []Condition{generateCondition(0)}
-	} else {
-		conditions.Any = []Condition{generateCondition(0)}
+func getRandomFact() (string, string) {
+	channels := make([]string, 0, len(channelFacts))
+	for channel := range channelFacts {
+		channels = append(channels, channel)
 	}
 
-	numActions := rand.Intn(2) + 1
-	actions := make([]Action, numActions)
-	for i := range actions {
-		actions[i] = generateAction()
-	}
+	channel := channels[rand.Intn(len(channels))]
+	facts := channelFacts[channel]
+	fact := facts[rand.Intn(len(facts))]
 
-	return Rule{
-		Name:       fmt.Sprintf("rule-%d", index),
-		Priority:   rand.Intn(20) + 1,
-		Conditions: conditions,
-		Actions:    actions,
+	return channel, fact
+}
+
+func getFactType(fact string) string {
+	numericFacts := []string{"temperature", "humidity", "pressure", "wind_speed", "rainfall", "solar_radiation",
+		"speed", "capacity", "latency", "packet_loss", "bandwidth_usage", "connection_count",
+		"cpu_usage", "memory_usage", "disk_space", "process_count", "uptime", "load_average", "fan_speed",
+		"voltage", "current", "power", "energy_consumption", "power_factor", "frequency", "harmonic_distortion",
+		"ph", "conductivity", "turbidity", "dissolved_oxygen", "flow_rate"}
+
+	booleanFacts := []string{"temperature_warning", "humidity_warning", "fault_status"}
+
+	for _, f := range numericFacts {
+		if f == fact {
+			return "numeric"
+		}
+	}
+	for _, f := range booleanFacts {
+		if f == fact {
+			return "boolean"
+		}
+	}
+	return "string"
+}
+
+func generateValue(factType string) interface{} {
+	switch factType {
+	case "numeric":
+		return gofakeit.Float64Range(-100, 100)
+	case "boolean":
+		return gofakeit.Bool()
+	default:
+		return gofakeit.Word()
 	}
 }
 
-func main() {
-	numRules := flag.Int("rules", 1000, "Number of rules to generate")
-	outputFile := flag.String("output", "generated_ruleset.json", "Output file name")
-	flag.Parse()
-
-	gofakeit.Seed(time.Now().UnixNano())
-
-	ruleset := Ruleset{Rules: make([]Rule, *numRules)}
-	for i := range ruleset.Rules {
-		ruleset.Rules[i] = generateRule(i + 1)
-	}
-
-	file, err := os.Create(*outputFile)
+func writeRulesetToFile(ruleset Ruleset, outputFile string) error {
+	file, err := os.Create(outputFile)
 	if err != nil {
-		fmt.Printf("Error creating file: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error creating file: %v", err)
 	}
 	defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	if err := encoder.Encode(ruleset); err != nil {
-		fmt.Printf("Error encoding JSON: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error encoding JSON: %v", err)
 	}
-
-	fmt.Printf("Generated ruleset with %d rules. Saved to %s\n", *numRules, *outputFile)
+	return nil
 }

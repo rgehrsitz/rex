@@ -1,16 +1,11 @@
 // rex/tools/redis_setup_cli/redis_setup.go
 
-//  This program initializes the Redis database with default values
-//  for the rex system. This includes groups, keys, and values for
-//  each group. It also starts a CLI for modifying values when debugging.
-
 package main
 
 import (
 	"bufio"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
@@ -20,18 +15,19 @@ import (
 var ctx = context.Background()
 
 func main() {
-	rdb := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379",
-	})
-
-	// Initialize pub/sub groups and default keys
+	rdb := connectToRedis("localhost:6379")
 	initializeRedis(rdb)
-
-	// Start CLI for modifying values
 	startCLI(rdb)
 }
 
-func initializeRedis(rdb *redis.Client) {
+func connectToRedis(addr string) *redis.Client {
+	rdb := redis.NewClient(&redis.Options{
+		Addr: addr,
+	})
+	return rdb
+}
+
+func initializeRedis(rdb *redis.Client) error {
 	groups := map[string]map[string]string{
 		"weather": {
 			"temperature": "25.0",
@@ -50,11 +46,12 @@ func initializeRedis(rdb *redis.Client) {
 			err := rdb.Set(ctx, fullKey, value, 0).Err()
 			if err != nil {
 				fmt.Printf("Error setting %s: %v\n", fullKey, err)
-			} else {
-				fmt.Printf("Set %s to %s\n", fullKey, value)
+				return err
 			}
+			fmt.Printf("Set %s to %s\n", fullKey, value)
 		}
 	}
+	return nil
 }
 
 func startCLI(rdb *redis.Client) {
@@ -69,25 +66,36 @@ func startCLI(rdb *redis.Client) {
 			break
 		}
 
-		parts := strings.Split(input, " ")
-		if len(parts) != 3 || parts[0] != "set" {
-			fmt.Println("Invalid command. Use 'set <group:key> <value>'")
-			continue
-		}
-
-		key := parts[1]
-		value := parts[2]
-
-		err := rdb.Set(ctx, key, value, 0).Err()
+		err := processCommand(rdb, input)
 		if err != nil {
-			fmt.Printf("Error setting %s: %v\n", key, err)
-		} else {
-			fmt.Printf("Set %s to %s\n", key, value)
-			// Publish update to the group channel
-			group := strings.Split(key, ":")[0]
-			rdb.Publish(ctx, group, fmt.Sprintf("%s=%s", key, value))
-			log.Printf("Published update to group %s: %s=%s", group, key, value)
-			log.Printf("context: %v", ctx)
+			fmt.Printf("Error: %v\n", err)
 		}
 	}
+}
+
+func processCommand(rdb *redis.Client, input string) error {
+	parts := strings.Split(input, " ")
+	if len(parts) != 3 || parts[0] != "set" {
+		return fmt.Errorf("invalid command. Use 'set <group:key> <value>'")
+	}
+
+	key := parts[1]
+	value := parts[2]
+
+	err := rdb.Set(ctx, key, value, 0).Err()
+	if err != nil {
+		return fmt.Errorf("error setting %s: %v", key, err)
+	}
+
+	fmt.Printf("Set %s to %s\n", key, value)
+
+	// Publish update to the group channel
+	group := strings.Split(key, ":")[0]
+	err = rdb.Publish(ctx, group, fmt.Sprintf("%s=%s", key, value)).Err()
+	if err != nil {
+		return fmt.Errorf("error publishing update: %v", err)
+	}
+
+	fmt.Printf("Published update to group %s: %s=%s\n", group, key, value)
+	return nil
 }
