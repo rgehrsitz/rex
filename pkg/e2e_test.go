@@ -9,10 +9,21 @@ import (
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 )
 
-func setupEngine(t *testing.T, jsonData []byte) *runtime.Engine {
+func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *store.RedisStore) {
+	s, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("Failed to create miniredis: %v", err)
+	}
+
+	redisStore := store.NewRedisStore(s.Addr(), "", 0)
+	return s, redisStore
+}
+
+func setupEngine(t *testing.T, jsonData []byte, redisStore *store.RedisStore) *runtime.Engine {
 	// Parse JSON ruleset
 	ruleset, err := compiler.Parse(jsonData)
 	assert.NoError(t, err)
@@ -24,7 +35,6 @@ func setupEngine(t *testing.T, jsonData []byte) *runtime.Engine {
 	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)
 	assert.NoError(t, err)
 
-	redisStore := store.NewRedisStore("localhost:6379", "", 0)
 	// Create runtime engine from bytecode file
 	engine, err := runtime.NewEngineFromFile(filename, redisStore)
 	assert.NoError(t, err)
@@ -33,8 +43,7 @@ func setupEngine(t *testing.T, jsonData []byte) *runtime.Engine {
 	return engine
 }
 
-func setupPreconditions() *store.RedisStore {
-	redisStore := store.NewRedisStore("localhost:6379", "", 0)
+func setupPreconditions(redisStore *store.RedisStore) {
 	redisStore.SetFact("temperature_status", false)
 	redisStore.SetFact("humidity_status", false)
 	redisStore.SetFact("complex_status", false)
@@ -44,10 +53,12 @@ func setupPreconditions() *store.RedisStore {
 	redisStore.SetFact("temperature", 0.0)
 	redisStore.SetFact("humidity", 0.0)
 	redisStore.SetFact("pressure", 0.0)
-	return redisStore
 }
 
 func TestEndToEnd(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
 	jsonData := []byte(`
 		{
 			"rules": [
@@ -80,37 +91,25 @@ func TestEndToEnd(t *testing.T) {
 		}
 	`)
 
-	// Parse JSON ruleset
-	ruleset, err := compiler.Parse(jsonData)
-	assert.NoError(t, err)
-
-	// Generate bytecode
-	BytecodeFile := compiler.GenerateBytecode(ruleset)
-
-	filename := "e2e_test_bytecode.bin"
-	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)
-	assert.NoError(t, err)
-
-	redisStore := store.NewRedisStore("localhost:6379", "", 0)
-	// Create runtime engine from bytecode file
-	engine, err := runtime.NewEngineFromFile(filename, redisStore)
-	assert.NoError(t, err)
-	assert.NotNil(t, engine)
+	engine := setupEngine(t, jsonData, redisStore)
+	redisStore.SetFact("humidity", 70.0)
+	redisStore.SetFact("temperature", 0.0)
 
 	// Process fact update
 	engine.ProcessFactUpdate("temperature", 30.11)
 
-	testStore := store.NewRedisStore("localhost:6379", "", 0)
-
 	// Verify the fact update
-	facts, _ := testStore.GetFact("temperature_status")
+	facts, _ := redisStore.GetFact("temperature_status")
 	assert.Equal(t, true, facts)
 
 	// Clean up
-	os.Remove(filename)
+	os.Remove("e2e_test_bytecode.bin")
 }
 
 func TestEndToEndWithMultipleRules(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
 	jsonData := []byte(`
 		{
 			"rules": [
@@ -158,81 +157,66 @@ func TestEndToEndWithMultipleRules(t *testing.T) {
 		}
 	`)
 
-	// Parse JSON ruleset
-	ruleset, err := compiler.Parse(jsonData)
-	assert.NoError(t, err)
-
-	// Generate bytecode
-	BytecodeFile := compiler.GenerateBytecode(ruleset)
-
-	filename := "e2e_test_bytecode.bin"
-	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)
-	assert.NoError(t, err)
-
-	redisStore := store.NewRedisStore("localhost:6379", "", 0)
-	// Create runtime engine from bytecode file
-	engine, err := runtime.NewEngineFromFile(filename, redisStore)
-
-	assert.NoError(t, err)
-	assert.NotNil(t, engine)
+	engine := setupEngine(t, jsonData, redisStore)
 
 	// Process fact update
 	engine.ProcessFactUpdate("humi", 59.1)
 
-	testStore := store.NewRedisStore("localhost:6379", "", 0)
-
 	// Verify the fact update
-	fact, _ := testStore.GetFact("temperature_status")
+	fact, _ := redisStore.GetFact("humi_status")
 	assert.Equal(t, true, fact)
 
 	// Clean up
-	os.Remove(filename)
+	os.Remove("e2e_test_bytecode.bin")
 }
 
 func TestComplexConditions(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
 	jsonData := []byte(`
-{
-  "rules": [
-    {
-      "name": "rule-1",
-      "priority": 10,
-      "conditions": {
-        "any": [
-          {
-            "fact": "pressure",
-            "operator": "EQ",
-            "value": 1013
-          },
-          {
-            "all": [
-              {
-                "fact": "temperature",
-                "operator": "GT",
-                "value": 30.1
-              },
-              {
-                "fact": "humidity",
-                "operator": "LT",
-                "value": 60
-              }
-            ]
-          }
-        ]
-      },
-      "actions": [
-        {
-          "type": "updateStore",
-          "target": "complex_status",
-          "value": true
-        }
-      ]
-    }
-  ]
-}
+		{
+			"rules": [
+				{
+					"name": "rule-1",
+					"priority": 10,
+					"conditions": {
+						"any": [
+							{
+								"fact": "pressure",
+								"operator": "EQ",
+								"value": 1013
+							},
+							{
+								"all": [
+									{
+										"fact": "temperature",
+										"operator": "GT",
+										"value": 30.1
+									},
+									{
+										"fact": "humidity",
+										"operator": "LT",
+										"value": 60
+									}
+								]
+							}
+						]
+					},
+					"actions": [
+						{
+							"type": "updateStore",
+							"target": "complex_status",
+							"value": true
+						}
+					]
+				}
+			]
+		}
 	`)
 
-	redisStore := setupPreconditions()
-	engine := setupEngine(t, jsonData)
+	setupPreconditions(redisStore)
+	engine := setupEngine(t, jsonData, redisStore)
 
 	// Set initial values for the facts
 	redisStore.SetFact("temperature", 30.2)
@@ -247,9 +231,16 @@ func TestComplexConditions(t *testing.T) {
 	// Verify update in the store
 	complexStatus, _ := redisStore.GetFact("complex_status")
 	assert.Equal(t, true, complexStatus)
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
 }
 
 func TestDifferentActions(t *testing.T) {
+
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
 	jsonData := []byte(`
 		{
 			"rules": [
@@ -282,8 +273,7 @@ func TestDifferentActions(t *testing.T) {
 		}
 	`)
 
-	redisStore := setupPreconditions()
-	engine := setupEngine(t, jsonData)
+	engine := setupEngine(t, jsonData, redisStore)
 
 	// Set initial values for the facts
 	redisStore.SetFact("temperature", 0.2)
@@ -297,6 +287,9 @@ func TestDifferentActions(t *testing.T) {
 
 	alert, _ := redisStore.GetFact("alert")
 	assert.Equal(t, "high temperature", alert)
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
 }
 
 // // This test is intentionally failing for now due to the chaining of rules being turned off
@@ -379,6 +372,9 @@ func TestDifferentActions(t *testing.T) {
 // }
 
 func TestNoRulesMatching(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
 	jsonData := []byte(`
 		{
 			"rules": [
@@ -406,8 +402,8 @@ func TestNoRulesMatching(t *testing.T) {
 		}
 	`)
 
-	redisStore := setupPreconditions()
-	engine := setupEngine(t, jsonData)
+	engine := setupEngine(t, jsonData, redisStore)
+	setupPreconditions(redisStore)
 
 	// Set initial values for the facts
 	redisStore.SetFact("temperature", 30.11)
@@ -418,9 +414,15 @@ func TestNoRulesMatching(t *testing.T) {
 	// Verify no updates in the store
 	facts, _ := redisStore.GetFact("temperature_status")
 	assert.Equal(t, false, facts)
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
 }
 
 func TestMultipleRulesMatching(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
 	jsonData := []byte(`
 		{
 			"rules": [
@@ -468,8 +470,7 @@ func TestMultipleRulesMatching(t *testing.T) {
 		}
 	`)
 
-	redisStore := setupPreconditions()
-	engine := setupEngine(t, jsonData)
+	engine := setupEngine(t, jsonData, redisStore)
 
 	// Set initial values for the facts
 	redisStore.SetFact("temperature", 30.11)
@@ -485,4 +486,7 @@ func TestMultipleRulesMatching(t *testing.T) {
 
 	humidityStatus, _ := redisStore.GetFact("humidity_status")
 	assert.Equal(t, true, humidityStatus)
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
 }
