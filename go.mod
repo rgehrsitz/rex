@@ -1,6 +1,6 @@
 module rgehrsitz/rex
 
-go 1.22.2
+go 1.22
 
 require (
 	github.com/alicebob/miniredis/v2 v2.33.0
