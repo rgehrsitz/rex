@@ -1,3 +1,5 @@
+// rex/tools/redis_setup_cli/redis_setup_test.go
+
 package main
 
 import (

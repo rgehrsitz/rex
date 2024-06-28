@@ -1,3 +1,5 @@
+// rex/tools/rule_gen/main.go
+
 package main
 
 import (

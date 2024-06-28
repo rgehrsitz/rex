@@ -1,3 +1,5 @@
+// rex/pkg/logging/logging_test.go
+
 package logging
 
 import (

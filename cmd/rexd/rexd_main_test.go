@@ -1,3 +1,5 @@
+// rex/cmd/rexd/rexd_main_test.go
+
 package main
 
 import (
