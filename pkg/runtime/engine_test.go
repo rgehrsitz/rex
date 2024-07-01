@@ -180,3 +180,133 @@ func TestCompare(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessFactUpdateSimpleRule(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	engine := createTestEngine(redisStore, `{
+        "rules": [{
+            "name": "simple_rule",
+            "conditions": {
+                "all": [{
+                    "fact": "temperature",
+                    "operator": "GT",
+                    "value": 30
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "status",
+                "value": "hot"
+            }]
+        }]
+    }`)
+
+	engine.ProcessFactUpdate("temperature", 35)
+
+	status, err := redisStore.GetFact("status")
+	assert.NoError(t, err)
+	assert.Equal(t, "hot", status)
+}
+
+func TestProcessFactUpdateComplexRule(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	engine := createTestEngine(redisStore, `{
+        "rules": [{
+            "name": "complex_rule",
+            "conditions": {
+                "all": [
+                    {
+                        "fact": "temperature",
+                        "operator": "GT",
+                        "value": 30
+                    },
+                    {
+                        "any": [
+                            {
+                                "fact": "humidity",
+                                "operator": "LT",
+                                "value": 50
+                            },
+                            {
+                                "fact": "pressure",
+                                "operator": "GT",
+                                "value": 1000
+                            }
+                        ]
+                    }
+                ]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "status",
+                "value": "alert"
+            }]
+        }]
+    }`)
+
+	// Initialize Redis store with initial facts
+	initialFacts := map[string]interface{}{
+		"temperature": 25.0,
+		"humidity":    49.0,
+		"pressure":    900.0,
+		"status":      "",
+	}
+	for k, v := range initialFacts {
+		redisStore.SetFact(k, v)
+	}
+
+	// Test case 1: Should trigger the rule
+	t.Log("Test case 1: Should trigger the rule")
+	engine.ProcessFactUpdate("temperature", 35.0)
+
+	status, err := redisStore.GetFact("status")
+	assert.NoError(t, err)
+	assert.Equal(t, "alert", status, "Rule should have been triggered")
+
+	// Reset status in Redis
+	redisStore.SetFact("status", "")
+	redisStore.SetFact("temperature", 35)
+	redisStore.SetFact("humidity", 60)
+	redisStore.SetFact("pressure", 900)
+
+	// Test case 2: Should trigger the rule with different conditions
+	t.Log("Test case 2: Should trigger the rule with different conditions")
+	engine.ProcessFactUpdate("humidity", 30.0)
+
+	status, err = redisStore.GetFact("status")
+	assert.NoError(t, err)
+	assert.Equal(t, "alert", status, "Rule should have been triggered")
+
+	// Test case 3: Should not trigger the rule
+	t.Log("Test case 3: Should not trigger the rule")
+	redisStore.SetFact("status", "")
+	engine.ProcessFactUpdate("pressure", 900.0)
+
+	status, err = redisStore.GetFact("status")
+	assert.NoError(t, err)
+	assert.Equal(t, "", status, "Rule should not have been triggered")
+}
+
+// Helper function to create a test engine
+func createTestEngine(redisStore *store.RedisStore, jsonRuleset string) *Engine {
+	ruleset, _ := compiler.Parse([]byte(jsonRuleset))
+	bytecodeFile := compiler.GenerateBytecode(ruleset)
+
+	filename := "test_bytecode.bin"
+	compiler.WriteBytecodeToFile(filename, bytecodeFile)
+	defer os.Remove(filename)
+
+	engine, _ := NewEngineFromFile(filename, redisStore)
+
+	// Synchronize engine's fact store with Redis store
+	facts, _ := redisStore.MGetFacts("temperature", "humidity", "pressure", "status")
+	for k, v := range facts {
+		engine.Facts[k] = v
+	}
+
+	return engine
+}

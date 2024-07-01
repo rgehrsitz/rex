@@ -276,8 +276,11 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 
 	// Evaluate each rule
 	for _, ruleName := range ruleNames {
+		logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
 		e.evaluateRule(ruleName)
 	}
+
+	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Finished processing fact update")
 }
 
 // evaluateRule evaluates a rule with the given ruleName.

@@ -490,3 +490,77 @@ func TestMultipleRulesMatching(t *testing.T) {
 	// Clean up
 	os.Remove("e2e_test_bytecode.bin")
 }
+
+func TestEndToEndComplexRuleChaining(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	jsonData := []byte(`
+    {
+        "rules": [
+            {
+                "name": "temperature_rule",
+                "conditions": {
+                    "all": [
+                        {
+                            "fact": "temperature",
+                            "operator": "GT",
+                            "value": 30
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "type": "updateStore",
+                        "target": "temperature_status",
+                        "value": "high"
+                    }
+                ]
+            },
+            {
+                "name": "alert_rule",
+                "conditions": {
+                    "all": [
+                        {
+                            "fact": "temperature_status",
+                            "operator": "EQ",
+                            "value": "high"
+                        },
+                        {
+                            "fact": "humidity",
+                            "operator": "GT",
+                            "value": 70
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "type": "updateStore",
+                        "target": "alert",
+                        "value": "high_temp_and_humidity"
+                    }
+                ]
+            }
+        ]
+    }`)
+
+	engine := setupEngine(t, jsonData, redisStore)
+
+	// Set initial values
+	redisStore.SetFact("temperature", 25)
+	redisStore.SetFact("humidity", 60)
+
+	// Trigger the first rule
+	engine.ProcessFactUpdate("temperature", 35)
+
+	// Check intermediate result
+	tempStatus, _ := redisStore.GetFact("temperature_status")
+	assert.Equal(t, "high", tempStatus)
+
+	// Trigger the second rule
+	engine.ProcessFactUpdate("humidity", 75)
+
+	// Check final result
+	alert, _ := redisStore.GetFact("alert")
+	assert.Equal(t, "high_temp_and_humidity", alert)
+}

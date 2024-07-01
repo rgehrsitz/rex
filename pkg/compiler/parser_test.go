@@ -191,10 +191,49 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "High temperature and low humidity or high pressure detected", ruleset.Rules[0].Actions[0].Value)
 }
 
-func TestInvalidJSON(t *testing.T) {
-	jsonData := []byte(`{`)
-	_, err := Parse(jsonData)
+func TestParseInvalidJSON(t *testing.T) {
+	invalidJSON := []byte(`{"rules": [{"name": "invalid_rule",}]}`)
+	_, err := Parse(invalidJSON)
 	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid JSON format")
+}
+
+func TestParseInvalidRuleStructure(t *testing.T) {
+	invalidRule := []byte(`{
+        "rules": [{
+            "name": "invalid_rule",
+            "conditions": {
+                "invalid": [{"fact": "temperature", "operator": "GT", "value": 30}]
+            },
+            "actions": [{"type": "updateStore", "target": "status", "value": true}]
+        }]
+    }`)
+	_, err := Parse(invalidRule)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid condition group")
+}
+
+func TestParseNestedConditions(t *testing.T) {
+	nestedConditions := []byte(`{
+        "rules": [{
+            "name": "nested_rule",
+            "conditions": {
+                "all": [
+                    {"fact": "temperature", "operator": "GT", "value": 30},
+                    {"any": [
+                        {"fact": "humidity", "operator": "LT", "value": 50},
+                        {"fact": "pressure", "operator": "GT", "value": 1000}
+                    ]}
+                ]
+            },
+            "actions": [{"type": "updateStore", "target": "status", "value": true}]
+        }]
+    }`)
+	ruleset, err := Parse(nestedConditions)
+	assert.NoError(t, err)
+	assert.Len(t, ruleset.Rules, 1)
+	assert.Len(t, ruleset.Rules[0].Conditions.All, 2)
+	assert.Len(t, ruleset.Rules[0].Conditions.All[1].Any, 2)
 }
 
 func TestMissingRules(t *testing.T) {

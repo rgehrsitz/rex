@@ -414,3 +414,104 @@ func TestBoolToBytes(t *testing.T) {
 	assert.Equal(t, []byte{1}, boolToBytes(true))
 	assert.Equal(t, []byte{0}, boolToBytes(false))
 }
+
+func TestGenerateBytecodeSimpleRule(t *testing.T) {
+	ruleset := &Ruleset{
+		Rules: []Rule{
+			{
+				Name: "simple_rule",
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{
+						{
+							Fact:     "temperature",
+							Operator: "GT",
+							Value:    30.0,
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Type:   "updateStore",
+						Target: "status",
+						Value:  true,
+					},
+				},
+			},
+		},
+	}
+
+	bytecodeFile := GenerateBytecode(ruleset)
+
+	assert.NotNil(t, bytecodeFile)
+	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
+	assert.NotEmpty(t, bytecodeFile.Instructions)
+	assert.Len(t, bytecodeFile.RuleExecIndex, 1)
+	assert.Equal(t, "simple_rule", bytecodeFile.RuleExecIndex[0].RuleName)
+}
+
+func TestGenerateBytecodeComplexRule(t *testing.T) {
+	ruleset := &Ruleset{
+		Rules: []Rule{
+			{
+				Name: "complex_rule",
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{
+						{
+							Fact:     "temperature",
+							Operator: "GT",
+							Value:    30.0,
+						},
+						{
+							Any: []*ConditionOrGroup{
+								{
+									Fact:     "humidity",
+									Operator: "LT",
+									Value:    50.0,
+								},
+								{
+									Fact:     "pressure",
+									Operator: "GT",
+									Value:    1000.0,
+								},
+							},
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Type:   "updateStore",
+						Target: "status",
+						Value:  true,
+					},
+				},
+			},
+		},
+	}
+
+	bytecodeFile := GenerateBytecode(ruleset)
+
+	assert.NotNil(t, bytecodeFile)
+	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
+	assert.NotEmpty(t, bytecodeFile.Instructions)
+	assert.Len(t, bytecodeFile.RuleExecIndex, 1)
+	assert.Equal(t, "complex_rule", bytecodeFile.RuleExecIndex[0].RuleName)
+
+	// Check for the presence of specific opcodes
+	opcodes := extractOpcodes(bytecodeFile.Instructions)
+	assert.Contains(t, opcodes, LOAD_FACT_FLOAT)
+	assert.Contains(t, opcodes, GT_FLOAT)
+	assert.Contains(t, opcodes, LT_FLOAT)
+	assert.Contains(t, opcodes, JUMP_IF_FALSE)
+	assert.Contains(t, opcodes, ACTION_START)
+}
+
+// Helper function to extract opcodes from bytecode
+func extractOpcodes(instructions []byte) []Opcode {
+	var opcodes []Opcode
+	for _, instruction := range instructions {
+		opcodes = append(opcodes, Opcode(instruction))
+	}
+	return opcodes
+}
