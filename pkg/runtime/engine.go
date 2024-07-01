@@ -4,7 +4,6 @@ package runtime
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
@@ -55,7 +54,7 @@ func (e *Engine) GetStats() map[string]interface{} {
 func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	bytecode, err := os.ReadFile(filename)
 	if err != nil {
-		return nil, err
+		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to read bytecode file", err, map[string]interface{}{"filename": filename})
 	}
 	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 
@@ -72,9 +71,8 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 
 	// Read header
 	if offset+28 > len(bytecode) {
-		return nil, fmt.Errorf("bytecode file too short for header")
+		return nil, logging.NewError(logging.ErrorTypeRuntime, "Bytecode file too short for header", nil, nil)
 	}
-
 	version := binary.LittleEndian.Uint32(bytecode[offset:])
 	logging.Logger.Debug().Uint32("version", version).Msg("Read bytecode version")
 	offset += 4
@@ -102,12 +100,12 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	logging.Logger.Debug().Int("offset", offset).Msg("Starting to read rule execution index")
 	for i := 0; i < int(numRules); i++ {
 		if offset+4 > len(bytecode) {
-			return nil, fmt.Errorf("unexpected end of bytecode while reading rule execution index")
+			return nil, logging.NewError(logging.ErrorTypeRuntime, "Unexpected end of bytecode while reading rule execution index", nil, nil)
 		}
 		nameLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
 		if offset+nameLen+4 > len(bytecode) {
-			return nil, fmt.Errorf("unexpected end of bytecode while reading rule name")
+			return nil, logging.NewError(logging.ErrorTypeRuntime, "Unexpected end of bytecode while reading rule name", nil, nil)
 		}
 		name := string(bytecode[offset : offset+nameLen])
 		offset += nameLen
