@@ -195,7 +195,7 @@ func TestParseInvalidJSON(t *testing.T) {
 	invalidJSON := []byte(`{"rules": [{"name": "invalid_rule",}]}`)
 	_, err := Parse(invalidJSON)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid JSON format")
+	assert.Contains(t, err.Error(), "Failed to unmarshal JSON data")
 }
 
 func TestParseInvalidRuleStructure(t *testing.T) {
@@ -210,7 +210,7 @@ func TestParseInvalidRuleStructure(t *testing.T) {
     }`)
 	_, err := Parse(invalidRule)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid condition group")
+	assert.Contains(t, err.Error(), "Invalid rule")
 }
 
 func TestParseNestedConditions(t *testing.T) {
@@ -620,7 +620,7 @@ func TestValidateRule(t *testing.T) {
 				},
 				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
 			},
-			expectedErr: "rule name is required",
+			expectedErr: "COMPILE: Rule name is required",
 		},
 		{
 			name: "Negative Priority",
@@ -632,7 +632,7 @@ func TestValidateRule(t *testing.T) {
 				},
 				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
 			},
-			expectedErr: "rule priority must be non-negative",
+			expectedErr: "COMPILE: Rule priority must be non-negative",
 		},
 		{
 			name: "Empty Conditions",
@@ -642,7 +642,7 @@ func TestValidateRule(t *testing.T) {
 				Conditions: ConditionGroup{},
 				Actions:    []Action{{Type: "updateStore", Target: "alarm", Value: true}},
 			},
-			expectedErr: "invalid condition group: empty condition group",
+			expectedErr: "COMPILE: Invalid condition group",
 		},
 		{
 			name: "No Actions",
@@ -654,7 +654,7 @@ func TestValidateRule(t *testing.T) {
 				},
 				Actions: []Action{},
 			},
-			expectedErr: "at least one action is required",
+			expectedErr: "COMPILE: At least one action is required",
 		},
 	}
 
@@ -684,22 +684,22 @@ func TestValidateConditionOrGroup(t *testing.T) {
 		{
 			name:        "Missing Fact",
 			cog:         &ConditionOrGroup{Operator: "GT", Value: 30},
-			expectedErr: "empty or missing fact field",
+			expectedErr: "COMPILE: Empty or missing fact field",
 		},
 		{
 			name:        "Invalid Operator",
 			cog:         &ConditionOrGroup{Fact: "temperature", Operator: "INVALID", Value: 30},
-			expectedErr: "invalid condition operator 'INVALID'",
+			expectedErr: "COMPILE: Invalid condition operator",
 		},
 		{
 			name:        "Missing Value",
 			cog:         &ConditionOrGroup{Fact: "temperature", Operator: "GT"},
-			expectedErr: "invalid condition value '<nil>' for operator 'GT'",
+			expectedErr: "COMPILE: Invalid condition value for operator",
 		},
 		{
 			name:        "Invalid Value Type",
 			cog:         &ConditionOrGroup{Fact: "temperature", Operator: "GT", Value: "not a number"},
-			expectedErr: "invalid condition value 'not a number' for operator 'GT'",
+			expectedErr: "COMPILE: Invalid condition value for operator",
 		},
 		{
 			name: "Valid Nested All",
@@ -724,7 +724,7 @@ func TestValidateConditionOrGroup(t *testing.T) {
 		{
 			name:        "Nil Condition",
 			cog:         nil,
-			expectedErr: "nil condition or group received",
+			expectedErr: "COMPILE: Nil condition or group received",
 		},
 	}
 
@@ -754,22 +754,22 @@ func TestValidateAction(t *testing.T) {
 		{
 			name:           "Nil Action",
 			action:         nil,
-			expectedErrMsg: "nil action received",
+			expectedErrMsg: "Nil action received",
 		},
 		{
 			name:           "Missing Type",
 			action:         &Action{Target: "alarm", Value: true},
-			expectedErrMsg: "empty or missing type field",
+			expectedErrMsg: "Empty or missing type field",
 		},
 		{
 			name:           "Missing Target",
 			action:         &Action{Type: "updateStore", Value: true},
-			expectedErrMsg: "empty or missing target field",
+			expectedErrMsg: "Empty or missing target field",
 		},
 		{
 			name:           "Invalid Value Type",
 			action:         &Action{Type: "updateStore", Target: "alarm", Value: make(chan int)},
-			expectedErrMsg: "invalid action value",
+			expectedErrMsg: "Invalid action value",
 		},
 	}
 

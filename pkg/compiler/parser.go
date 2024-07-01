@@ -4,8 +4,6 @@ package compiler
 
 import (
 	"encoding/json"
-	"errors"
-	"fmt"
 	"strconv"
 
 	"rgehrsitz/rex/pkg/logging"
@@ -13,82 +11,67 @@ import (
 
 // Parse parses the provided JSON data and returns a pointer to a Ruleset and an error.
 func Parse(jsonData []byte) (*Ruleset, error) {
-	logging.Logger.Debug().Str("jsonData", string(jsonData)).Msg("Starting to parse JSON data")
 	var ruleset Ruleset
 	err := json.Unmarshal(jsonData, &ruleset)
 	if err != nil {
-		logging.Logger.Error().Err(err).Msg("Failed to unmarshal JSON data")
-		return nil, fmt.Errorf("invalid JSON format: %v", err)
+		return nil, logging.NewError(logging.ErrorTypeParse, "Failed to unmarshal JSON data", err, nil)
 	}
 	if len(ruleset.Rules) == 0 {
-		return nil, errors.New("missing rules field")
+		return nil, logging.NewError(logging.ErrorTypeParse, "Missing rules field", nil, nil)
 	}
 	for i, rule := range ruleset.Rules {
 		if err := validateRule(&rule); err != nil {
-			logging.Logger.Error().Err(err).Str("rule", rule.Name).Msg("Invalid rule")
-			return nil, fmt.Errorf("invalid rule '%s': %v", rule.Name, err)
+			return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid rule", err, map[string]interface{}{"rule_name": rule.Name})
 		}
 		ruleset.Rules[i] = rule
 
-		// Add validation for actions
 		for j, action := range rule.Actions {
 			if err := validateAction(&action); err != nil {
-				logging.Logger.Error().Err(err).Str("rule", rule.Name).Str("action", action.Type).Msg("Invalid action")
-				return nil, fmt.Errorf("invalid action '%s' in rule '%s': %v", action.Type, rule.Name, err)
+				return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid action", err, map[string]interface{}{"rule_name": rule.Name, "action_type": action.Type})
 			}
 			rule.Actions[j] = action
 		}
 	}
 
-	//print the parsed ruleset
 	logging.Logger.Debug().Interface("ruleset", ruleset).Msg("Parsed JSON data")
 	return &ruleset, nil
 }
 
 // validateRule validates a rule and returns an error if any validation fails.
 func validateRule(rule *Rule) error {
-	// Basic rule validations
 	logging.Logger.Debug().Str("rule", rule.Name).Msg("Validating rule")
 	if rule.Name == "" {
-		return errors.New("rule name is required")
+		return logging.NewError(logging.ErrorTypeCompile, "Rule name is required", nil, nil)
 	}
 	if rule.Priority < 0 {
-		return errors.New("rule priority must be non-negative")
+		return logging.NewError(logging.ErrorTypeCompile, "Rule priority must be non-negative", nil, map[string]interface{}{"rule_name": rule.Name})
 	}
-	// Start group validation and reordering
 	if err := validateAndOrderConditionGroup(&rule.Conditions); err != nil {
-		return fmt.Errorf("invalid condition group: %v", err)
+		return logging.NewError(logging.ErrorTypeCompile, "Invalid condition group", err, map[string]interface{}{"rule_name": rule.Name})
 	}
-	// Actions validation remains the same
 	if len(rule.Actions) == 0 {
-		return errors.New("at least one action is required")
+		return logging.NewError(logging.ErrorTypeCompile, "At least one action is required", nil, map[string]interface{}{"rule_name": rule.Name})
 	}
-	// Fact validations remain the same
 	return nil
 }
 
-// validateAndOrderConditionGroup validates and orders a condition group.
 func validateAndOrderConditionGroup(cg *ConditionGroup) error {
-	// Log for debugging
 	logging.Logger.Debug().Interface("All", cg.All).Interface("Any", cg.Any).Msg("Validating and ordering condition group")
-	// Check if the entire group is logically empty
 	if len(cg.All) == 0 && len(cg.Any) == 0 {
 		logging.Logger.Error().Msg("Empty condition group detected")
-		return errors.New("empty condition group")
+		return logging.NewError(logging.ErrorTypeCompile, "Empty condition group", nil, nil)
 	}
 
-	// Validate and order the conditions and nested groups
-	orderedAll, err := orderConditionsAndGroups(cg.All)
+	var err error
+	cg.All, err = orderConditionsAndGroups(cg.All)
 	if err != nil {
 		return err
 	}
-	cg.All = orderedAll
 
-	orderedAny, err := orderConditionsAndGroups(cg.Any)
+	cg.Any, err = orderConditionsAndGroups(cg.Any)
 	if err != nil {
 		return err
 	}
-	cg.Any = orderedAny
 
 	return nil
 }
@@ -113,7 +96,6 @@ func orderConditionsAndGroups(cogs []*ConditionOrGroup) ([]*ConditionOrGroup, er
 		}
 	}
 
-	// Return ordered list with conditions first, followed by nested groups
 	return append(conditions, nestedGroups...), nil
 }
 
@@ -122,42 +104,38 @@ func isCondition(cog *ConditionOrGroup) bool {
 	return cog.Fact != "" && cog.Operator != "" && cog.Value != nil
 }
 
-// validateConditionOrGroup validates a ConditionOrGroup object.
 func validateConditionOrGroup(cog *ConditionOrGroup) error {
 	logging.Logger.Debug().Interface("ConditionOrGroup", cog).Msg("Validating condition or group")
 	if cog == nil {
-		return errors.New("nil condition or group received")
+		return logging.NewError(logging.ErrorTypeCompile, "Nil condition or group received", nil, nil)
 	}
 
 	if len(cog.All) == 0 && len(cog.Any) == 0 {
 		if cog.Fact == "" {
-			return errors.New("empty or missing fact field")
+			return logging.NewError(logging.ErrorTypeCompile, "Empty or missing fact field", nil, nil)
 		} else if !isFactValid(cog.Fact) {
-			return fmt.Errorf("invalid condition fact '%s'", cog.Fact)
+			return logging.NewError(logging.ErrorTypeCompile, "Invalid condition fact", nil, map[string]interface{}{"fact": cog.Fact})
 		}
 
 		if cog.Operator == "" {
-			return errors.New("empty or missing operator field")
+			return logging.NewError(logging.ErrorTypeCompile, "Empty or missing operator field", nil, nil)
 		} else if !isOperatorValid(cog.Operator) {
-			return fmt.Errorf("invalid condition operator '%s'", cog.Operator)
+			return logging.NewError(logging.ErrorTypeCompile, "Invalid condition operator", nil, map[string]interface{}{"operator": cog.Operator})
 		}
 
 		if cog.Value == "" {
-			return fmt.Errorf("invalid condition value '%v'", cog.Value)
+			return logging.NewError(logging.ErrorTypeCompile, "Invalid condition value", nil, map[string]interface{}{"value": cog.Value})
 		} else if !isValueValid(cog.Operator, cog.Value) {
-			return fmt.Errorf("invalid condition value '%v' for operator '%s'", cog.Value, cog.Operator)
+			return logging.NewError(logging.ErrorTypeCompile, "Invalid condition value for operator", nil, map[string]interface{}{"value": cog.Value, "operator": cog.Operator})
 		}
 	}
 
-	// Otherwise, validate as a group
-	// Validate 'All' nested groups
 	for _, subgroup := range cog.All {
 		if err := validateConditionOrGroup(subgroup); err != nil {
 			return err
 		}
 	}
 
-	// Validate 'Any' nested groups
 	for _, subgroup := range cog.Any {
 		if err := validateConditionOrGroup(subgroup); err != nil {
 			return err
@@ -167,23 +145,21 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 	return nil
 }
 
-// validateAction validates the given action.
 func validateAction(action *Action) error {
 	if action != nil {
 		logging.Logger.Debug().Str("action", action.Type).Msg("Validating action")
 	}
 	if action == nil {
-		return errors.New("nil action received")
+		return logging.NewError(logging.ErrorTypeCompile, "Nil action received", nil, nil)
 	}
 	if action.Type == "" {
-		return errors.New("empty or missing type field")
+		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing type field", nil, nil)
 	}
-	// Add checks for valid action types, targets, and values
 	if action.Target == "" {
-		return errors.New("empty or missing target field")
+		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing target field", nil, nil)
 	}
 	if !isActionValueValid(action.Type, action.Value) {
-		return fmt.Errorf("invalid action value '%v' for action type '%s'", action.Value, action.Type)
+		return logging.NewError(logging.ErrorTypeCompile, "Invalid action value for action type", nil, map[string]interface{}{"value": action.Value, "action_type": action.Type})
 	}
 	return nil
 }

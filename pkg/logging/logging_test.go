@@ -54,7 +54,7 @@ func TestConfigureLogger(t *testing.T) {
 			name:          "Invalid level returns error",
 			logLevel:      "invalid",
 			logOutput:     "console",
-			expectedError: "invalid log level",
+			expectedError: "Invalid log level",
 		},
 		{
 			name:      "Debug level to file",
@@ -70,7 +70,7 @@ func TestConfigureLogger(t *testing.T) {
 			name:          "Invalid output option returns error",
 			logLevel:      "info",
 			logOutput:     "invalid",
-			expectedError: "invalid log output option",
+			expectedError: "Invalid log output option",
 		},
 	}
 
