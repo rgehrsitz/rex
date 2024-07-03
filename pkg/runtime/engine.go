@@ -171,13 +171,6 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 	return engine, nil
 }
 
-// ProcessFactUpdate updates the fact value in the engine's store and evaluates rules that reference the updated fact.
-// It takes the fact name and the new fact value as parameters.
-// If the fact value is an integer or float32, it is converted to float64 before updating the store.
-// If the fact value is of any other type, it is stored as is.
-// The function also retrieves any dependent facts from the KV store and updates the local fact store accordingly.
-// If any dependent facts are missing from the store, the corresponding rules are removed from the evaluation process.
-// Finally, the function evaluates each remaining rule that references the updated fact.
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
@@ -275,19 +268,18 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	// Evaluate each rule
 	for _, ruleName := range ruleNames {
 		logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
-		e.evaluateRule(ruleName)
+		err := e.evaluateRule(ruleName)
+		if err != nil {
+			logging.Logger.Error().Err(err).Str("ruleName", ruleName).Msg("Failed to evaluate rule")
+			// Handle the error as needed, e.g., stop processing further rules
+			return
+		}
 	}
 
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Finished processing fact update")
 }
 
-// evaluateRule evaluates a rule with the given ruleName.
-// It searches for the rule in the ruleExecutionIndex and executes the corresponding bytecode instructions.
-// The function logs debug messages for each opcode encountered during execution.
-// If the rule is not found in the ruleExecutionIndex, a warning message is logged and the function returns.
-// The function takes into account facts and constants loaded from the bytecode and performs comparisons and jumps based on the opcode instructions.
-// When an ACTION_END opcode is encountered, the function executes the action associated with the rule.
-func (e *Engine) evaluateRule(ruleName string) {
+func (e *Engine) evaluateRule(ruleName string) error {
 	logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
 
 	e.Stats.TotalRulesProcessed++
@@ -303,8 +295,9 @@ func (e *Engine) evaluateRule(ruleName string) {
 	}
 
 	if !found {
-		logging.Logger.Warn().Str("ruleName", ruleName).Msg("Rule not found in ruleExecutionIndex")
-		return
+		err := logging.NewError(logging.ErrorTypeRuntime, "Rule not found in ruleExecutionIndex", nil, map[string]interface{}{"ruleName": ruleName})
+		logging.Logger.Warn().Err(err).Msg("Rule not found")
+		return err
 	}
 
 	logging.Logger.Debug().Str("ruleName", ruleName).Int("offset", ruleOffset).Msg("Found rule in ruleExecutionIndex")
@@ -333,7 +326,7 @@ func (e *Engine) evaluateRule(ruleName string) {
 			continue
 		case compiler.RULE_END:
 			logging.Logger.Debug().Msg("Encountered RULE_END opcode")
-			return
+			return nil
 		case compiler.LOAD_FACT_FLOAT:
 			nameLen := int(e.bytecode[offset])
 			offset++
@@ -412,7 +405,11 @@ func (e *Engine) evaluateRule(ruleName string) {
 			logging.Logger.Debug().Msg("Encountered ACTION_START opcode")
 		case compiler.ACTION_END:
 			logging.Logger.Debug().Msg("Encountered ACTION_END opcode")
-			e.executeAction(action)
+			err := e.executeAction(action)
+			if err != nil {
+				logging.Logger.Error().Err(err).Msg("Failed to execute action")
+				return err
+			}
 		case compiler.LABEL:
 			offset += 4
 			logging.Logger.Debug().Msg("Encountered LABEL opcode")
@@ -429,9 +426,12 @@ func (e *Engine) evaluateRule(ruleName string) {
 			offset += nameLen
 			logging.Logger.Debug().Str("actionTarget", action.Target).Msg("Encountered ACTION_TARGET opcode")
 		default:
-			logging.Logger.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown opcode")
+			err := logging.NewError(logging.ErrorTypeRuntime, "Unknown opcode encountered", nil, map[string]interface{}{"opcode": opcode})
+			logging.Logger.Warn().Err(err).Msg("Unknown opcode")
+			return err
 		}
 	}
+	return nil
 }
 
 // compare compares the given `factValue` and `constValue` based on the provided `opcode`.
@@ -473,12 +473,8 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 	}
 }
 
-// executeAction executes the given action on the Engine.
-// It updates the fact value in the local fact store and sends the fact update to the store via a publish command.
-// If an error occurs during the update, it logs the error and returns.
-// After updating the fact, it triggers the fact update processing.
-// The function supports different action types and logs a warning for unknown action types.
-func (e *Engine) executeAction(action compiler.Action) {
+// executeAction now returns an error
+func (e *Engine) executeAction(action compiler.Action) error {
 	switch action.Type {
 	case "updateStore":
 		factName := action.Target
@@ -490,23 +486,21 @@ func (e *Engine) executeAction(action compiler.Action) {
 		e.Stats.TotalFactsUpdated++
 
 		// Send the fact update to the store via a set and publish command
-		// instead of just a set command.
 		err := e.store.SetAndPublishFact(factName, factValue)
 		if err != nil {
 			logging.Logger.Error().Err(err).Str("factName", factName).Interface("factValue", factValue).Msg("Failed to update fact in store")
-			return
+			return err
 		}
 
 		logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in store")
 
-		// ****************************************
-		//  If we want to automaticaly trigger a cascading rule(s)
-		//  then this is where we would do it
-		// Trigger the fact update processing
+		// Trigger the fact update processing if needed
 		// e.ProcessFactUpdate(factName, factValue)
 
-	// Add more action types as needed
 	default:
-		logging.Logger.Warn().Str("type", action.Type).Msg("Unknown action type")
+		err := logging.NewError(logging.ErrorTypeRuntime, "Unknown action type encountered", nil, map[string]interface{}{"type": action.Type})
+		logging.Logger.Warn().Err(err).Msg("Unknown action type")
+		return err
 	}
+	return nil
 }
