@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -12,24 +13,88 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/rs/zerolog"
+	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
+	"rgehrsitz/rex/pkg/logging"
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
 )
 
-func main() {
-	// Define command-line flags
-	configFile := flag.String("config", "", "Path to configuration file")
-	flag.Parse()
+// Config represents the application configuration
+type Config struct {
+	BytecodeFile    string
+	LogLevel        string
+	LogDestination  string
+	LogTimeFormat   string
+	RedisAddress    string
+	RedisPassword   string
+	RedisDB         int
+	RedisChannels   []string
+	EngineInterval  int
+	DashboardEnable bool
+	DashboardPort   int
+	DashboardUpdate int
+}
 
-	// Set up Viper
+// RexDependencies represents the external dependencies of the application
+type RexDependencies struct {
+	Store     store.Store
+	Engine    *runtime.Engine
+	Dashboard *runtime.Dashboard
+}
+
+// StoreFactory is an interface for creating a store
+type StoreFactory interface {
+	NewStore(addr, password string, db int) store.Store
+}
+
+// EngineFactory is an interface for creating an engine
+type EngineFactory interface {
+	NewEngine(bytecodeFile string, store store.Store) (*runtime.Engine, error)
+}
+
+// DashboardFactory is an interface for creating a dashboard
+type DashboardFactory interface {
+	NewDashboard(engine *runtime.Engine, port int, updateInterval time.Duration) *runtime.Dashboard
+}
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := run(ctx, os.Args, &RealStoreFactory{}, &RealEngineFactory{}, &RealDashboardFactory{}); err != nil {
+		log.Fatal().Err(err).Msg("Application failed")
+	}
+}
+
+func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFactory EngineFactory, dashboardFactory DashboardFactory) error {
+	config, err := parseConfig(args)
+	if err != nil {
+		return fmt.Errorf("failed to parse configuration: %w", err)
+	}
+
+	if err := logging.ConfigureLogger(config.LogLevel, config.LogDestination); err != nil {
+		return fmt.Errorf("failed to configure logger: %w", err)
+	}
+
+	deps, err := setupDependencies(config, storeFactory, engineFactory, dashboardFactory)
+	if err != nil {
+		return fmt.Errorf("failed to setup dependencies: %w", err)
+	}
+
+	return runMainLoop(ctx, deps, config)
+}
+
+func parseConfig(args []string) (*Config, error) {
+	configFile := flag.String("config", "", "Path to configuration file")
+	flag.CommandLine.Parse(args[1:])
+
 	viper.SetConfigType("json")
 	viper.SetDefault("logging.level", "info")
-	viper.SetDefault("logging.destination", "console")
-	viper.SetDefault("logging.timeFormat", "Unix")
+	viper.SetDefault("logging.output", "console")
+	viper.SetDefault("logging.time_format", "unixnano")
 	viper.SetDefault("redis.address", "localhost:6379")
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
@@ -38,7 +103,6 @@ func main() {
 	viper.SetDefault("dashboard.port", 8080)
 	viper.SetDefault("dashboard.update_interval", 5)
 
-	// Try to read the default config file if no config file is specified
 	if *configFile == "" {
 		viper.SetConfigName("rex_config")
 		viper.AddConfigPath(".")
@@ -48,142 +112,134 @@ func main() {
 		viper.SetConfigFile(*configFile)
 	}
 
-	// Read the configuration
 	if err := viper.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok && *configFile == "" {
-			// Config file not found and not explicitly specified, use defaults
-			fmt.Println("No configuration file found, using defaults")
-		} else {
-			// Config file was explicitly specified or error other than file not found
-			fmt.Printf("Error reading config file: %s\n", err)
-			os.Exit(1)
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok || *configFile != "" {
+			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
+		log.Info().Msg("No configuration file found, using defaults")
 	}
 
-	// Now we can use viper.GetString(), viper.GetInt(), etc. to get configuration values
-	bytecodeFile := viper.GetString("bytecode_file")
-	logLevel := viper.GetString("logging.level")
-	logDest := viper.GetString("logging.destination")
-	logTimeFormat := viper.GetString("logging.timeFormat")
-	redisAddr := viper.GetString("redis.address")
-	redisPassword := viper.GetString("redis.password")
-	redisDB := viper.GetInt("redis.database")
-	redisChannels := viper.GetStringSlice("redis.channels")
+	return &Config{
+		BytecodeFile:    viper.GetString("bytecode_file"),
+		LogLevel:        viper.GetString("logging.level"),
+		LogDestination:  viper.GetString("logging.output"),
+		LogTimeFormat:   viper.GetString("logging.time_format"),
+		RedisAddress:    viper.GetString("redis.address"),
+		RedisPassword:   viper.GetString("redis.password"),
+		RedisDB:         viper.GetInt("redis.database"),
+		RedisChannels:   viper.GetStringSlice("redis.channels"),
+		EngineInterval:  viper.GetInt("engine.update_interval"),
+		DashboardEnable: viper.GetBool("dashboard.enabled"),
+		DashboardPort:   viper.GetInt("dashboard.port"),
+		DashboardUpdate: viper.GetInt("dashboard.update_interval"),
+	}, nil
+}
 
-	// Set up logging
-	setUpLogging(logLevel, logDest, logTimeFormat)
+func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory, dashboardFactory DashboardFactory) (*RexDependencies, error) {
+	store := storeFactory.NewStore(config.RedisAddress, config.RedisPassword, config.RedisDB)
 
-	// Initialize Redis store
-	redisStore := store.NewRedisStore(redisAddr, redisPassword, redisDB)
-
-	// Initialize engine
-	engine, err := runtime.NewEngineFromFile(bytecodeFile, redisStore)
+	engine, err := engineFactory.NewEngine(config.BytecodeFile, store)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Failed to initialize engine")
+		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
 
-	// Set up Redis subscription
-	pubsub := redisStore.Subscribe(redisChannels...)
-	if pubsub == nil {
-		log.Fatal().Msg("Failed to subscribe to Redis channels")
+	var dashboard *runtime.Dashboard
+	if config.DashboardEnable {
+		dashboard = dashboardFactory.NewDashboard(engine, config.DashboardPort, time.Duration(config.DashboardUpdate)*time.Second)
 	}
+
+	return &RexDependencies{
+		Store:     store,
+		Engine:    engine,
+		Dashboard: dashboard,
+	}, nil
+}
+
+func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	redisStore, ok := deps.Store.(*store.RedisStore)
+	if !ok {
+		return fmt.Errorf("store is not a RedisStore")
+	}
+
+	pubsub := redisStore.Subscribe(config.RedisChannels...)
 	defer pubsub.Close()
 
-	// Todo: enable the following when dash functionaility is ready
-	if viper.GetBool("dashboard.enabled") {
-		dashboard := runtime.NewDashboard(engine, viper.GetInt("dashboard.port"), time.Duration(viper.GetInt("engine.update_interval"))*time.Second)
-		dashboard.Start()
+	if deps.Dashboard != nil {
+		deps.Dashboard.Start()
 	}
 
-	// Set up signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	// Main event loop
 	log.Info().Msg("REX runtime engine started")
+
 	for {
 		select {
 		case msg := <-pubsub.Channel():
-			log.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
-			// Process the message and update facts
-			// This is a placeholder - we need to implement the actual message processing logic
-			// depending on how we want to handle channels and naming conventions
-			parts := strings.Split(msg.Payload, ":")
-			if len(parts) != 2 {
-				log.Fatal().Msgf("Invalid payload format: %s", msg.Payload)
+			if err := processMessage(deps.Engine, msg); err != nil {
+				log.Error().Err(err).Msg("Failed to process message")
 			}
-
-			// For now, we will keep the channel and key concatinated with a colon
-			channel := parts[0]
-			keyValue := strings.Split(parts[1], "=")
-			if len(keyValue) != 2 {
-				log.Fatal().Msgf("Invalid key-value format: %s", parts[1])
-			}
-
-			key := channel + ":" + keyValue[0]
-			value := keyValue[1]
-
-			var typedValue interface{}
-
-			// Check if the value is a boolean
-			if value == "true" || value == "false" {
-				typedValue = value == "true"
-			} else if num, err := strconv.ParseFloat(value, 64); err == nil {
-				// It's a valid number
-				typedValue = num
-			} else {
-				// Treat it as a string
-				typedValue = value
-			}
-
-			engine.ProcessFactUpdate(key, typedValue)
-
 		case <-sigChan:
 			log.Info().Msg("Shutting down REX runtime engine")
-			pubsub.Close()
-			return
-		case <-time.After(5 * time.Second):
-			// Periodic tasks, if any
+			return nil
+		case <-time.After(time.Duration(config.EngineInterval) * time.Second):
 			log.Debug().Msg("Performing periodic tasks")
+		case <-ctx.Done():
+			return nil
 		}
 	}
-
 }
 
-func setUpLogging(level, dest, logTimeFormat string) {
-	// Set log level
-	switch level {
-	case "debug":
-		zerolog.SetGlobalLevel(zerolog.DebugLevel)
-	case "info":
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
-	case "warn":
-		zerolog.SetGlobalLevel(zerolog.WarnLevel)
-	case "error":
-		zerolog.SetGlobalLevel(zerolog.ErrorLevel)
-	default:
-		zerolog.SetGlobalLevel(zerolog.InfoLevel)
+func processMessage(engine *runtime.Engine, msg *redis.Message) error {
+	log.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
+
+	parts := strings.Split(msg.Payload, ":")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid payload format: %s", msg.Payload)
 	}
 
-	// Set log destination
-	switch dest {
-	case "file":
-		logFile, err := os.OpenFile("rex.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err != nil {
-			log.Fatal().Err(err).Msg("Failed to open log file")
-		}
-		log.Logger = log.Output(logFile)
-	case "console":
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
-	default:
-		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout})
+	channel := parts[0]
+	keyValue := strings.Split(parts[1], "=")
+	if len(keyValue) != 2 {
+		return fmt.Errorf("invalid key-value format: %s", parts[1])
 	}
 
-	// Set log time format
-	switch logTimeFormat {
-	case "unix":
-		zerolog.TimeFieldFormat = zerolog.TimeFormatUnix
-	case "unixnano":
-		zerolog.TimeFieldFormat = zerolog.TimeFormatUnixMicro
+	key := channel + ":" + keyValue[0]
+	value := keyValue[1]
+
+	var typedValue interface{}
+	if value == "true" || value == "false" {
+		typedValue = value == "true"
+	} else if num, err := strconv.ParseFloat(value, 64); err == nil {
+		typedValue = num
+	} else {
+		typedValue = value
 	}
+
+	engine.ProcessFactUpdate(key, typedValue)
+	return nil
+}
+
+// RealStoreFactory implements StoreFactory
+type RealStoreFactory struct{}
+
+func (f *RealStoreFactory) NewStore(addr, password string, db int) store.Store {
+	return store.NewRedisStore(addr, password, db)
+}
+
+// RealEngineFactory implements EngineFactory
+type RealEngineFactory struct{}
+
+func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.Store) (*runtime.Engine, error) {
+	return runtime.NewEngineFromFile(bytecodeFile, store)
+}
+
+// RealDashboardFactory implements DashboardFactory
+type RealDashboardFactory struct{}
+
+func (f *RealDashboardFactory) NewDashboard(engine *runtime.Engine, port int, updateInterval time.Duration) *runtime.Dashboard {
+	return runtime.NewDashboard(engine, port, updateInterval)
 }

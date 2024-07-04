@@ -1,0 +1,22 @@
+{
+  "bytecode_file": "custom_bytecode.bin",
+  "logging": {
+    "level": "info",
+    "output": "file",
+    "timeFormat": "unixnano"
+  },
+  "redis": {
+    "address": "redis.example.com:6379",
+    "password": "password123",
+    "database": 1,
+    "channels": ["custom_channel"]
+  },
+  "engine": {
+    "update_interval": 10
+  },
+  "dashboard": {
+    "enabled": false,
+    "port": 9090,
+    "update_interval": 15
+  }
+}

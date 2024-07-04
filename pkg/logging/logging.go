@@ -31,7 +31,7 @@ func ConfigureLogger(logLevel, logOutput string) error {
 
 	switch logOutput {
 	case "console":
-		Logger = Logger.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "3:04PM"})
+		Logger = Logger.Output(zerolog.ConsoleWriter{Out: os.Stderr, TimeFormat: "3:04:05PM"})
 	case "file":
 		file, err := os.Create("logs.txt")
 		if err != nil {

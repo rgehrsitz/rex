@@ -1,138 +1,199 @@
-// rex/cmd/rexd/rexd_main_test.go
+// rex/cmd/rexd/main_test.go
 
 package main
 
 import (
-	"encoding/binary"
+	"context"
+	"flag"
 	"fmt"
-	"io"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"rgehrsitz/rex/pkg/runtime"
+	"rgehrsitz/rex/pkg/store"
 )
 
-func createMockBytecodeFile(filename string) error {
-	file, err := os.Create(filename)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
+// Mock implementations for testing purposes
+type MockStoreFactory struct{}
 
-	// Write header
-	binary.Write(file, binary.LittleEndian, uint32(1))  // Version
-	binary.Write(file, binary.LittleEndian, uint32(0))  // Checksum
-	binary.Write(file, binary.LittleEndian, uint32(0))  // ConstPoolSize
-	binary.Write(file, binary.LittleEndian, uint32(1))  // NumRules
-	binary.Write(file, binary.LittleEndian, uint32(28)) // RuleExecIndexOffset
-	binary.Write(file, binary.LittleEndian, uint32(44)) // FactRuleIndexOffset
-	binary.Write(file, binary.LittleEndian, uint32(68)) // FactDepIndexOffset
-
-	// Write mock instructions (just placeholders)
-	file.Write(make([]byte, 1000)) // Write 1000 bytes of placeholder instructions
-
-	// Write mock rule execution index
-	binary.Write(file, binary.LittleEndian, uint32(4)) // RuleNameLength
-	file.Write([]byte("rule"))                         // RuleName
-	binary.Write(file, binary.LittleEndian, uint32(0)) // ByteOffset
-
-	// Write mock fact rule index
-	binary.Write(file, binary.LittleEndian, uint32(4)) // FactNameLength
-	file.Write([]byte("fact"))                         // FactName
-	binary.Write(file, binary.LittleEndian, uint32(1)) // RulesCount
-	binary.Write(file, binary.LittleEndian, uint32(4)) // RuleNameLength
-	file.Write([]byte("rule"))                         // RuleName
-
-	// Write mock fact dependency index
-	binary.Write(file, binary.LittleEndian, uint32(4)) // RuleNameLength
-	file.Write([]byte("rule"))                         // RuleName
-	binary.Write(file, binary.LittleEndian, uint32(1)) // FactsCount
-	binary.Write(file, binary.LittleEndian, uint32(4)) // FactNameLength
-	file.Write([]byte("fact"))                         // FactName
-
-	return nil
+func (f *MockStoreFactory) NewStore(addr, password string, db int) store.Store {
+	return store.NewRedisStore(addr, password, db)
 }
 
-func TestMain(t *testing.T) {
-	// Set up miniredis
-	s, err := miniredis.Run()
-	assert.NoError(t, err)
-	defer s.Close()
+type MockEngineFactory struct{}
 
-	// Create a temporary config file for testing
-	tempFile, err := os.CreateTemp("", "test_config*.json")
-	assert.NoError(t, err)
-	defer os.Remove(tempFile.Name())
+func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store) (*runtime.Engine, error) {
+	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
+}
 
-	// Write test config data with miniredis address
-	testConfig := fmt.Sprintf(`{
-		"bytecode_file": "test_bytecode.bin",
-		"logging": {
-			"level": "debug",
-			"destination": "console",
-			"timeFormat": "Unix"
-		},
-		"redis": {
-			"address": "%s",
-			"password": "",
-			"database": 0,
-			"channels": ["test_channel"]
-		},
-		"engine": {
-			"update_interval": 1
-		},
-		"dashboard": {
-			"enabled": false,
-			"port": 8080,
-			"update_interval": 1
-		}
-	}`, s.Addr())
-	_, err = tempFile.Write([]byte(testConfig))
-	assert.NoError(t, err)
-	tempFile.Close()
+type MockDashboardFactory struct{}
 
-	// Set up command-line arguments
-	os.Args = []string{"rexd", "-config", tempFile.Name()}
+func (f *MockDashboardFactory) NewDashboard(engine *runtime.Engine, port int, updateInterval time.Duration) *runtime.Dashboard {
+	return &runtime.Dashboard{}
+}
 
-	// Create a mock bytecode file
-	err = createMockBytecodeFile("test_bytecode.bin")
-	assert.NoError(t, err)
-	defer os.Remove("test_bytecode.bin")
+func TestParseConfig(t *testing.T) {
+	// Reset the flag set before each test run
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 
-	// Redirect stdout and stderr
-	oldStdout := os.Stdout
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-	os.Stderr = w
+	configFile, err := os.CreateTemp("", "rex_config.json")
+	require.NoError(t, err)
+	defer os.Remove(configFile.Name())
 
-	// Run the main function in a goroutine
-	done := make(chan bool)
-	go func() {
-		main()
-		done <- true
-	}()
+	configContent := `{
+		"bytecode_file": "test.bytecode",
+		"logging.level": "debug",
+		"logging.output": "file",
+		"logging.time_format": "RFC3339",
+		"redis.address": "localhost:6379",
+		"redis.password": "password",
+		"redis.database": 1,
+		"redis.channels": ["rex_updates"],
+		"engine.update_interval": 10,
+		"dashboard.enabled": true,
+		"dashboard.port": 9090,
+		"dashboard.update_interval": 15
+	}`
+	_, err = configFile.WriteString(configContent)
+	require.NoError(t, err)
+	configFile.Close()
 
-	// Wait for a short time to allow the program to start
-	select {
-	case <-done:
-		// If main() returns quickly, it probably encountered an error
-		t.Fatal("Main function returned unexpectedly")
-	case <-time.After(500 * time.Millisecond):
-		// This is the expected path - main() should still be running
+	args := []string{"rexd", "--config", configFile.Name()}
+	config, err := parseConfig(args)
+	require.NoError(t, err)
+
+	assert.Equal(t, "test.bytecode", config.BytecodeFile)
+	assert.Equal(t, "debug", config.LogLevel)
+	assert.Equal(t, "file", config.LogDestination)
+	assert.Equal(t, "RFC3339", config.LogTimeFormat)
+	assert.Equal(t, "localhost:6379", config.RedisAddress)
+	assert.Equal(t, "password", config.RedisPassword)
+	assert.Equal(t, 1, config.RedisDB)
+	assert.Equal(t, []string{"rex_updates"}, config.RedisChannels)
+	assert.Equal(t, 10, config.EngineInterval)
+	assert.True(t, config.DashboardEnable)
+	assert.Equal(t, 9090, config.DashboardPort)
+	assert.Equal(t, 15, config.DashboardUpdate)
+}
+
+func TestSetupDependencies(t *testing.T) {
+	// Reset the flag set before each test run
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	config := &Config{
+		BytecodeFile:    "test.bytecode",
+		RedisAddress:    mr.Addr(),
+		RedisPassword:   "",
+		RedisDB:         0,
+		DashboardEnable: true,
+		DashboardPort:   8080,
+		DashboardUpdate: 10,
 	}
 
-	// Restore stdout and stderr
-	w.Close()
-	os.Stdout = oldStdout
-	os.Stderr = oldStderr
+	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{}, &MockDashboardFactory{})
+	require.NoError(t, err)
 
-	// Read the output
-	out, _ := io.ReadAll(r)
-	output := string(out)
+	assert.NotNil(t, deps.Store)
+	assert.NotNil(t, deps.Engine)
+	assert.NotNil(t, deps.Dashboard)
+}
 
-	// Check if the output contains expected messages
-	assert.Contains(t, output, "REX runtime engine started")
+func TestRunMainLoop(t *testing.T) {
+	// Reset the flag set before each test run
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	config := &Config{
+		RedisAddress:    mr.Addr(),
+		RedisChannels:   []string{"rex_updates"},
+		EngineInterval:  1,
+		DashboardEnable: false,
+	}
+
+	deps := &RexDependencies{
+		Store:  store.NewRedisStore(mr.Addr(), "", 0),
+		Engine: &runtime.Engine{Facts: make(map[string]interface{})},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		mr.Publish("rex_updates", "test:key=value")
+		cancel()
+	}()
+
+	err = runMainLoop(ctx, deps, config)
+	assert.NoError(t, err)
+}
+
+func TestProcessMessage(t *testing.T) {
+	// Reset the flag set before each test run
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	engine := &runtime.Engine{
+		Facts: make(map[string]interface{}),
+	}
+
+	msg := &redis.Message{
+		Channel: "rex_updates",
+		Payload: "test:key=value",
+	}
+
+	err = processMessage(engine, msg)
+	require.NoError(t, err)
+
+	assert.Equal(t, "value", engine.Facts["test:key"])
+}
+
+func TestRun(t *testing.T) {
+	// Reset the flag set before each test run
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	configFile, err := os.CreateTemp("", "rex_config.json")
+	require.NoError(t, err)
+	defer os.Remove(configFile.Name())
+
+	configContent := fmt.Sprintf(`{
+		"redis.address": "%s"
+	}`, mr.Addr())
+	_, err = configFile.WriteString(configContent)
+	require.NoError(t, err)
+	configFile.Close()
+
+	args := []string{"rexd", "--config", configFile.Name()}
+
+	// Use a context to control the runtime duration
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		mr.Publish("rex_updates", "test:key=value")
+	}()
+
+	err = run(ctx, args, &MockStoreFactory{}, &MockEngineFactory{}, &MockDashboardFactory{})
+	assert.NoError(t, err)
 }

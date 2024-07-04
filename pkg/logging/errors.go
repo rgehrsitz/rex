@@ -44,7 +44,7 @@ func NewError(errType ErrorType, message string, err error, fields map[string]in
 func LogError(logger zerolog.Logger, err error) {
 	rexErr, ok := err.(*RexError)
 	if !ok {
-		logger.Error().Err(err).Msg("An error occurred")
+		logger.Error().Err(err).Msg(err.Error())
 		return
 	}
 
@@ -56,5 +56,5 @@ func LogError(logger zerolog.Logger, err error) {
 		event = event.Interface(k, v)
 	}
 
-	event.Msg("An error occurred")
+	event.Msg(rexErr.Message) // Use the RexError's message here
 }
