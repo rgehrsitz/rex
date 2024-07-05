@@ -83,6 +83,12 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 		ruleBytecode = append(ruleBytecode, byte(len(rule.Name)))
 		ruleBytecode = append(ruleBytecode, []byte(rule.Name)...)
 
+		// Append the rule priority
+		ruleBytecode = append(ruleBytecode, byte(PRIORITY))
+		priorityBytes := make([]byte, 4)
+		binary.LittleEndian.PutUint32(priorityBytes, uint32(rule.Priority))
+		ruleBytecode = append(ruleBytecode, priorityBytes...)
+
 		// Convert the conditions to a Node structure
 		conditionNode := convertConditionGroupToNode(rule.Conditions)
 

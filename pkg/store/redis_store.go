@@ -127,6 +127,6 @@ func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 	// Publish the value to a channel
 	err = s.client.Publish(ctx, group, fmt.Sprintf("%s=%s", key, data)).Err()
 	log.Printf("Published update to group %s: %s=%s", group, key, data)
-	log.Printf("context: %v", ctx)
+	//log.Printf("context: %v", ctx)
 	return err
 }

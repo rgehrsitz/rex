@@ -36,7 +36,7 @@ func setupEngine(t *testing.T, jsonData []byte, redisStore *store.RedisStore) *r
 	assert.NoError(t, err)
 
 	// Create runtime engine from bytecode file
-	engine, err := runtime.NewEngineFromFile(filename, redisStore, 0)
+	engine, err := runtime.NewEngineFromFile(filename, redisStore, 10)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
 
@@ -179,7 +179,7 @@ func TestComplexConditions(t *testing.T) {
 			"rules": [
 				{
 					"name": "rule-1",
-					"priority": 10,
+					"priority": 1,
 					"conditions": {
 						"any": [
 							{
@@ -219,13 +219,22 @@ func TestComplexConditions(t *testing.T) {
 	engine := setupEngine(t, jsonData, redisStore)
 
 	// Set initial values for the facts
-	redisStore.SetFact("temperature", 30.2)
+	redisStore.SetFact("temperature", 30)
 	redisStore.SetFact("humidity", 59.9)
-	redisStore.SetFact("pressure", 1013)
-
+	redisStore.SetFact("pressure", 1012)
 	// Process fact updates
 	engine.ProcessFactUpdate("temperature", 30.2)
+
+	// Set initial values for the facts
+	redisStore.SetFact("temperature", 30.2)
+	redisStore.SetFact("humidity", 59.9)
+	redisStore.SetFact("pressure", 1012)
 	engine.ProcessFactUpdate("humidity", 59.9)
+
+	// Set initial values for the facts
+	redisStore.SetFact("temperature", 30)
+	redisStore.SetFact("humidity", 61)
+	redisStore.SetFact("pressure", 1010)
 	engine.ProcessFactUpdate("pressure", 1013)
 
 	// Verify update in the store

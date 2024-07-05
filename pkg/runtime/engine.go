@@ -292,7 +292,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	for _, rule := range e.ruleExecutionIndex {
 		if rule.RuleName == ruleName {
 			ruleOffset = rule.ByteOffset
-			rulePriority = rule.Priority // Now we can use the Priority field
+			rulePriority = rule.Priority
 			found = true
 			break
 		}
@@ -314,6 +314,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	var comparisonResult bool
 
 	relevantFacts := make(map[string]interface{})
+	ruleTriggered := false
 
 	for offset < len(e.bytecode) {
 		opcode := compiler.Opcode(e.bytecode[offset])
@@ -330,8 +331,14 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			offset += ruleNameLength
 			logging.Logger.Debug().Str("ruleName", ruleName).Msg("Encountered rule name")
 			continue
+		case compiler.PRIORITY:
+			bits := binary.LittleEndian.Uint32(e.bytecode[offset : offset+5])
+			rulePriority = int(bits)
+			offset += 4
+			logging.Logger.Debug().Int("priority", rulePriority).Msg("Encountered PRIORITY opcode")
+			continue
 		case compiler.RULE_END:
-			if comparisonResult && rulePriority >= e.priorityThreshold {
+			if ruleTriggered && rulePriority <= e.priorityThreshold {
 				logging.Logger.Info().
 					Str("ruleName", ruleName).
 					Int("priority", rulePriority).
@@ -367,6 +374,9 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT,
 			compiler.CONTAINS_STRING, compiler.NOT_CONTAINS_STRING:
 			comparisonResult = e.compare(factValue, constValue, opcode)
+			if comparisonResult {
+				ruleTriggered = true
+			}
 			logging.Logger.Debug().Bool("comparisonResult", comparisonResult).Msg("Comparison result")
 		case compiler.JUMP_IF_FALSE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
