@@ -45,6 +45,7 @@ type RuleExecutionIndex struct {
 	RuleNameLength uint32
 	RuleName       string
 	ByteOffset     int
+	Priority       int
 }
 
 type FactRuleLookupIndex struct {

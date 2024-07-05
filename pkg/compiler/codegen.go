@@ -347,6 +347,18 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 			ruleStartOffset := i
 			logging.Logger.Debug().Str("ruleName", ruleName).Int("startOffset", ruleStartOffset).Msg("Found RULE_START")
 
+			// Find the priority of the rule
+			priority := 0
+			for j := i + 2 + ruleNameLength; j < len(bytecode); j++ {
+				if Opcode(bytecode[j]) == PRIORITY {
+					priority = int(binary.LittleEndian.Uint32(bytecode[j+1 : j+5]))
+					break
+				}
+				if Opcode(bytecode[j]) == RULE_END {
+					break
+				}
+			}
+
 			// Find the end of the rule using a state machine approach
 			for j := i + 2 + ruleNameLength; j < len(bytecode); j++ {
 				if Opcode(bytecode[j]) == RULE_END {
@@ -363,8 +375,9 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 						RuleNameLength: uint32(ruleNameLength),
 						RuleName:       ruleName,
 						ByteOffset:     ruleStartOffset,
+						Priority:       priority,
 					})
-					logging.Logger.Debug().Str("ruleName", ruleName).Int("byteOffset", ruleStartOffset).Msg("Added to ruleExecIndex")
+					logging.Logger.Debug().Str("ruleName", ruleName).Int("byteOffset", ruleStartOffset).Int("priority", priority).Msg("Added to ruleExecIndex")
 
 					// Collect facts for dependency index
 					facts := collectFactsFromBytecode(bytecode[ruleStartOffset:ruleEndOffset])

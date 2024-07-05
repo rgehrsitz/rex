@@ -28,7 +28,8 @@ type Engine struct {
 		TotalFactsUpdated   int64
 		LastUpdateTime      time.Time
 	}
-	statsMutex sync.RWMutex
+	statsMutex        sync.RWMutex
+	priorityThreshold int
 }
 
 func (e *Engine) GetStats() map[string]interface{} {
@@ -51,7 +52,7 @@ func (e *Engine) GetStats() map[string]interface{} {
 // The Engine is initialized with the bytecode, rule execution index, fact rule index,
 // fact dependency index, and an empty Facts map.
 // The store.Store parameter is used to provide access to external data during rule execution.
-func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
+func NewEngineFromFile(filename string, store store.Store, priorityThreshold int) (*Engine, error) {
 	bytecode, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to read bytecode file", err, map[string]interface{}{"filename": filename})
@@ -65,6 +66,7 @@ func NewEngineFromFile(filename string, store store.Store) (*Engine, error) {
 		factDependencyIndex: make([]compiler.FactDependencyIndex, 0),
 		Facts:               make(map[string]interface{}),
 		store:               store,
+		priorityThreshold:   priorityThreshold,
 	}
 
 	offset := 0
@@ -285,10 +287,12 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	e.Stats.TotalRulesProcessed++
 
 	var ruleOffset int
+	var rulePriority int
 	found := false
 	for _, rule := range e.ruleExecutionIndex {
 		if rule.RuleName == ruleName {
 			ruleOffset = rule.ByteOffset
+			rulePriority = rule.Priority // Now we can use the Priority field
 			found = true
 			break
 		}
@@ -300,7 +304,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 		return err
 	}
 
-	logging.Logger.Debug().Str("ruleName", ruleName).Int("offset", ruleOffset).Msg("Found rule in ruleExecutionIndex")
+	logging.Logger.Debug().Str("ruleName", ruleName).Int("offset", ruleOffset).Int("priority", rulePriority).Msg("Found rule in ruleExecutionIndex")
 
 	offset := ruleOffset
 	var action compiler.Action
@@ -308,6 +312,8 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	var factValue interface{}
 	var constValue interface{}
 	var comparisonResult bool
+
+	relevantFacts := make(map[string]interface{})
 
 	for offset < len(e.bytecode) {
 		opcode := compiler.Opcode(e.bytecode[offset])
@@ -325,29 +331,22 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			logging.Logger.Debug().Str("ruleName", ruleName).Msg("Encountered rule name")
 			continue
 		case compiler.RULE_END:
-			logging.Logger.Debug().Msg("Encountered RULE_END opcode")
+			if comparisonResult && rulePriority >= e.priorityThreshold {
+				logging.Logger.Info().
+					Str("ruleName", ruleName).
+					Int("priority", rulePriority).
+					Interface("relevantFacts", relevantFacts).
+					Msg("High-priority rule triggered")
+			}
 			return nil
-		case compiler.LOAD_FACT_FLOAT:
+		case compiler.LOAD_FACT_FLOAT, compiler.LOAD_FACT_STRING, compiler.LOAD_FACT_BOOL:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			factName := string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			factValue = e.Facts[factName]
-			logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_FLOAT opcode")
-		case compiler.LOAD_FACT_STRING:
-			nameLen := int(e.bytecode[offset])
-			offset++
-			factName := string(e.bytecode[offset : offset+nameLen])
-			offset += nameLen
-			factValue = e.Facts[factName]
-			logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_STRING opcode")
-		case compiler.LOAD_FACT_BOOL:
-			nameLen := int(e.bytecode[offset])
-			offset++
-			factName := string(e.bytecode[offset : offset+nameLen])
-			offset += nameLen
-			factValue = e.Facts[factName]
-			logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Encountered LOAD_FACT_BOOL opcode")
+			relevantFacts[factName] = factValue
+			logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Loaded fact")
 		case compiler.LOAD_CONST_FLOAT:
 			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
 			constValue = math.Float64frombits(bits)
@@ -368,7 +367,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT,
 			compiler.CONTAINS_STRING, compiler.NOT_CONTAINS_STRING:
 			comparisonResult = e.compare(factValue, constValue, opcode)
-			logging.Logger.Debug().Bool("comparisonResult", comparisonResult).Msg("Encountered comparison opcode")
+			logging.Logger.Debug().Bool("comparisonResult", comparisonResult).Msg("Comparison result")
 		case compiler.JUMP_IF_FALSE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
 			offset += 4

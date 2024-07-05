@@ -28,7 +28,8 @@ func (f *MockStoreFactory) NewStore(addr, password string, db int) store.Store {
 
 type MockEngineFactory struct{}
 
-func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store) (*runtime.Engine, error) {
+func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
+	// Updated to include priorityThreshold parameter
 	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
 }
 
@@ -91,13 +92,14 @@ func TestSetupDependencies(t *testing.T) {
 	defer mr.Close()
 
 	config := &Config{
-		BytecodeFile:    "test.bytecode",
-		RedisAddress:    mr.Addr(),
-		RedisPassword:   "",
-		RedisDB:         0,
-		DashboardEnable: true,
-		DashboardPort:   8080,
-		DashboardUpdate: 10,
+		BytecodeFile:      "test.bytecode",
+		RedisAddress:      mr.Addr(),
+		RedisPassword:     "",
+		RedisDB:           0,
+		DashboardEnable:   true,
+		DashboardPort:     8080,
+		DashboardUpdate:   10,
+		PriorityThreshold: 5, // Add PriorityThreshold to the config
 	}
 
 	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{}, &MockDashboardFactory{})
@@ -177,7 +179,8 @@ func TestRun(t *testing.T) {
 	defer os.Remove(configFile.Name())
 
 	configContent := fmt.Sprintf(`{
-		"redis.address": "%s"
+		"redis.address": "%s",
+		"engine.priority_threshold": 5
 	}`, mr.Addr())
 	_, err = configFile.WriteString(configContent)
 	require.NoError(t, err)

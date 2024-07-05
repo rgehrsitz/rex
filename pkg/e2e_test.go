@@ -36,7 +36,7 @@ func setupEngine(t *testing.T, jsonData []byte, redisStore *store.RedisStore) *r
 	assert.NoError(t, err)
 
 	// Create runtime engine from bytecode file
-	engine, err := runtime.NewEngineFromFile(filename, redisStore)
+	engine, err := runtime.NewEngineFromFile(filename, redisStore, 0)
 	assert.NoError(t, err)
 	assert.NotNil(t, engine)
 

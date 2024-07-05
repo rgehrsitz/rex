@@ -114,6 +114,7 @@ const (
 	VERSION
 	NUM_RULES
 	CONST_POOL_SIZE
+	PRIORITY
 )
 
 // hasOperands returns true if the opcode requires operands.

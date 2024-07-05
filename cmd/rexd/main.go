@@ -24,18 +24,19 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	BytecodeFile    string
-	LogLevel        string
-	LogDestination  string
-	LogTimeFormat   string
-	RedisAddress    string
-	RedisPassword   string
-	RedisDB         int
-	RedisChannels   []string
-	EngineInterval  int
-	DashboardEnable bool
-	DashboardPort   int
-	DashboardUpdate int
+	BytecodeFile      string
+	LogLevel          string
+	LogDestination    string
+	LogTimeFormat     string
+	RedisAddress      string
+	RedisPassword     string
+	RedisDB           int
+	RedisChannels     []string
+	EngineInterval    int
+	DashboardEnable   bool
+	DashboardPort     int
+	DashboardUpdate   int
+	PriorityThreshold int
 }
 
 // RexDependencies represents the external dependencies of the application
@@ -52,7 +53,7 @@ type StoreFactory interface {
 
 // EngineFactory is an interface for creating an engine
 type EngineFactory interface {
-	NewEngine(bytecodeFile string, store store.Store) (*runtime.Engine, error)
+	NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error)
 }
 
 // DashboardFactory is an interface for creating a dashboard
@@ -102,6 +103,7 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("dashboard.enabled", false)
 	viper.SetDefault("dashboard.port", 8080)
 	viper.SetDefault("dashboard.update_interval", 5)
+	viper.SetDefault("engine.priority_threshold", 1)
 
 	if *configFile == "" {
 		viper.SetConfigName("rex_config")
@@ -120,25 +122,26 @@ func parseConfig(args []string) (*Config, error) {
 	}
 
 	return &Config{
-		BytecodeFile:    viper.GetString("bytecode_file"),
-		LogLevel:        viper.GetString("logging.level"),
-		LogDestination:  viper.GetString("logging.output"),
-		LogTimeFormat:   viper.GetString("logging.time_format"),
-		RedisAddress:    viper.GetString("redis.address"),
-		RedisPassword:   viper.GetString("redis.password"),
-		RedisDB:         viper.GetInt("redis.database"),
-		RedisChannels:   viper.GetStringSlice("redis.channels"),
-		EngineInterval:  viper.GetInt("engine.update_interval"),
-		DashboardEnable: viper.GetBool("dashboard.enabled"),
-		DashboardPort:   viper.GetInt("dashboard.port"),
-		DashboardUpdate: viper.GetInt("dashboard.update_interval"),
+		BytecodeFile:      viper.GetString("bytecode_file"),
+		LogLevel:          viper.GetString("logging.level"),
+		LogDestination:    viper.GetString("logging.output"),
+		LogTimeFormat:     viper.GetString("logging.time_format"),
+		RedisAddress:      viper.GetString("redis.address"),
+		RedisPassword:     viper.GetString("redis.password"),
+		RedisDB:           viper.GetInt("redis.database"),
+		RedisChannels:     viper.GetStringSlice("redis.channels"),
+		EngineInterval:    viper.GetInt("engine.update_interval"),
+		DashboardEnable:   viper.GetBool("dashboard.enabled"),
+		DashboardPort:     viper.GetInt("dashboard.port"),
+		DashboardUpdate:   viper.GetInt("dashboard.update_interval"),
+		PriorityThreshold: viper.GetInt("engine.priority_threshold"),
 	}, nil
 }
 
 func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory, dashboardFactory DashboardFactory) (*RexDependencies, error) {
 	store := storeFactory.NewStore(config.RedisAddress, config.RedisPassword, config.RedisDB)
 
-	engine, err := engineFactory.NewEngine(config.BytecodeFile, store)
+	engine, err := engineFactory.NewEngine(config.BytecodeFile, store, config.PriorityThreshold)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
@@ -233,8 +236,8 @@ func (f *RealStoreFactory) NewStore(addr, password string, db int) store.Store {
 // RealEngineFactory implements EngineFactory
 type RealEngineFactory struct{}
 
-func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.Store) (*runtime.Engine, error) {
-	return runtime.NewEngineFromFile(bytecodeFile, store)
+func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
+	return runtime.NewEngineFromFile(bytecodeFile, store, priorityThreshold)
 }
 
 // RealDashboardFactory implements DashboardFactory
