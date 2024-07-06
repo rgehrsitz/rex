@@ -197,21 +197,15 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 }
 
 func processMessage(engine *runtime.Engine, msg *redis.Message) error {
-	log.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
+	logging.Logger.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
 
-	parts := strings.Split(msg.Payload, ":")
+	parts := strings.Split(msg.Payload, "=")
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid payload format: %s", msg.Payload)
 	}
 
-	channel := parts[0]
-	keyValue := strings.Split(parts[1], "=")
-	if len(keyValue) != 2 {
-		return fmt.Errorf("invalid key-value format: %s", parts[1])
-	}
-
-	key := channel + ":" + keyValue[0]
-	value := keyValue[1]
+	key := parts[0]
+	value := parts[1]
 
 	var typedValue interface{}
 	if value == "true" || value == "false" {

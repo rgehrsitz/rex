@@ -152,7 +152,12 @@ func TestProcessMessage(t *testing.T) {
 	defer mr.Close()
 
 	engine := &runtime.Engine{
-		Facts: make(map[string]interface{}),
+		Facts:     make(map[string]interface{}),
+		RuleStats: make(map[string]*runtime.RuleStats),
+		FactStats: make(map[string]*runtime.FactStats),
+		Stats: runtime.EngineStats{
+			EngineStartTime: time.Now(),
+		},
 	}
 
 	msg := &redis.Message{

@@ -4,15 +4,19 @@ package runtime
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
 	"rgehrsitz/rex/pkg/logging"
+
+	"github.com/shirou/gopsutil/v4/process"
 )
 
 type Engine struct {
@@ -22,25 +26,58 @@ type Engine struct {
 	factDependencyIndex []compiler.FactDependencyIndex
 	Facts               map[string]interface{}
 	store               store.Store
-	Stats               struct {
-		TotalFactsProcessed int64
-		TotalRulesProcessed int64
-		TotalFactsUpdated   int64
-		LastUpdateTime      time.Time
-	}
-	statsMutex        sync.RWMutex
-	priorityThreshold int
+	Stats               EngineStats
+	RuleStats           map[string]*RuleStats
+	FactStats           map[string]*FactStats
+	statsMutex          sync.RWMutex
+	priorityThreshold   int
+	pid                 int32
+	proc                *process.Process
+}
+
+type EngineStats struct {
+	TotalFactsProcessed int64
+	TotalRulesProcessed int64
+	TotalFactsUpdated   int64
+	LastUpdateTime      time.Time
+	EngineStartTime     time.Time
+	CPUUsage            float64
+	MemoryUsage         uint64
+	GoroutineCount      int
+	ErrorCount          int64
+	WarningCount        int64
+}
+
+type RuleStats struct {
+	Name               string
+	ExecutionCount     int64
+	LastExecutionTime  time.Time
+	TotalExecutionTime time.Duration
+	Priority           int
+}
+
+type FactStats struct {
+	Name               string
+	UpdateCount        int64
+	LastUpdateTime     time.Time
+	TotalUpdateLatency time.Duration
 }
 
 func (e *Engine) GetStats() map[string]interface{} {
 	e.statsMutex.RLock()
 	defer e.statsMutex.RUnlock()
+
 	return map[string]interface{}{
 		"TotalFactsProcessed": e.Stats.TotalFactsProcessed,
 		"TotalRulesProcessed": e.Stats.TotalRulesProcessed,
 		"TotalFactsUpdated":   e.Stats.TotalFactsUpdated,
 		"LastUpdateTime":      e.Stats.LastUpdateTime.Format(time.RFC3339),
-		"LastPageRefresh":     time.Now().Format(time.RFC3339),
+		"EngineUptime":        time.Since(e.Stats.EngineStartTime).String(),
+		"CPUUsage":            fmt.Sprintf("%.2f%%", e.Stats.CPUUsage),
+		"MemoryUsage":         fmt.Sprintf("%.2f MB", float64(e.Stats.MemoryUsage)/(1024*1024)),
+		"GoroutineCount":      e.Stats.GoroutineCount,
+		"ErrorCount":          e.Stats.ErrorCount,
+		"WarningCount":        e.Stats.WarningCount,
 		"TotalRules":          len(e.ruleExecutionIndex),
 		"TotalFacts":          len(e.Facts),
 	}
@@ -66,8 +103,20 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		factDependencyIndex: make([]compiler.FactDependencyIndex, 0),
 		Facts:               make(map[string]interface{}),
 		store:               store,
-		priorityThreshold:   priorityThreshold,
+		Stats: EngineStats{
+			EngineStartTime: time.Now(),
+		},
+		RuleStats:         make(map[string]*RuleStats),
+		FactStats:         make(map[string]*FactStats),
+		priorityThreshold: priorityThreshold,
+		pid:               int32(os.Getpid()),
 	}
+
+	proc, err := process.NewProcess(engine.pid)
+	if err != nil {
+		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to create process", err, nil)
+	}
+	engine.proc = proc
 
 	offset := 0
 
@@ -169,6 +218,14 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		logging.Logger.Debug().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
 	}
 
+	// Initialize RuleStats for each rule
+	for _, rule := range engine.ruleExecutionIndex {
+		engine.RuleStats[rule.RuleName] = &RuleStats{
+			Name:     rule.RuleName,
+			Priority: rule.Priority,
+		}
+	}
+
 	logging.Logger.Info().Msg("Engine initialized from bytecode")
 	return engine, nil
 }
@@ -176,8 +233,35 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
+	startTime := time.Now()
+
+	e.statsMutex.Lock()
 	e.Stats.TotalFactsProcessed++
-	e.Stats.LastUpdateTime = time.Now()
+	e.Stats.LastUpdateTime = startTime
+
+	// Ensure Facts map is initialized
+	if e.Facts == nil {
+		e.Facts = make(map[string]interface{})
+	}
+	e.Facts[factName] = factValue
+
+	// Ensure FactStats map is initialized
+	if e.FactStats == nil {
+		e.FactStats = make(map[string]*FactStats)
+	}
+
+	// Update fact stats
+	if factStats, ok := e.FactStats[factName]; ok {
+		factStats.UpdateCount++
+		factStats.LastUpdateTime = startTime
+	} else {
+		e.FactStats[factName] = &FactStats{
+			Name:           factName,
+			UpdateCount:    1,
+			LastUpdateTime: startTime,
+		}
+	}
+	e.statsMutex.Unlock()
 
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
@@ -278,13 +362,34 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 		}
 	}
 
+	e.statsMutex.Lock()
+	updateDuration := time.Since(startTime)
+	e.FactStats[factName].TotalUpdateLatency += updateDuration
+	e.updateSystemStats()
+	e.statsMutex.Unlock()
+
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Finished processing fact update")
 }
 
 func (e *Engine) evaluateRule(ruleName string) error {
 	logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
 
+	startTime := time.Now()
+	//timeout := time.After(5 * time.Second)
+
+	e.statsMutex.RLock()
+	defer e.statsMutex.RUnlock()
+
 	e.Stats.TotalRulesProcessed++
+
+	ruleStats, ok := e.RuleStats[ruleName]
+	if !ok {
+		ruleStats = &RuleStats{Name: ruleName}
+		e.RuleStats[ruleName] = ruleStats
+	}
+
+	ruleStats.ExecutionCount++
+	ruleStats.LastExecutionTime = startTime
 
 	var ruleOffset int
 	var rulePriority int
@@ -440,6 +545,9 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			return err
 		}
 	}
+	executionDuration := time.Since(startTime)
+	ruleStats.TotalExecutionTime += executionDuration
+
 	return nil
 }
 
@@ -512,4 +620,33 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		return err
 	}
 	return nil
+}
+
+func (e *Engine) updateCPUUsage() {
+	percentage, err := e.proc.Percent(time.Second)
+	if err == nil {
+		e.Stats.CPUUsage = percentage
+	} else {
+		logging.Logger.Warn().Err(err).Msg("Failed to update CPU usage")
+	}
+}
+
+func (e *Engine) updateMemoryUsage() {
+	memInfo, err := e.proc.MemoryInfo()
+	if err == nil {
+		e.Stats.MemoryUsage = memInfo.RSS // Resident Set Size
+	} else {
+		logging.Logger.Warn().Err(err).Msg("Failed to update memory usage")
+	}
+}
+
+func (e *Engine) updateGoroutineCount() {
+	e.Stats.GoroutineCount = runtime.NumGoroutine()
+}
+
+// New method to update all system stats at once
+func (e *Engine) updateSystemStats() {
+	e.updateCPUUsage()
+	e.updateMemoryUsage()
+	e.updateGoroutineCount()
 }

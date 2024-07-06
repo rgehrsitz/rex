@@ -1,4 +1,4 @@
-// rex/tools/redis_setup_cli/redis_setup_test.go
+// rex/tools/redis_setup/redis_setup_main_test.go
 
 package main
 
