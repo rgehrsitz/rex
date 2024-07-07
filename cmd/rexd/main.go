@@ -24,19 +24,20 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	BytecodeFile      string
-	LogLevel          string
-	LogDestination    string
-	LogTimeFormat     string
-	RedisAddress      string
-	RedisPassword     string
-	RedisDB           int
-	RedisChannels     []string
-	EngineInterval    int
-	DashboardEnable   bool
-	DashboardPort     int
-	DashboardUpdate   int
-	PriorityThreshold int
+	BytecodeFile                string
+	LogLevel                    string
+	LogDestination              string
+	LogTimeFormat               string
+	RedisAddress                string
+	RedisPassword               string
+	RedisDB                     int
+	RedisChannels               []string
+	EngineInterval              int
+	DashboardEnable             bool
+	DashboardPort               int
+	DashboardUpdate             int
+	PriorityThreshold           int
+	EnablePerformanceMonitoring bool
 }
 
 // RexDependencies represents the external dependencies of the application
@@ -53,7 +54,7 @@ type StoreFactory interface {
 
 // EngineFactory is an interface for creating an engine
 type EngineFactory interface {
-	NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error)
+	NewEngine(bytecodeFile string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*runtime.Engine, error)
 }
 
 // DashboardFactory is an interface for creating a dashboard
@@ -104,6 +105,7 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("dashboard.port", 8080)
 	viper.SetDefault("dashboard.update_interval", 5)
 	viper.SetDefault("engine.priority_threshold", 1)
+	viper.SetDefault("engine.enable_performance_monitoring", false)
 
 	if *configFile == "" {
 		viper.SetConfigName("rex_config")
@@ -122,26 +124,27 @@ func parseConfig(args []string) (*Config, error) {
 	}
 
 	return &Config{
-		BytecodeFile:      viper.GetString("bytecode_file"),
-		LogLevel:          viper.GetString("logging.level"),
-		LogDestination:    viper.GetString("logging.output"),
-		LogTimeFormat:     viper.GetString("logging.time_format"),
-		RedisAddress:      viper.GetString("redis.address"),
-		RedisPassword:     viper.GetString("redis.password"),
-		RedisDB:           viper.GetInt("redis.database"),
-		RedisChannels:     viper.GetStringSlice("redis.channels"),
-		EngineInterval:    viper.GetInt("engine.update_interval"),
-		DashboardEnable:   viper.GetBool("dashboard.enabled"),
-		DashboardPort:     viper.GetInt("dashboard.port"),
-		DashboardUpdate:   viper.GetInt("dashboard.update_interval"),
-		PriorityThreshold: viper.GetInt("engine.priority_threshold"),
+		BytecodeFile:                viper.GetString("bytecode_file"),
+		LogLevel:                    viper.GetString("logging.level"),
+		LogDestination:              viper.GetString("logging.output"),
+		LogTimeFormat:               viper.GetString("logging.time_format"),
+		RedisAddress:                viper.GetString("redis.address"),
+		RedisPassword:               viper.GetString("redis.password"),
+		RedisDB:                     viper.GetInt("redis.database"),
+		RedisChannels:               viper.GetStringSlice("redis.channels"),
+		EngineInterval:              viper.GetInt("engine.update_interval"),
+		DashboardEnable:             viper.GetBool("dashboard.enabled"),
+		DashboardPort:               viper.GetInt("dashboard.port"),
+		DashboardUpdate:             viper.GetInt("dashboard.update_interval"),
+		PriorityThreshold:           viper.GetInt("engine.priority_threshold"),
+		EnablePerformanceMonitoring: viper.GetBool("engine.enable_performance_monitoring"),
 	}, nil
 }
 
 func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory, dashboardFactory DashboardFactory) (*RexDependencies, error) {
 	store := storeFactory.NewStore(config.RedisAddress, config.RedisPassword, config.RedisDB)
 
-	engine, err := engineFactory.NewEngine(config.BytecodeFile, store, config.PriorityThreshold)
+	engine, err := engineFactory.NewEngine(config.BytecodeFile, store, config.PriorityThreshold, config.EnablePerformanceMonitoring)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
@@ -230,8 +233,8 @@ func (f *RealStoreFactory) NewStore(addr, password string, db int) store.Store {
 // RealEngineFactory implements EngineFactory
 type RealEngineFactory struct{}
 
-func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
-	return runtime.NewEngineFromFile(bytecodeFile, store, priorityThreshold)
+func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*runtime.Engine, error) {
+	return runtime.NewEngineFromFile(bytecodeFile, store, priorityThreshold, enablePerformanceMonitoring)
 }
 
 // RealDashboardFactory implements DashboardFactory

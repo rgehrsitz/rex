@@ -28,7 +28,7 @@ func (f *MockStoreFactory) NewStore(addr, password string, db int) store.Store {
 
 type MockEngineFactory struct{}
 
-func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
+func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*runtime.Engine, error) {
 	// Updated to include priorityThreshold parameter
 	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
 }

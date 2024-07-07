@@ -12,7 +12,9 @@
     "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
-    "update_interval": 5
+    "update_interval": 5,
+    "priority_threshold": 1,
+    "enable_performance_monitoring": false
   },
   "dashboard": {
     "enabled": true,

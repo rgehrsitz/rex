@@ -20,19 +20,20 @@ import (
 )
 
 type Engine struct {
-	bytecode            []byte
-	ruleExecutionIndex  []compiler.RuleExecutionIndex
-	factRuleIndex       map[string][]string
-	factDependencyIndex []compiler.FactDependencyIndex
-	Facts               map[string]interface{}
-	store               store.Store
-	Stats               EngineStats
-	RuleStats           map[string]*RuleStats
-	FactStats           map[string]*FactStats
-	statsMutex          sync.RWMutex
-	priorityThreshold   int
-	pid                 int32
-	proc                *process.Process
+	bytecode                    []byte
+	ruleExecutionIndex          []compiler.RuleExecutionIndex
+	factRuleIndex               map[string][]string
+	factDependencyIndex         []compiler.FactDependencyIndex
+	Facts                       map[string]interface{}
+	store                       store.Store
+	Stats                       EngineStats
+	RuleStats                   map[string]*RuleStats
+	FactStats                   map[string]*FactStats
+	statsMutex                  sync.RWMutex
+	priorityThreshold           int
+	pid                         int32
+	proc                        *process.Process
+	enablePerformanceMonitoring bool
 }
 
 type EngineStats struct {
@@ -89,7 +90,8 @@ func (e *Engine) GetStats() map[string]interface{} {
 // The Engine is initialized with the bytecode, rule execution index, fact rule index,
 // fact dependency index, and an empty Facts map.
 // The store.Store parameter is used to provide access to external data during rule execution.
-func NewEngineFromFile(filename string, store store.Store, priorityThreshold int) (*Engine, error) {
+func NewEngineFromFile(filename string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*Engine, error) {
+
 	bytecode, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to read bytecode file", err, map[string]interface{}{"filename": filename})
@@ -106,10 +108,11 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		Stats: EngineStats{
 			EngineStartTime: time.Now(),
 		},
-		RuleStats:         make(map[string]*RuleStats),
-		FactStats:         make(map[string]*FactStats),
-		priorityThreshold: priorityThreshold,
-		pid:               int32(os.Getpid()),
+		RuleStats:                   make(map[string]*RuleStats),
+		FactStats:                   make(map[string]*FactStats),
+		priorityThreshold:           priorityThreshold,
+		pid:                         int32(os.Getpid()),
+		enablePerformanceMonitoring: enablePerformanceMonitoring,
 	}
 
 	proc, err := process.NewProcess(engine.pid)
@@ -233,35 +236,37 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
-	startTime := time.Now()
+	var startTime time.Time
+	if e.enablePerformanceMonitoring {
+		startTime = time.Now()
+		e.statsMutex.Lock()
+		e.Stats.TotalFactsProcessed++
+		e.Stats.LastUpdateTime = startTime
 
-	e.statsMutex.Lock()
-	e.Stats.TotalFactsProcessed++
-	e.Stats.LastUpdateTime = startTime
-
-	// Ensure Facts map is initialized
-	if e.Facts == nil {
-		e.Facts = make(map[string]interface{})
-	}
-	e.Facts[factName] = factValue
-
-	// Ensure FactStats map is initialized
-	if e.FactStats == nil {
-		e.FactStats = make(map[string]*FactStats)
-	}
-
-	// Update fact stats
-	if factStats, ok := e.FactStats[factName]; ok {
-		factStats.UpdateCount++
-		factStats.LastUpdateTime = startTime
-	} else {
-		e.FactStats[factName] = &FactStats{
-			Name:           factName,
-			UpdateCount:    1,
-			LastUpdateTime: startTime,
+		// Ensure Facts map is initialized
+		if e.Facts == nil {
+			e.Facts = make(map[string]interface{})
 		}
+		e.Facts[factName] = factValue
+
+		// Ensure FactStats map is initialized
+		if e.FactStats == nil {
+			e.FactStats = make(map[string]*FactStats)
+		}
+
+		// Update fact stats
+		if factStats, ok := e.FactStats[factName]; ok {
+			factStats.UpdateCount++
+			factStats.LastUpdateTime = startTime
+		} else {
+			e.FactStats[factName] = &FactStats{
+				Name:           factName,
+				UpdateCount:    1,
+				LastUpdateTime: startTime,
+			}
+		}
+		e.statsMutex.Unlock()
 	}
-	e.statsMutex.Unlock()
 
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
@@ -362,11 +367,13 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 		}
 	}
 
-	e.statsMutex.Lock()
-	updateDuration := time.Since(startTime)
-	e.FactStats[factName].TotalUpdateLatency += updateDuration
-	e.updateSystemStats()
-	e.statsMutex.Unlock()
+	if e.enablePerformanceMonitoring {
+		e.statsMutex.Lock()
+		updateDuration := time.Since(startTime)
+		e.FactStats[factName].TotalUpdateLatency += updateDuration
+		e.updateSystemStats()
+		e.statsMutex.Unlock()
+	}
 
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Finished processing fact update")
 }
@@ -374,22 +381,17 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 func (e *Engine) evaluateRule(ruleName string) error {
 	logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
 
-	startTime := time.Now()
-	//timeout := time.After(5 * time.Second)
-
-	e.statsMutex.RLock()
-	defer e.statsMutex.RUnlock()
-
-	e.Stats.TotalRulesProcessed++
-
-	ruleStats, ok := e.RuleStats[ruleName]
-	if !ok {
-		ruleStats = &RuleStats{Name: ruleName}
-		e.RuleStats[ruleName] = ruleStats
+	var startTime time.Time
+	if e.enablePerformanceMonitoring {
+		startTime = time.Now()
+		e.statsMutex.Lock()
+		e.Stats.TotalRulesProcessed++
+		if ruleStats, ok := e.RuleStats[ruleName]; ok {
+			ruleStats.ExecutionCount++
+			ruleStats.LastExecutionTime = startTime
+		}
+		e.statsMutex.Unlock()
 	}
-
-	ruleStats.ExecutionCount++
-	ruleStats.LastExecutionTime = startTime
 
 	var ruleOffset int
 	var rulePriority int
@@ -545,8 +547,15 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			return err
 		}
 	}
-	executionDuration := time.Since(startTime)
-	ruleStats.TotalExecutionTime += executionDuration
+
+	if e.enablePerformanceMonitoring {
+		e.statsMutex.Lock()
+		executionDuration := time.Since(startTime)
+		if ruleStats, ok := e.RuleStats[ruleName]; ok {
+			ruleStats.TotalExecutionTime += executionDuration
+		}
+		e.statsMutex.Unlock()
+	}
 
 	return nil
 }
