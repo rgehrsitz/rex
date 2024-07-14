@@ -312,3 +312,64 @@ func createTestEngine(redisStore *store.RedisStore, jsonRuleset string) *Engine 
 
 	return engine
 }
+
+func TestPerformanceMonitoring(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	// Test with performance monitoring enabled
+	engineEnabled := createTestEngine(redisStore, `{
+        "rules": [{
+            "name": "test_rule",
+            "conditions": {
+                "all": [{
+                    "fact": "temperature",
+                    "operator": "GT",
+                    "value": 30
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "status",
+                "value": "hot"
+            }]
+        }]
+    }`)
+	engineEnabled.enablePerformanceMonitoring = true
+
+	// Process a fact update
+	engineEnabled.ProcessFactUpdate("temperature", 35)
+
+	assert.Greater(t, engineEnabled.Stats.TotalFactsProcessed, int64(0))
+	assert.Greater(t, engineEnabled.Stats.TotalRulesProcessed, int64(0))
+	assert.NotZero(t, engineEnabled.Stats.LastUpdateTime)
+	assert.NotNil(t, engineEnabled.FactStats["temperature"])
+
+	// Test with performance monitoring disabled
+	engineDisabled := createTestEngine(redisStore, `{
+        "rules": [{
+            "name": "test_rule",
+            "conditions": {
+                "all": [{
+                    "fact": "temperature",
+                    "operator": "GT",
+                    "value": 30
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "status",
+                "value": "hot"
+            }]
+        }]
+    }`)
+	engineDisabled.enablePerformanceMonitoring = false
+
+	// Process a fact update
+	engineDisabled.ProcessFactUpdate("temperature", 35)
+
+	assert.Equal(t, int64(0), engineDisabled.Stats.TotalFactsProcessed)
+	assert.Equal(t, int64(0), engineDisabled.Stats.TotalRulesProcessed)
+	assert.Zero(t, engineDisabled.Stats.LastUpdateTime)
+	assert.Nil(t, engineDisabled.FactStats["temperature"])
+}

@@ -22,6 +22,8 @@ type RedisStore struct {
 // NewRedisStore creates a new instance of RedisStore with the given address, password, and database number.
 // It establishes a connection to the Redis server and returns a pointer to the RedisStore.
 func NewRedisStore(addr, password string, db int) *RedisStore {
+	logging.Logger.Info().Str("addr", addr).Int("db", db).Msg("Connecting to Redis")
+
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
@@ -30,8 +32,10 @@ func NewRedisStore(addr, password string, db int) *RedisStore {
 
 	_, err := client.Ping(ctx).Result()
 	if err != nil {
-		logging.Logger.Fatal().Err(err).Msg("Failed to connect to Redis: %v")
+		logging.Logger.Fatal().Err(err).Msg("Failed to connect to Redis")
 	}
+
+	logging.Logger.Info().Msg("Successfully connected to Redis")
 
 	return &RedisStore{client: client}
 }
@@ -94,6 +98,8 @@ func (s *RedisStore) MGetFacts(keys ...string) (map[string]interface{}, error) {
 }
 
 func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
+	logging.Logger.Info().Strs("channels", channels).Msg("Subscribing to Redis channels")
+
 	pubsub := s.client.Subscribe(ctx, channels...)
 
 	// Verify the subscription was successful
@@ -108,7 +114,19 @@ func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
 }
 
 func (s *RedisStore) ReceiveFacts() <-chan *redis.Message {
-	return s.client.Subscribe(ctx).Channel()
+	logging.Logger.Info().Msg("Setting up fact reception from Redis")
+	pubsub := s.client.Subscribe(ctx, "weather", "system", "network", "energy", "water")
+
+	// Verify the subscription was successful
+	_, err := pubsub.Receive(ctx)
+	if err != nil {
+		logging.Logger.Error().Err(err).Msg("Failed to subscribe to Redis channels")
+		return nil
+	}
+
+	logging.Logger.Info().Msg("Successfully subscribed to Redis channels")
+
+	return pubsub.Channel()
 }
 
 func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {

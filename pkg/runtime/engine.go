@@ -10,6 +10,7 @@ import (
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,7 @@ type Engine struct {
 	pid                         int32
 	proc                        *process.Process
 	enablePerformanceMonitoring bool
+	stopMonitoring              chan struct{}
 }
 
 type EngineStats struct {
@@ -68,12 +70,15 @@ func (e *Engine) GetStats() map[string]interface{} {
 	e.statsMutex.RLock()
 	defer e.statsMutex.RUnlock()
 
+	uptime := time.Since(e.Stats.EngineStartTime)
+	uptimeStr := formatDuration(uptime)
+
 	return map[string]interface{}{
 		"TotalFactsProcessed": e.Stats.TotalFactsProcessed,
 		"TotalRulesProcessed": e.Stats.TotalRulesProcessed,
 		"TotalFactsUpdated":   e.Stats.TotalFactsUpdated,
 		"LastUpdateTime":      e.Stats.LastUpdateTime.Format(time.RFC3339),
-		"EngineUptime":        time.Since(e.Stats.EngineStartTime).String(),
+		"EngineUptime":        uptimeStr,
 		"CPUUsage":            fmt.Sprintf("%.2f%%", e.Stats.CPUUsage),
 		"MemoryUsage":         fmt.Sprintf("%.2f MB", float64(e.Stats.MemoryUsage)/(1024*1024)),
 		"GoroutineCount":      e.Stats.GoroutineCount,
@@ -113,6 +118,7 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		priorityThreshold:           priorityThreshold,
 		pid:                         int32(os.Getpid()),
 		enablePerformanceMonitoring: enablePerformanceMonitoring,
+		stopMonitoring:              make(chan struct{}),
 	}
 
 	proc, err := process.NewProcess(engine.pid)
@@ -229,44 +235,19 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		}
 	}
 
+	go engine.StartFactProcessing()
+
 	logging.Logger.Info().Msg("Engine initialized from bytecode")
+
+	if enablePerformanceMonitoring {
+		engine.StartPerformanceMonitoring(5 * time.Second) // or choose an appropriate interval
+	}
+
 	return engine, nil
 }
 
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
-
-	var startTime time.Time
-	if e.enablePerformanceMonitoring {
-		startTime = time.Now()
-		e.statsMutex.Lock()
-		e.Stats.TotalFactsProcessed++
-		e.Stats.LastUpdateTime = startTime
-
-		// Ensure Facts map is initialized
-		if e.Facts == nil {
-			e.Facts = make(map[string]interface{})
-		}
-		e.Facts[factName] = factValue
-
-		// Ensure FactStats map is initialized
-		if e.FactStats == nil {
-			e.FactStats = make(map[string]*FactStats)
-		}
-
-		// Update fact stats
-		if factStats, ok := e.FactStats[factName]; ok {
-			factStats.UpdateCount++
-			factStats.LastUpdateTime = startTime
-		} else {
-			e.FactStats[factName] = &FactStats{
-				Name:           factName,
-				UpdateCount:    1,
-				LastUpdateTime: startTime,
-			}
-		}
-		e.statsMutex.Unlock()
-	}
 
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
@@ -367,19 +348,13 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 		}
 	}
 
-	if e.enablePerformanceMonitoring {
-		e.statsMutex.Lock()
-		updateDuration := time.Since(startTime)
-		e.FactStats[factName].TotalUpdateLatency += updateDuration
-		e.updateSystemStats()
-		e.statsMutex.Unlock()
-	}
-
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Finished processing fact update")
 }
 
 func (e *Engine) evaluateRule(ruleName string) error {
-	logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
+	logging.Logger.Debug().
+		Str("ruleName", ruleName).
+		Msg("Starting rule evaluation")
 
 	var startTime time.Time
 	if e.enablePerformanceMonitoring {
@@ -557,6 +532,11 @@ func (e *Engine) evaluateRule(ruleName string) error {
 		e.statsMutex.Unlock()
 	}
 
+	logging.Logger.Debug().
+		Str("ruleName", ruleName).
+		Bool("ruleTriggered", ruleTriggered).
+		Msg("Finished rule evaluation")
+
 	return nil
 }
 
@@ -601,6 +581,12 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 
 // executeAction now returns an error
 func (e *Engine) executeAction(action compiler.Action) error {
+	logging.Logger.Debug().
+		Str("actionType", action.Type).
+		Str("actionTarget", action.Target).
+		Interface("actionValue", action.Value).
+		Msg("Executing action")
+
 	switch action.Type {
 	case "updateStore":
 		factName := action.Target
@@ -628,11 +614,17 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		logging.Logger.Warn().Err(err).Msg("Unknown action type")
 		return err
 	}
+
+	logging.Logger.Debug().
+		Str("actionType", action.Type).
+		Str("actionTarget", action.Target).
+		Msg("Finished executing action")
+
 	return nil
 }
 
 func (e *Engine) updateCPUUsage() {
-	percentage, err := e.proc.Percent(time.Second)
+	percentage, err := e.proc.Percent(0) // Use 0 for non-blocking
 	if err == nil {
 		e.Stats.CPUUsage = percentage
 	} else {
@@ -658,4 +650,84 @@ func (e *Engine) updateSystemStats() {
 	e.updateCPUUsage()
 	e.updateMemoryUsage()
 	e.updateGoroutineCount()
+}
+
+func formatDuration(duration time.Duration) string {
+	days := int(duration.Hours() / 24)
+	hours := int(duration.Hours()) % 24
+	minutes := int(duration.Minutes()) % 60
+	seconds := int(duration.Seconds()) % 60
+
+	var sb strings.Builder
+	if days > 0 {
+		sb.WriteString(fmt.Sprintf("%dd ", days))
+	}
+	if hours > 0 {
+		sb.WriteString(fmt.Sprintf("%dh ", hours))
+	}
+	if minutes > 0 {
+		sb.WriteString(fmt.Sprintf("%dm ", minutes))
+	}
+	sb.WriteString(fmt.Sprintf("%ds", seconds))
+
+	return sb.String()
+}
+
+func (e *Engine) StartFactProcessing() {
+	logging.Logger.Info().Msg("Starting fact processing loop")
+	factChan := e.store.ReceiveFacts()
+
+	for msg := range factChan {
+		logging.Logger.Debug().
+			Str("channel", msg.Channel).
+			Str("payload", msg.Payload).
+			Msg("Received fact update")
+
+		parts := strings.SplitN(msg.Payload, "=", 2)
+		if len(parts) != 2 {
+			logging.Logger.Warn().
+				Str("payload", msg.Payload).
+				Msg("Invalid fact update format")
+			continue
+		}
+
+		factName := parts[0]
+		factValue := parts[1]
+
+		// Convert factValue to appropriate type
+		var value interface{}
+		if floatVal, err := strconv.ParseFloat(factValue, 64); err == nil {
+			value = floatVal
+		} else if boolVal, err := strconv.ParseBool(factValue); err == nil {
+			value = boolVal
+		} else {
+			value = factValue
+		}
+
+		e.ProcessFactUpdate(factName, value)
+	}
+}
+
+func (e *Engine) StartPerformanceMonitoring(interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				e.statsMutex.Lock()
+				e.updateSystemStats()
+				e.statsMutex.Unlock()
+			case <-e.stopMonitoring: // We'll add this channel later
+				return
+			}
+		}
+	}()
+}
+
+func (e *Engine) StopPerformanceMonitoring() {
+	if e.enablePerformanceMonitoring {
+		close(e.stopMonitoring)
+	}
 }

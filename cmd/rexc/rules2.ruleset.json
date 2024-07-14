@@ -1,0 +1,86 @@
+{
+  "rules": [
+    {
+      "name": "rule-1",
+      "priority": 10,
+      "conditions": {
+        "all": [
+          {
+            "fact": "weather:temperature",
+            "operator": "GT",
+            "value": 30.0
+          },
+          {
+            "fact": "weather:humidity",
+            "operator": "LT",
+            "value": 60
+          },
+          {
+            "any": [
+              {
+                "fact": "weather:pressure",
+                "operator": "LT",
+                "value": 1010
+              },
+              {
+                "fact": "weather:flow_rate",
+                "operator": "GT",
+                "value": 5.0
+              }
+            ]
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "updateStore",
+          "target": "weather:temperature_status",
+          "value": true
+        }
+      ]
+    },
+    {
+      "name": "rule-2",
+      "priority": 15,
+      "conditions": {
+        "all": [
+          {
+            "any": [
+              {
+                "fact": "weather:pressure",
+                "operator": "EQ",
+                "value": 1013
+              },
+              {
+                "fact": "weather:flow_rate",
+                "operator": "GTE",
+                "value": 5.0
+              }
+            ]
+          },
+          {
+            "any": [
+              {
+                "fact": "weather:temperature",
+                "operator": "EQ",
+                "value": 72
+              },
+              {
+                "fact": "weather:flow_rate",
+                "operator": "LT",
+                "value": 5.0
+              }
+            ]
+          }
+        ]
+      },
+      "actions": [
+        {
+          "type": "sendMessage",
+          "target": "weather:alert-service",
+          "value": "Alert - Pressure or flow rate exceeded limits!"
+        }
+      ]
+    }
+  ]
+}
