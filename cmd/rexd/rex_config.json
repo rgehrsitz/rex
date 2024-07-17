@@ -12,13 +12,13 @@
     "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
-    "update_interval": 5,
+    "update_interval": 2,
     "priority_threshold": 1,
     "enable_performance_monitoring": true
   },
   "dashboard": {
     "enabled": true,
     "port": 8080,
-    "update_interval": 1
+    "update_interval": 2
   }
 }

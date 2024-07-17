@@ -1,3 +1,5 @@
+// pkg\runtime\dashboard\src\lib\stores\dashboardStore.ts
+
 import { writable } from "svelte/store";
 
 export interface DashboardData {

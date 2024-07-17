@@ -33,6 +33,8 @@ func initializeRedis(rdb *redis.Client) error {
 			"temperature": "25.0",
 			"humidity":    "60",
 			"pressure":    "1013.25",
+			"flow_rate":   "30",
+			"velocity":    "45",
 		},
 		"system": {
 			"flow_rate": "30",

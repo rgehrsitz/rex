@@ -624,9 +624,10 @@ func (e *Engine) executeAction(action compiler.Action) error {
 }
 
 func (e *Engine) updateCPUUsage() {
-	percentage, err := e.proc.Percent(0) // Use 0 for non-blocking
+	percentage, err := e.proc.Percent(0)
 	if err == nil {
 		e.Stats.CPUUsage = percentage
+		logging.Logger.Debug().Float64("cpuUsage", percentage).Msg("Updated CPU usage")
 	} else {
 		logging.Logger.Warn().Err(err).Msg("Failed to update CPU usage")
 	}
@@ -635,14 +636,17 @@ func (e *Engine) updateCPUUsage() {
 func (e *Engine) updateMemoryUsage() {
 	memInfo, err := e.proc.MemoryInfo()
 	if err == nil {
-		e.Stats.MemoryUsage = memInfo.RSS // Resident Set Size
+		e.Stats.MemoryUsage = memInfo.RSS
+		logging.Logger.Debug().Uint64("memoryUsage", memInfo.RSS).Msg("Updated memory usage")
 	} else {
 		logging.Logger.Warn().Err(err).Msg("Failed to update memory usage")
 	}
 }
 
 func (e *Engine) updateGoroutineCount() {
-	e.Stats.GoroutineCount = runtime.NumGoroutine()
+	count := runtime.NumGoroutine()
+	e.Stats.GoroutineCount = count
+	logging.Logger.Debug().Int("goroutineCount", count).Msg("Updated goroutine count")
 }
 
 // New method to update all system stats at once
@@ -650,6 +654,9 @@ func (e *Engine) updateSystemStats() {
 	e.updateCPUUsage()
 	e.updateMemoryUsage()
 	e.updateGoroutineCount()
+	e.statsMutex.Lock()
+	e.Stats.LastUpdateTime = time.Now()
+	e.statsMutex.Unlock()
 }
 
 func formatDuration(duration time.Duration) string {
@@ -709,6 +716,7 @@ func (e *Engine) StartFactProcessing() {
 }
 
 func (e *Engine) StartPerformanceMonitoring(interval time.Duration) {
+	logging.Logger.Info().Msg("Starting performance monitoring")
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -716,10 +724,12 @@ func (e *Engine) StartPerformanceMonitoring(interval time.Duration) {
 		for {
 			select {
 			case <-ticker.C:
+				logging.Logger.Debug().Msg("Updating system stats")
 				e.statsMutex.Lock()
 				e.updateSystemStats()
 				e.statsMutex.Unlock()
-			case <-e.stopMonitoring: // We'll add this channel later
+			case <-e.stopMonitoring:
+				logging.Logger.Info().Msg("Stopping performance monitoring")
 				return
 			}
 		}

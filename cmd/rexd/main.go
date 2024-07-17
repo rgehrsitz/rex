@@ -86,9 +86,9 @@ func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFa
 		return fmt.Errorf("failed to setup dependencies: %w", err)
 	}
 
-	if config.EnablePerformanceMonitoring {
-		deps.Engine.StartPerformanceMonitoring(5 * time.Second)
-	}
+	// if config.EnablePerformanceMonitoring {
+	// 	deps.Engine.StartPerformanceMonitoring(5 * time.Second)
+	// }
 
 	return runMainLoop(ctx, deps, config)
 }

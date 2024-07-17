@@ -1,3 +1,5 @@
+// pkg\runtime\dashboard.go
+
 package runtime
 
 import (
@@ -73,6 +75,8 @@ func (d *Dashboard) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	fmt.Printf("Client connected: %v\n", conn.RemoteAddr()) // Add this line for debugging
+
 	d.clientsMutex.Lock()
 	d.clients[conn] = true
 	d.clientsMutex.Unlock()
@@ -87,6 +91,8 @@ func (d *Dashboard) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	d.clientsMutex.Lock()
 	delete(d.clients, conn)
 	d.clientsMutex.Unlock()
+
+	fmt.Printf("Client disconnected: %v\n", conn.RemoteAddr()) // Add this line for debugging
 }
 
 func (d *Dashboard) broadcastUpdates() {
@@ -100,6 +106,8 @@ func (d *Dashboard) broadcastUpdates() {
 			fmt.Printf("Error marshaling stats: %v\n", err)
 			continue
 		}
+
+		fmt.Printf("Broadcasting update: %s\n", string(message)) // Add this log
 
 		d.clientsMutex.Lock()
 		for client := range d.clients {
