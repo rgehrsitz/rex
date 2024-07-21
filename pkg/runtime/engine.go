@@ -39,16 +39,19 @@ type Engine struct {
 }
 
 type EngineStats struct {
-	TotalFactsProcessed int64
-	TotalRulesProcessed int64
-	TotalFactsUpdated   int64
-	LastUpdateTime      time.Time
-	EngineStartTime     time.Time
-	CPUUsage            float64
-	MemoryUsage         uint64
-	GoroutineCount      int
-	ErrorCount          int64
-	WarningCount        int64
+	TotalFactsProcessed       int64
+	TotalRulesProcessed       int64
+	TotalFactsUpdated         int64
+	LastUpdateTime            time.Time
+	EngineStartTime           time.Time
+	CPUUsage                  float64
+	MemoryUsage               uint64
+	GoroutineCount            int
+	ErrorCount                int64
+	WarningCount              int64
+	AverageRuleEvaluationTime time.Duration
+	FactProcessingRate        float64
+	RuleExecutionRate         float64
 }
 
 type RuleStats struct {
@@ -74,18 +77,21 @@ func (e *Engine) GetStats() map[string]interface{} {
 	uptimeStr := formatDuration(uptime)
 
 	return map[string]interface{}{
-		"TotalFactsProcessed": e.Stats.TotalFactsProcessed,
-		"TotalRulesProcessed": e.Stats.TotalRulesProcessed,
-		"TotalFactsUpdated":   e.Stats.TotalFactsUpdated,
-		"LastUpdateTime":      e.Stats.LastUpdateTime.Format(time.RFC3339),
-		"EngineUptime":        uptimeStr,
-		"CPUUsage":            fmt.Sprintf("%.2f%%", e.Stats.CPUUsage),
-		"MemoryUsage":         fmt.Sprintf("%.2f MB", float64(e.Stats.MemoryUsage)/(1024*1024)),
-		"GoroutineCount":      e.Stats.GoroutineCount,
-		"ErrorCount":          e.Stats.ErrorCount,
-		"WarningCount":        e.Stats.WarningCount,
-		"TotalRules":          len(e.ruleExecutionIndex),
-		"TotalFacts":          len(e.Facts),
+		"TotalFactsProcessed":       e.Stats.TotalFactsProcessed,
+		"TotalRulesProcessed":       e.Stats.TotalRulesProcessed,
+		"TotalFactsUpdated":         e.Stats.TotalFactsUpdated,
+		"LastUpdateTime":            e.Stats.LastUpdateTime.Format(time.RFC3339),
+		"EngineUptime":              uptimeStr,
+		"CPUUsage":                  fmt.Sprintf("%.2f%%", e.Stats.CPUUsage),
+		"MemoryUsage":               fmt.Sprintf("%.2f MB", float64(e.Stats.MemoryUsage)/(1024*1024)),
+		"GoroutineCount":            e.Stats.GoroutineCount,
+		"ErrorCount":                e.Stats.ErrorCount,
+		"WarningCount":              e.Stats.WarningCount,
+		"AverageRuleEvaluationTime": e.Stats.AverageRuleEvaluationTime.Milliseconds(),
+		"FactProcessingRate":        e.Stats.FactProcessingRate,
+		"RuleExecutionRate":         e.Stats.RuleExecutionRate,
+		"TotalRules":                len(e.ruleExecutionIndex),
+		"TotalFacts":                len(e.Facts),
 	}
 }
 
@@ -601,6 +607,12 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		e.Stats.TotalFactsUpdated++
 		e.statsMutex.Unlock()
 
+		logging.Logger.Debug().
+			Str("factName", factName).
+			Interface("factValue", factValue).
+			Int64("TotalFactsUpdated", e.Stats.TotalFactsUpdated).
+			Msg("Fact updated")
+
 		// Send the fact update to the store via a set and publish command
 		err := e.store.SetAndPublishFact(factName, factValue)
 		if err != nil {
@@ -666,6 +678,8 @@ func (e *Engine) updateSystemStats() {
 	e.updateGoroutineCount()
 
 	e.Stats.LastUpdateTime = time.Now()
+
+	e.calculateRates()
 
 	logging.Logger.Debug().
 		Float64("cpuUsage", e.Stats.CPUUsage).
@@ -782,4 +796,31 @@ func (e *Engine) Shutdown() {
 	}
 	// Add any other cleanup operations here
 	logging.Logger.Info().Msg("Engine shutdown complete")
+}
+
+func (e *Engine) calculateRates() {
+	e.statsMutex.Lock()
+	defer e.statsMutex.Unlock()
+
+	duration := time.Since(e.Stats.EngineStartTime)
+	if duration > 0 {
+		e.Stats.FactProcessingRate = float64(e.Stats.TotalFactsProcessed) / duration.Seconds()
+		e.Stats.RuleExecutionRate = float64(e.Stats.TotalRulesProcessed) / duration.Seconds()
+	}
+
+	totalTime := time.Duration(0)
+	totalRules := int64(0)
+	for _, ruleStats := range e.RuleStats {
+		totalTime += ruleStats.TotalExecutionTime
+		totalRules += ruleStats.ExecutionCount
+	}
+	if totalRules > 0 {
+		e.Stats.AverageRuleEvaluationTime = totalTime / time.Duration(totalRules)
+	}
+
+	logging.Logger.Debug().
+		Float64("FactProcessingRate", e.Stats.FactProcessingRate).
+		Float64("RuleExecutionRate", e.Stats.RuleExecutionRate).
+		Dur("AverageRuleEvaluationTime", e.Stats.AverageRuleEvaluationTime).
+		Msg("Calculated rates and averages")
 }
