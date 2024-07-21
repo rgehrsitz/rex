@@ -89,12 +89,7 @@ func (e *Engine) GetStats() map[string]interface{} {
 	}
 }
 
-// NewEngineFromFile creates a new Engine instance by reading bytecode from a file.
-// It takes the filename of the bytecode file and a store.Store instance as parameters.
-// The function returns a pointer to the Engine and an error, if any.
-// The Engine is initialized with the bytecode, rule execution index, fact rule index,
-// fact dependency index, and an empty Facts map.
-// The store.Store parameter is used to provide access to external data during rule execution.
+// New method to create an engine from a file
 func NewEngineFromFile(filename string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*Engine, error) {
 
 	bytecode, err := os.ReadFile(filename)
@@ -239,9 +234,9 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 
 	logging.Logger.Info().Msg("Engine initialized from bytecode")
 
-	if enablePerformanceMonitoring {
-		engine.StartPerformanceMonitoring(5 * time.Second) // or choose an appropriate interval
-	}
+	// if enablePerformanceMonitoring {
+	// 	engine.StartPerformanceMonitoring(time.Duration(EngineInterval) * time.Second) // or choose an appropriate interval
+	// }
 
 	return engine, nil
 }
@@ -623,24 +618,24 @@ func (e *Engine) executeAction(action compiler.Action) error {
 	return nil
 }
 
-func (e *Engine) updateCPUUsage() {
+func (e *Engine) updateCPUUsage() error {
 	percentage, err := e.proc.Percent(0)
-	if err == nil {
-		e.Stats.CPUUsage = percentage
-		logging.Logger.Debug().Float64("cpuUsage", percentage).Msg("Updated CPU usage")
-	} else {
-		logging.Logger.Warn().Err(err).Msg("Failed to update CPU usage")
+	if err != nil {
+		return err
 	}
+	e.Stats.CPUUsage = percentage
+	logging.Logger.Debug().Float64("cpuUsage", percentage).Msg("Updated CPU usage")
+	return nil
 }
 
-func (e *Engine) updateMemoryUsage() {
+func (e *Engine) updateMemoryUsage() error {
 	memInfo, err := e.proc.MemoryInfo()
-	if err == nil {
-		e.Stats.MemoryUsage = memInfo.RSS
-		logging.Logger.Debug().Uint64("memoryUsage", memInfo.RSS).Msg("Updated memory usage")
-	} else {
-		logging.Logger.Warn().Err(err).Msg("Failed to update memory usage")
+	if err != nil {
+		return err
 	}
+	e.Stats.MemoryUsage = memInfo.RSS
+	logging.Logger.Debug().Uint64("memoryUsage", memInfo.RSS).Msg("Updated memory usage")
+	return nil
 }
 
 func (e *Engine) updateGoroutineCount() {
@@ -651,12 +646,24 @@ func (e *Engine) updateGoroutineCount() {
 
 // New method to update all system stats at once
 func (e *Engine) updateSystemStats() {
-	e.updateCPUUsage()
-	e.updateMemoryUsage()
+	logging.Logger.Debug().Msg("Starting to update system stats")
+
+	if err := e.updateCPUUsage(); err != nil {
+		logging.Logger.Error().Err(err).Msg("Failed to update CPU usage")
+	}
+	if err := e.updateMemoryUsage(); err != nil {
+		logging.Logger.Error().Err(err).Msg("Failed to update memory usage")
+	}
 	e.updateGoroutineCount()
-	e.statsMutex.Lock()
+
 	e.Stats.LastUpdateTime = time.Now()
-	e.statsMutex.Unlock()
+
+	logging.Logger.Debug().
+		Float64("cpuUsage", e.Stats.CPUUsage).
+		Uint64("memoryUsage", e.Stats.MemoryUsage).
+		Int("goroutineCount", e.Stats.GoroutineCount).
+		Time("lastUpdateTime", e.Stats.LastUpdateTime).
+		Msg("System stats updated")
 }
 
 func formatDuration(duration time.Duration) string {
@@ -718,18 +725,35 @@ func (e *Engine) StartFactProcessing() {
 func (e *Engine) StartPerformanceMonitoring(interval time.Duration) {
 	logging.Logger.Info().Msg("Starting performance monitoring")
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logging.Logger.Error().Interface("panic", r).Msg("Performance monitoring goroutine panicked")
+			}
+			logging.Logger.Info().Msg("Performance monitoring goroutine exited")
+		}()
+
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+
+		logging.Logger.Info().Msg("Performance monitoring goroutine started")
 
 		for {
 			select {
 			case <-ticker.C:
-				logging.Logger.Debug().Msg("Updating system stats")
-				e.statsMutex.Lock()
-				e.updateSystemStats()
-				e.statsMutex.Unlock()
+				logging.Logger.Debug().Msg("Ticker fired, updating system stats")
+				func() {
+					defer func() {
+						if r := recover(); r != nil {
+							logging.Logger.Error().Interface("panic", r).Msg("Panic while updating system stats")
+						}
+					}()
+					e.statsMutex.Lock()
+					e.updateSystemStats()
+					e.statsMutex.Unlock()
+				}()
+				logging.Logger.Debug().Msg("System stats update completed")
 			case <-e.stopMonitoring:
-				logging.Logger.Info().Msg("Stopping performance monitoring")
+				logging.Logger.Info().Msg("Received stop signal, stopping performance monitoring")
 				return
 			}
 		}
@@ -740,4 +764,13 @@ func (e *Engine) StopPerformanceMonitoring() {
 	if e.enablePerformanceMonitoring {
 		close(e.stopMonitoring)
 	}
+}
+
+func (e *Engine) Shutdown() {
+	logging.Logger.Info().Msg("Initiating engine shutdown")
+	if e.enablePerformanceMonitoring {
+		e.StopPerformanceMonitoring()
+	}
+	// Add any other cleanup operations here
+	logging.Logger.Info().Msg("Engine shutdown complete")
 }

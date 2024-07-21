@@ -86,9 +86,9 @@ func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFa
 		return fmt.Errorf("failed to setup dependencies: %w", err)
 	}
 
-	// if config.EnablePerformanceMonitoring {
-	// 	deps.Engine.StartPerformanceMonitoring(5 * time.Second)
-	// }
+	if config.EnablePerformanceMonitoring {
+		deps.Engine.StartPerformanceMonitoring(time.Duration(config.EngineInterval) * time.Second)
+	}
 
 	return runMainLoop(ctx, deps, config)
 }
@@ -198,8 +198,8 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 				deps.Engine.StopPerformanceMonitoring()
 			}
 			return nil
-		case <-time.After(time.Duration(config.EngineInterval) * time.Second):
-			log.Debug().Msg("Performing periodic tasks")
+		// case <-time.After(time.Duration(config.EngineInterval) * time.Second):
+		// 	log.Debug().Msg("Performing periodic tasks")
 		case <-ctx.Done():
 			if config.EnablePerformanceMonitoring {
 				deps.Engine.StopPerformanceMonitoring()
