@@ -244,6 +244,10 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
+	e.statsMutex.Lock()
+	e.Stats.TotalFactsProcessed++
+	e.statsMutex.Unlock()
+
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
 		e.Facts[factName] = float64(num)
@@ -351,11 +355,14 @@ func (e *Engine) evaluateRule(ruleName string) error {
 		Str("ruleName", ruleName).
 		Msg("Starting rule evaluation")
 
+	e.statsMutex.Lock()
+	e.Stats.TotalRulesProcessed++
+	e.statsMutex.Unlock()
+
 	var startTime time.Time
 	if e.enablePerformanceMonitoring {
 		startTime = time.Now()
 		e.statsMutex.Lock()
-		e.Stats.TotalRulesProcessed++
 		if ruleStats, ok := e.RuleStats[ruleName]; ok {
 			ruleStats.ExecutionCount++
 			ruleStats.LastExecutionTime = startTime
@@ -590,7 +597,9 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		// Update the fact value in the local fact store
 		e.Facts[factName] = factValue
 
+		e.statsMutex.Lock()
 		e.Stats.TotalFactsUpdated++
+		e.statsMutex.Unlock()
 
 		// Send the fact update to the store via a set and publish command
 		err := e.store.SetAndPublishFact(factName, factValue)
