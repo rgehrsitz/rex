@@ -677,15 +677,22 @@ func (e *Engine) updateSystemStats() {
 	}
 	e.updateGoroutineCount()
 
-	e.Stats.LastUpdateTime = time.Now()
-
-	e.calculateRates()
+	// func() {
+	// 	defer func() {
+	// 		if r := recover(); r != nil {
+	// 			logging.Logger.Error().Interface("panic", r).Msg("Panic in calculateRates")
+	// 		}
+	// 	}()
+	// 	//e.calculateRates()
+	// }()
 
 	logging.Logger.Debug().
 		Float64("cpuUsage", e.Stats.CPUUsage).
 		Uint64("memoryUsage", e.Stats.MemoryUsage).
 		Int("goroutineCount", e.Stats.GoroutineCount).
-		Time("lastUpdateTime", e.Stats.LastUpdateTime).
+		Float64("factProcessingRate", e.Stats.FactProcessingRate).
+		Float64("ruleExecutionRate", e.Stats.RuleExecutionRate).
+		Dur("avgRuleEvalTime", e.Stats.AverageRuleEvaluationTime).
 		Msg("System stats updated")
 }
 
@@ -802,20 +809,34 @@ func (e *Engine) calculateRates() {
 	e.statsMutex.Lock()
 	defer e.statsMutex.Unlock()
 
+	logging.Logger.Debug().Msg("Starting calculateRates")
+
+	defer func() {
+		if r := recover(); r != nil {
+			logging.Logger.Error().Interface("panic", r).Msg("Panic in calculateRates")
+		}
+	}()
+
 	duration := time.Since(e.Stats.EngineStartTime)
 	if duration > 0 {
 		e.Stats.FactProcessingRate = float64(e.Stats.TotalFactsProcessed) / duration.Seconds()
 		e.Stats.RuleExecutionRate = float64(e.Stats.TotalRulesProcessed) / duration.Seconds()
+	} else {
+		// Avoid division by zero
+		e.Stats.FactProcessingRate = 0
+		e.Stats.RuleExecutionRate = 0
 	}
 
-	totalTime := time.Duration(0)
-	totalRules := int64(0)
+	var totalTime time.Duration
+	var totalRules int64
 	for _, ruleStats := range e.RuleStats {
 		totalTime += ruleStats.TotalExecutionTime
 		totalRules += ruleStats.ExecutionCount
 	}
 	if totalRules > 0 {
 		e.Stats.AverageRuleEvaluationTime = totalTime / time.Duration(totalRules)
+	} else {
+		e.Stats.AverageRuleEvaluationTime = 0
 	}
 
 	logging.Logger.Debug().
@@ -823,4 +844,6 @@ func (e *Engine) calculateRates() {
 		Float64("RuleExecutionRate", e.Stats.RuleExecutionRate).
 		Dur("AverageRuleEvaluationTime", e.Stats.AverageRuleEvaluationTime).
 		Msg("Calculated rates and averages")
+
+	logging.Logger.Debug().Msg("Finished calculateRates")
 }

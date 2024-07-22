@@ -1,7 +1,7 @@
 {
   "bytecode_file": "output.bytecode",
   "logging": {
-    "level": "debug",
+    "level": "info",
     "destination": "console",
     "timeFormat": "unixnano"
   },
@@ -13,11 +13,11 @@
   },
   "engine": {
     "priority_threshold": 1,
-    "enable_performance_monitoring": true,
+    "enable_performance_monitoring": false,
     "update_interval": 2
   },
   "dashboard": {
-    "enabled": true,
+    "enabled": false,
     "port": 8080,
     "update_interval": 2
   }
