@@ -13,11 +13,11 @@
   },
   "engine": {
     "priority_threshold": 1,
-    "enable_performance_monitoring": false,
+    "enable_performance_monitoring": true,
     "update_interval": 2
   },
   "dashboard": {
-    "enabled": false,
+    "enabled": true,
     "port": 8080,
     "update_interval": 2
   }

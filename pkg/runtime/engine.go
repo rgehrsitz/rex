@@ -365,16 +365,19 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	e.Stats.TotalRulesProcessed++
 	e.statsMutex.Unlock()
 
-	var startTime time.Time
-	if e.enablePerformanceMonitoring {
-		startTime = time.Now()
-		e.statsMutex.Lock()
-		if ruleStats, ok := e.RuleStats[ruleName]; ok {
-			ruleStats.ExecutionCount++
-			ruleStats.LastExecutionTime = startTime
+	startTime := time.Now() // Start timer for rule evaluation
+	defer func() {
+		if e.enablePerformanceMonitoring {
+			executionDuration := time.Since(startTime)
+			e.statsMutex.Lock()
+			if ruleStats, ok := e.RuleStats[ruleName]; ok {
+				ruleStats.ExecutionCount++
+				ruleStats.TotalExecutionTime += executionDuration
+				ruleStats.LastExecutionTime = startTime
+			}
+			e.statsMutex.Unlock()
 		}
-		e.statsMutex.Unlock()
-	}
+	}()
 
 	var ruleOffset int
 	var rulePriority int
@@ -531,14 +534,14 @@ func (e *Engine) evaluateRule(ruleName string) error {
 		}
 	}
 
-	if e.enablePerformanceMonitoring {
-		e.statsMutex.Lock()
-		executionDuration := time.Since(startTime)
-		if ruleStats, ok := e.RuleStats[ruleName]; ok {
-			ruleStats.TotalExecutionTime += executionDuration
-		}
-		e.statsMutex.Unlock()
-	}
+	// if e.enablePerformanceMonitoring {
+	// 	e.statsMutex.Lock()
+	// 	executionDuration := time.Since(startTime)
+	// 	if ruleStats, ok := e.RuleStats[ruleName]; ok {
+	// 		ruleStats.TotalExecutionTime += executionDuration
+	// 	}
+	// 	e.statsMutex.Unlock()
+	// }
 
 	logging.Logger.Debug().
 		Str("ruleName", ruleName).
@@ -677,14 +680,14 @@ func (e *Engine) updateSystemStats() {
 	}
 	e.updateGoroutineCount()
 
-	// func() {
-	// 	defer func() {
-	// 		if r := recover(); r != nil {
-	// 			logging.Logger.Error().Interface("panic", r).Msg("Panic in calculateRates")
-	// 		}
-	// 	}()
-	// 	//e.calculateRates()
-	// }()
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logging.Logger.Error().Interface("panic", r).Msg("Panic in calculateRates")
+			}
+		}()
+		e.calculateRates()
+	}()
 
 	logging.Logger.Debug().
 		Float64("cpuUsage", e.Stats.CPUUsage).
@@ -806,33 +809,39 @@ func (e *Engine) Shutdown() {
 }
 
 func (e *Engine) calculateRates() {
-	e.statsMutex.Lock()
-	defer e.statsMutex.Unlock()
-
 	logging.Logger.Debug().Msg("Starting calculateRates")
 
 	defer func() {
 		if r := recover(); r != nil {
 			logging.Logger.Error().Interface("panic", r).Msg("Panic in calculateRates")
 		}
+		logging.Logger.Debug().Msg("Finished calculateRates")
 	}()
 
 	duration := time.Since(e.Stats.EngineStartTime)
+	logging.Logger.Debug().Dur("duration", duration).Msg("Engine uptime calculated")
+
 	if duration > 0 {
 		e.Stats.FactProcessingRate = float64(e.Stats.TotalFactsProcessed) / duration.Seconds()
 		e.Stats.RuleExecutionRate = float64(e.Stats.TotalRulesProcessed) / duration.Seconds()
 	} else {
-		// Avoid division by zero
 		e.Stats.FactProcessingRate = 0
 		e.Stats.RuleExecutionRate = 0
 	}
+	logging.Logger.Debug().
+		Float64("FactProcessingRate", e.Stats.FactProcessingRate).
+		Float64("RuleExecutionRate", e.Stats.RuleExecutionRate).
+		Msg("Processing and execution rates calculated")
 
 	var totalTime time.Duration
 	var totalRules int64
-	for _, ruleStats := range e.RuleStats {
+	for ruleName, ruleStats := range e.RuleStats {
+		logging.Logger.Debug().Str("ruleName", ruleName).Msg("Processing rule stats")
 		totalTime += ruleStats.TotalExecutionTime
 		totalRules += ruleStats.ExecutionCount
 	}
+	logging.Logger.Debug().Int64("totalRules", totalRules).Dur("totalTime", totalTime).Msg("Total rules and time calculated")
+
 	if totalRules > 0 {
 		e.Stats.AverageRuleEvaluationTime = totalTime / time.Duration(totalRules)
 	} else {
@@ -843,7 +852,7 @@ func (e *Engine) calculateRates() {
 		Float64("FactProcessingRate", e.Stats.FactProcessingRate).
 		Float64("RuleExecutionRate", e.Stats.RuleExecutionRate).
 		Dur("AverageRuleEvaluationTime", e.Stats.AverageRuleEvaluationTime).
-		Msg("Calculated rates and averages")
+		Msg("Rates and averages calculated")
 
-	logging.Logger.Debug().Msg("Finished calculateRates")
+	logging.Logger.Debug().Msg("Finished calculateRates successfully")
 }
