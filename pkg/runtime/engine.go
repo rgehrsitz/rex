@@ -4,16 +4,12 @@ package runtime
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
-	"runtime"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"rgehrsitz/rex/pkg/logging"
 
@@ -27,72 +23,11 @@ type Engine struct {
 	factDependencyIndex         []compiler.FactDependencyIndex
 	Facts                       map[string]interface{}
 	store                       store.Store
-	Stats                       EngineStats
-	RuleStats                   map[string]*RuleStats
-	FactStats                   map[string]*FactStats
-	statsMutex                  sync.RWMutex
 	priorityThreshold           int
 	pid                         int32
 	proc                        *process.Process
 	enablePerformanceMonitoring bool
 	stopMonitoring              chan struct{}
-}
-
-type EngineStats struct {
-	TotalFactsProcessed       int64
-	TotalRulesProcessed       int64
-	TotalFactsUpdated         int64
-	LastUpdateTime            time.Time
-	EngineStartTime           time.Time
-	CPUUsage                  float64
-	MemoryUsage               uint64
-	GoroutineCount            int
-	ErrorCount                int64
-	WarningCount              int64
-	AverageRuleEvaluationTime time.Duration
-	FactProcessingRate        float64
-	RuleExecutionRate         float64
-}
-
-type RuleStats struct {
-	Name               string
-	ExecutionCount     int64
-	LastExecutionTime  time.Time
-	TotalExecutionTime time.Duration
-	Priority           int
-}
-
-type FactStats struct {
-	Name               string
-	UpdateCount        int64
-	LastUpdateTime     time.Time
-	TotalUpdateLatency time.Duration
-}
-
-func (e *Engine) GetStats() map[string]interface{} {
-	e.statsMutex.RLock()
-	defer e.statsMutex.RUnlock()
-
-	uptime := time.Since(e.Stats.EngineStartTime)
-	uptimeStr := formatDuration(uptime)
-
-	return map[string]interface{}{
-		"TotalFactsProcessed":       e.Stats.TotalFactsProcessed,
-		"TotalRulesProcessed":       e.Stats.TotalRulesProcessed,
-		"TotalFactsUpdated":         e.Stats.TotalFactsUpdated,
-		"LastUpdateTime":            e.Stats.LastUpdateTime.Format(time.RFC3339),
-		"EngineUptime":              uptimeStr,
-		"CPUUsage":                  fmt.Sprintf("%.2f%%", e.Stats.CPUUsage),
-		"MemoryUsage":               fmt.Sprintf("%.2f MB", float64(e.Stats.MemoryUsage)/(1024*1024)),
-		"GoroutineCount":            e.Stats.GoroutineCount,
-		"ErrorCount":                e.Stats.ErrorCount,
-		"WarningCount":              e.Stats.WarningCount,
-		"AverageRuleEvaluationTime": e.Stats.AverageRuleEvaluationTime.Milliseconds(),
-		"FactProcessingRate":        e.Stats.FactProcessingRate,
-		"RuleExecutionRate":         e.Stats.RuleExecutionRate,
-		"TotalRules":                len(e.ruleExecutionIndex),
-		"TotalFacts":                len(e.Facts),
-	}
 }
 
 // New method to create an engine from a file
@@ -105,17 +40,12 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 
 	engine := &Engine{
-		bytecode:            bytecode,
-		ruleExecutionIndex:  make([]compiler.RuleExecutionIndex, 0),
-		factRuleIndex:       make(map[string][]string),
-		factDependencyIndex: make([]compiler.FactDependencyIndex, 0),
-		Facts:               make(map[string]interface{}),
-		store:               store,
-		Stats: EngineStats{
-			EngineStartTime: time.Now(),
-		},
-		RuleStats:                   make(map[string]*RuleStats),
-		FactStats:                   make(map[string]*FactStats),
+		bytecode:                    bytecode,
+		ruleExecutionIndex:          make([]compiler.RuleExecutionIndex, 0),
+		factRuleIndex:               make(map[string][]string),
+		factDependencyIndex:         make([]compiler.FactDependencyIndex, 0),
+		Facts:                       make(map[string]interface{}),
+		store:                       store,
 		priorityThreshold:           priorityThreshold,
 		pid:                         int32(os.Getpid()),
 		enablePerformanceMonitoring: enablePerformanceMonitoring,
@@ -228,14 +158,6 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		logging.Logger.Debug().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
 	}
 
-	// Initialize RuleStats for each rule
-	for _, rule := range engine.ruleExecutionIndex {
-		engine.RuleStats[rule.RuleName] = &RuleStats{
-			Name:     rule.RuleName,
-			Priority: rule.Priority,
-		}
-	}
-
 	go engine.StartFactProcessing()
 
 	logging.Logger.Info().Msg("Engine initialized from bytecode")
@@ -249,10 +171,6 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
-
-	e.statsMutex.Lock()
-	e.Stats.TotalFactsProcessed++
-	e.statsMutex.Unlock()
 
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
@@ -360,24 +278,6 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	logging.Logger.Debug().
 		Str("ruleName", ruleName).
 		Msg("Starting rule evaluation")
-
-	e.statsMutex.Lock()
-	e.Stats.TotalRulesProcessed++
-	e.statsMutex.Unlock()
-
-	startTime := time.Now() // Start timer for rule evaluation
-	defer func() {
-		if e.enablePerformanceMonitoring {
-			executionDuration := time.Since(startTime)
-			e.statsMutex.Lock()
-			if ruleStats, ok := e.RuleStats[ruleName]; ok {
-				ruleStats.ExecutionCount++
-				ruleStats.TotalExecutionTime += executionDuration
-				ruleStats.LastExecutionTime = startTime
-			}
-			e.statsMutex.Unlock()
-		}
-	}()
 
 	var ruleOffset int
 	var rulePriority int
@@ -606,14 +506,9 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		// Update the fact value in the local fact store
 		e.Facts[factName] = factValue
 
-		e.statsMutex.Lock()
-		e.Stats.TotalFactsUpdated++
-		e.statsMutex.Unlock()
-
 		logging.Logger.Debug().
 			Str("factName", factName).
 			Interface("factValue", factValue).
-			Int64("TotalFactsUpdated", e.Stats.TotalFactsUpdated).
 			Msg("Fact updated")
 
 		// Send the fact update to the store via a set and publish command
@@ -640,84 +535,6 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		Msg("Finished executing action")
 
 	return nil
-}
-
-func (e *Engine) updateCPUUsage() error {
-	percentage, err := e.proc.Percent(0)
-	if err != nil {
-		return err
-	}
-	e.Stats.CPUUsage = percentage
-	logging.Logger.Debug().Float64("cpuUsage", percentage).Msg("Updated CPU usage")
-	return nil
-}
-
-func (e *Engine) updateMemoryUsage() error {
-	memInfo, err := e.proc.MemoryInfo()
-	if err != nil {
-		return err
-	}
-	e.Stats.MemoryUsage = memInfo.RSS
-	logging.Logger.Debug().Uint64("memoryUsage", memInfo.RSS).Msg("Updated memory usage")
-	return nil
-}
-
-func (e *Engine) updateGoroutineCount() {
-	count := runtime.NumGoroutine()
-	e.Stats.GoroutineCount = count
-	logging.Logger.Debug().Int("goroutineCount", count).Msg("Updated goroutine count")
-}
-
-// New method to update all system stats at once
-func (e *Engine) updateSystemStats() {
-	logging.Logger.Debug().Msg("Starting to update system stats")
-
-	if err := e.updateCPUUsage(); err != nil {
-		logging.Logger.Error().Err(err).Msg("Failed to update CPU usage")
-	}
-	if err := e.updateMemoryUsage(); err != nil {
-		logging.Logger.Error().Err(err).Msg("Failed to update memory usage")
-	}
-	e.updateGoroutineCount()
-
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logging.Logger.Error().Interface("panic", r).Msg("Panic in calculateRates")
-			}
-		}()
-		e.calculateRates()
-	}()
-
-	logging.Logger.Debug().
-		Float64("cpuUsage", e.Stats.CPUUsage).
-		Uint64("memoryUsage", e.Stats.MemoryUsage).
-		Int("goroutineCount", e.Stats.GoroutineCount).
-		Float64("factProcessingRate", e.Stats.FactProcessingRate).
-		Float64("ruleExecutionRate", e.Stats.RuleExecutionRate).
-		Dur("avgRuleEvalTime", e.Stats.AverageRuleEvaluationTime).
-		Msg("System stats updated")
-}
-
-func formatDuration(duration time.Duration) string {
-	days := int(duration.Hours() / 24)
-	hours := int(duration.Hours()) % 24
-	minutes := int(duration.Minutes()) % 60
-	seconds := int(duration.Seconds()) % 60
-
-	var sb strings.Builder
-	if days > 0 {
-		sb.WriteString(fmt.Sprintf("%dd ", days))
-	}
-	if hours > 0 {
-		sb.WriteString(fmt.Sprintf("%dh ", hours))
-	}
-	if minutes > 0 {
-		sb.WriteString(fmt.Sprintf("%dm ", minutes))
-	}
-	sb.WriteString(fmt.Sprintf("%ds", seconds))
-
-	return sb.String()
 }
 
 func (e *Engine) StartFactProcessing() {
@@ -755,104 +572,10 @@ func (e *Engine) StartFactProcessing() {
 	}
 }
 
-func (e *Engine) StartPerformanceMonitoring(interval time.Duration) {
-	logging.Logger.Info().Msg("Starting performance monitoring")
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logging.Logger.Error().Interface("panic", r).Msg("Performance monitoring goroutine panicked")
-			}
-			logging.Logger.Info().Msg("Performance monitoring goroutine exited")
-		}()
-
-		ticker := time.NewTicker(interval)
-		defer ticker.Stop()
-
-		logging.Logger.Info().Msg("Performance monitoring goroutine started")
-
-		for {
-			select {
-			case <-ticker.C:
-				logging.Logger.Debug().Msg("Ticker fired, updating system stats")
-				func() {
-					defer func() {
-						if r := recover(); r != nil {
-							logging.Logger.Error().Interface("panic", r).Msg("Panic while updating system stats")
-						}
-					}()
-					e.statsMutex.Lock()
-					e.updateSystemStats()
-					e.statsMutex.Unlock()
-				}()
-				logging.Logger.Debug().Msg("System stats update completed")
-			case <-e.stopMonitoring:
-				logging.Logger.Info().Msg("Received stop signal, stopping performance monitoring")
-				return
-			}
-		}
-	}()
-}
-
-func (e *Engine) StopPerformanceMonitoring() {
-	if e.enablePerformanceMonitoring {
-		close(e.stopMonitoring)
-	}
-}
-
 func (e *Engine) Shutdown() {
 	logging.Logger.Info().Msg("Initiating engine shutdown")
-	if e.enablePerformanceMonitoring {
-		e.StopPerformanceMonitoring()
-	}
-	// Add any other cleanup operations here
+
+	// Shutdown performance monitoring
+
 	logging.Logger.Info().Msg("Engine shutdown complete")
-}
-
-func (e *Engine) calculateRates() {
-	logging.Logger.Debug().Msg("Starting calculateRates")
-
-	defer func() {
-		if r := recover(); r != nil {
-			logging.Logger.Error().Interface("panic", r).Msg("Panic in calculateRates")
-		}
-		logging.Logger.Debug().Msg("Finished calculateRates")
-	}()
-
-	duration := time.Since(e.Stats.EngineStartTime)
-	logging.Logger.Debug().Dur("duration", duration).Msg("Engine uptime calculated")
-
-	if duration > 0 {
-		e.Stats.FactProcessingRate = float64(e.Stats.TotalFactsProcessed) / duration.Seconds()
-		e.Stats.RuleExecutionRate = float64(e.Stats.TotalRulesProcessed) / duration.Seconds()
-	} else {
-		e.Stats.FactProcessingRate = 0
-		e.Stats.RuleExecutionRate = 0
-	}
-	logging.Logger.Debug().
-		Float64("FactProcessingRate", e.Stats.FactProcessingRate).
-		Float64("RuleExecutionRate", e.Stats.RuleExecutionRate).
-		Msg("Processing and execution rates calculated")
-
-	var totalTime time.Duration
-	var totalRules int64
-	for ruleName, ruleStats := range e.RuleStats {
-		logging.Logger.Debug().Str("ruleName", ruleName).Msg("Processing rule stats")
-		totalTime += ruleStats.TotalExecutionTime
-		totalRules += ruleStats.ExecutionCount
-	}
-	logging.Logger.Debug().Int64("totalRules", totalRules).Dur("totalTime", totalTime).Msg("Total rules and time calculated")
-
-	if totalRules > 0 {
-		e.Stats.AverageRuleEvaluationTime = totalTime / time.Duration(totalRules)
-	} else {
-		e.Stats.AverageRuleEvaluationTime = 0
-	}
-
-	logging.Logger.Debug().
-		Float64("FactProcessingRate", e.Stats.FactProcessingRate).
-		Float64("RuleExecutionRate", e.Stats.RuleExecutionRate).
-		Dur("AverageRuleEvaluationTime", e.Stats.AverageRuleEvaluationTime).
-		Msg("Rates and averages calculated")
-
-	logging.Logger.Debug().Msg("Finished calculateRates successfully")
 }

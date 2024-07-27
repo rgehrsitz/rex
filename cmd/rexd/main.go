@@ -11,7 +11,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/rs/zerolog/log"
@@ -32,19 +31,15 @@ type Config struct {
 	RedisPassword               string
 	RedisDB                     int
 	RedisChannels               []string
-	EngineInterval              int
-	DashboardEnable             bool
-	DashboardPort               int
-	DashboardUpdate             int
 	PriorityThreshold           int
 	EnablePerformanceMonitoring bool
+	EngineInterval              int
 }
 
 // RexDependencies represents the external dependencies of the application
 type RexDependencies struct {
-	Store     store.Store
-	Engine    *runtime.Engine
-	Dashboard *runtime.Dashboard
+	Store  store.Store
+	Engine *runtime.Engine
 }
 
 // StoreFactory is an interface for creating a store
@@ -57,21 +52,16 @@ type EngineFactory interface {
 	NewEngine(bytecodeFile string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*runtime.Engine, error)
 }
 
-// DashboardFactory is an interface for creating a dashboard
-type DashboardFactory interface {
-	NewDashboard(engine *runtime.Engine, port int, updateInterval time.Duration) *runtime.Dashboard
-}
-
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := run(ctx, os.Args, &RealStoreFactory{}, &RealEngineFactory{}, &RealDashboardFactory{}); err != nil {
+	if err := run(ctx, os.Args, &RealStoreFactory{}, &RealEngineFactory{}); err != nil {
 		log.Fatal().Err(err).Msg("Application failed")
 	}
 }
 
-func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFactory EngineFactory, dashboardFactory DashboardFactory) error {
+func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFactory EngineFactory) error {
 	config, err := parseConfig(args)
 	if err != nil {
 		return fmt.Errorf("failed to parse configuration: %w", err)
@@ -81,13 +71,9 @@ func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFa
 		return fmt.Errorf("failed to configure logger: %w", err)
 	}
 
-	deps, err := setupDependencies(config, storeFactory, engineFactory, dashboardFactory)
+	deps, err := setupDependencies(config, storeFactory, engineFactory)
 	if err != nil {
 		return fmt.Errorf("failed to setup dependencies: %w", err)
-	}
-
-	if config.EnablePerformanceMonitoring {
-		deps.Engine.StartPerformanceMonitoring(time.Duration(config.EngineInterval) * time.Second)
 	}
 
 	return runMainLoop(ctx, deps, config)
@@ -104,12 +90,9 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.address", "localhost:6379")
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
-	viper.SetDefault("engine.update_interval", 5)
-	viper.SetDefault("dashboard.enabled", false)
-	viper.SetDefault("dashboard.port", 8080)
-	viper.SetDefault("dashboard.update_interval", 5)
 	viper.SetDefault("engine.priority_threshold", 1)
 	viper.SetDefault("engine.enable_performance_monitoring", false)
+	viper.SetDefault("engine.update_interval", 5)
 
 	if *configFile == "" {
 		viper.SetConfigName("rex_config")
@@ -136,16 +119,13 @@ func parseConfig(args []string) (*Config, error) {
 		RedisPassword:               viper.GetString("redis.password"),
 		RedisDB:                     viper.GetInt("redis.database"),
 		RedisChannels:               viper.GetStringSlice("redis.channels"),
-		EngineInterval:              viper.GetInt("engine.update_interval"),
-		DashboardEnable:             viper.GetBool("dashboard.enabled"),
-		DashboardPort:               viper.GetInt("dashboard.port"),
-		DashboardUpdate:             viper.GetInt("dashboard.update_interval"),
 		PriorityThreshold:           viper.GetInt("engine.priority_threshold"),
 		EnablePerformanceMonitoring: viper.GetBool("engine.enable_performance_monitoring"),
+		EngineInterval:              viper.GetInt("engine.update_interval"),
 	}, nil
 }
 
-func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory, dashboardFactory DashboardFactory) (*RexDependencies, error) {
+func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory) (*RexDependencies, error) {
 	store := storeFactory.NewStore(config.RedisAddress, config.RedisPassword, config.RedisDB)
 
 	engine, err := engineFactory.NewEngine(config.BytecodeFile, store, config.PriorityThreshold, config.EnablePerformanceMonitoring)
@@ -153,15 +133,9 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
 
-	var dashboard *runtime.Dashboard
-	if config.DashboardEnable {
-		dashboard = dashboardFactory.NewDashboard(engine, config.DashboardPort, time.Duration(config.DashboardUpdate)*time.Second)
-	}
-
 	return &RexDependencies{
-		Store:     store,
-		Engine:    engine,
-		Dashboard: dashboard,
+		Store:  store,
+		Engine: engine,
 	}, nil
 }
 
@@ -177,10 +151,6 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 	pubsub := redisStore.Subscribe(config.RedisChannels...)
 	defer pubsub.Close()
 
-	if deps.Dashboard != nil {
-		deps.Dashboard.Start()
-	}
-
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
@@ -194,16 +164,8 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 			}
 		case <-sigChan:
 			log.Info().Msg("Shutting down REX runtime engine")
-			if config.EnablePerformanceMonitoring {
-				deps.Engine.StopPerformanceMonitoring()
-			}
 			return nil
-		// case <-time.After(time.Duration(config.EngineInterval) * time.Second):
-		// 	log.Debug().Msg("Performing periodic tasks")
 		case <-ctx.Done():
-			if config.EnablePerformanceMonitoring {
-				deps.Engine.StopPerformanceMonitoring()
-			}
 			return nil
 		}
 	}
@@ -245,11 +207,4 @@ type RealEngineFactory struct{}
 
 func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*runtime.Engine, error) {
 	return runtime.NewEngineFromFile(bytecodeFile, store, priorityThreshold, enablePerformanceMonitoring)
-}
-
-// RealDashboardFactory implements DashboardFactory
-type RealDashboardFactory struct{}
-
-func (f *RealDashboardFactory) NewDashboard(engine *runtime.Engine, port int, updateInterval time.Duration) *runtime.Dashboard {
-	return runtime.NewDashboard(engine, port, updateInterval)
 }

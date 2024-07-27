@@ -109,18 +109,6 @@ func BenchmarkExecuteAction(b *testing.B) {
 	}
 }
 
-func BenchmarkGetStats(b *testing.B) {
-	s, redisStore := setupMiniRedis(b)
-	defer s.Close()
-
-	engine := createMockEngine(redisStore)
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		engine.GetStats()
-	}
-}
-
 func BenchmarkFullRuleEvaluation(b *testing.B) {
 	s, redisStore := setupMiniRedis(b)
 	defer s.Close()
