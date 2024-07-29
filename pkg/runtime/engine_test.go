@@ -5,7 +5,6 @@ package runtime
 import (
 	"os"
 	"testing"
-	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
@@ -63,7 +62,7 @@ func TestProcessFactUpdate(t *testing.T) {
 	filename := createTestBytecodeFile(t, ruleset)
 	defer os.Remove(filename)
 
-	engine, err := NewEngineFromFile(filename, redisStore, 0, false)
+	engine, err := NewEngineFromFile(filename, redisStore, 0)
 	assert.NoError(t, err)
 
 	engine.ProcessFactUpdate("temperature", 35.0)
@@ -124,7 +123,7 @@ func TestMultipleRules(t *testing.T) {
 	filename := createTestBytecodeFile(t, ruleset)
 	defer os.Remove(filename)
 
-	engine, err := NewEngineFromFile(filename, redisStore, 0, false)
+	engine, err := NewEngineFromFile(filename, redisStore, 0)
 	assert.NoError(t, err)
 
 	engine.ProcessFactUpdate("temperature", 35.0)
@@ -303,7 +302,7 @@ func createTestEngine(redisStore *store.RedisStore, jsonRuleset string) *Engine 
 	compiler.WriteBytecodeToFile(filename, bytecodeFile)
 	defer os.Remove(filename)
 
-	engine, _ := NewEngineFromFile(filename, redisStore, 0, false)
+	engine, _ := NewEngineFromFile(filename, redisStore, 0)
 
 	// Synchronize engine's fact store with Redis store
 	facts, _ := redisStore.MGetFacts("temperature", "humidity", "pressure", "status")
@@ -312,96 +311,4 @@ func createTestEngine(redisStore *store.RedisStore, jsonRuleset string) *Engine 
 	}
 
 	return engine
-}
-
-// func TestPerformanceMonitoring(t *testing.T) {
-// 	s, redisStore := setupMiniredis(t)
-// 	defer s.Close()
-
-// 	// Test with performance monitoring enabled
-// 	engineEnabled := createTestEngine(redisStore, `{
-//         "rules": [{
-//             "name": "test_rule",
-//             "conditions": {
-//                 "all": [{
-//                     "fact": "temperature",
-//                     "operator": "GT",
-//                     "value": 30
-//                 }]
-//             },
-//             "actions": [{
-//                 "type": "updateStore",
-//                 "target": "status",
-//                 "value": "hot"
-//             }]
-//         }]
-//     }`)
-// 	engineEnabled.enablePerformanceMonitoring = true
-
-// 	// Process a fact update
-// 	engineEnabled.ProcessFactUpdate("temperature", 35)
-
-// 	assert.Greater(t, engineEnabled.Stats.TotalFactsProcessed, int64(0))
-// 	assert.Greater(t, engineEnabled.Stats.TotalRulesProcessed, int64(0))
-// 	assert.NotZero(t, engineEnabled.Stats.LastUpdateTime)
-// 	assert.NotNil(t, engineEnabled.FactStats["temperature"])
-
-// 	// Test with performance monitoring disabled
-// 	engineDisabled := createTestEngine(redisStore, `{
-//         "rules": [{
-//             "name": "test_rule",
-//             "conditions": {
-//                 "all": [{
-//                     "fact": "temperature",
-//                     "operator": "GT",
-//                     "value": 30
-//                 }]
-//             },
-//             "actions": [{
-//                 "type": "updateStore",
-//                 "target": "status",
-//                 "value": "hot"
-//             }]
-//         }]
-//     }`)
-// 	engineDisabled.enablePerformanceMonitoring = false
-
-// 	// Process a fact update
-// 	engineDisabled.ProcessFactUpdate("temperature", 35)
-
-// 	assert.Equal(t, int64(0), engineDisabled.Stats.TotalFactsProcessed)
-// 	assert.Equal(t, int64(0), engineDisabled.Stats.TotalRulesProcessed)
-// 	assert.Zero(t, engineDisabled.Stats.LastUpdateTime)
-// 	assert.Nil(t, engineDisabled.FactStats["temperature"])
-// }
-
-func TestCalculateRates(t *testing.T) {
-	engine := &Engine{
-		Stats: EngineStats{
-			EngineStartTime: time.Now().Add(-10 * time.Second),
-		},
-		RuleStats: make(map[string]*RuleStats),
-	}
-
-	engine.RuleStats["testRule"] = &RuleStats{
-		ExecutionCount:     10,
-		TotalExecutionTime: 500 * time.Millisecond,
-	}
-
-	engine.Stats.TotalFactsProcessed = 100
-	engine.Stats.TotalRulesProcessed = 10
-
-	engine.calculateRates()
-
-	if engine.Stats.FactProcessingRate <= 0 {
-		t.Errorf("Expected FactProcessingRate to be greater than 0, got %f", engine.Stats.FactProcessingRate)
-	}
-
-	if engine.Stats.RuleExecutionRate <= 0 {
-		t.Errorf("Expected RuleExecutionRate to be greater than 0, got %f", engine.Stats.RuleExecutionRate)
-	}
-
-	if engine.Stats.AverageRuleEvaluationTime <= 0 {
-		t.Errorf("Expected AverageRuleEvaluationTime to be greater than 0, got %d", engine.Stats.AverageRuleEvaluationTime)
-	}
 }

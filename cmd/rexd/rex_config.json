@@ -12,13 +12,6 @@
     "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
-    "priority_threshold": 1,
-    "enable_performance_monitoring": true,
-    "update_interval": 2
-  },
-  "dashboard": {
-    "enabled": true,
-    "port": 8080,
-    "update_interval": 2
+    "priority_threshold": 1
   }
 }

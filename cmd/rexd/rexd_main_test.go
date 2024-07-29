@@ -28,15 +28,9 @@ func (f *MockStoreFactory) NewStore(addr, password string, db int) store.Store {
 
 type MockEngineFactory struct{}
 
-func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*runtime.Engine, error) {
+func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
 	// Updated to include priorityThreshold parameter
 	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
-}
-
-type MockDashboardFactory struct{}
-
-func (f *MockDashboardFactory) NewDashboard(engine *runtime.Engine, port int, updateInterval time.Duration) *runtime.Dashboard {
-	return &runtime.Dashboard{}
 }
 
 func TestParseConfig(t *testing.T) {
@@ -77,10 +71,6 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "password", config.RedisPassword)
 	assert.Equal(t, 1, config.RedisDB)
 	assert.Equal(t, []string{"rex_updates"}, config.RedisChannels)
-	assert.Equal(t, 10, config.EngineInterval)
-	assert.True(t, config.DashboardEnable)
-	assert.Equal(t, 9090, config.DashboardPort)
-	assert.Equal(t, 15, config.DashboardUpdate)
 }
 
 func TestSetupDependencies(t *testing.T) {
@@ -96,18 +86,14 @@ func TestSetupDependencies(t *testing.T) {
 		RedisAddress:      mr.Addr(),
 		RedisPassword:     "",
 		RedisDB:           0,
-		DashboardEnable:   true,
-		DashboardPort:     8080,
-		DashboardUpdate:   10,
 		PriorityThreshold: 5, // Add PriorityThreshold to the config
 	}
 
-	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{}, &MockDashboardFactory{})
+	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{})
 	require.NoError(t, err)
 
 	assert.NotNil(t, deps.Store)
 	assert.NotNil(t, deps.Engine)
-	assert.NotNil(t, deps.Dashboard)
 }
 
 func TestRunMainLoop(t *testing.T) {
@@ -119,10 +105,8 @@ func TestRunMainLoop(t *testing.T) {
 	defer mr.Close()
 
 	config := &Config{
-		RedisAddress:    mr.Addr(),
-		RedisChannels:   []string{"rex_updates"},
-		EngineInterval:  1,
-		DashboardEnable: false,
+		RedisAddress:  mr.Addr(),
+		RedisChannels: []string{"rex_updates"},
 	}
 
 	deps := &RexDependencies{
@@ -152,12 +136,7 @@ func TestProcessMessage(t *testing.T) {
 	defer mr.Close()
 
 	engine := &runtime.Engine{
-		Facts:     make(map[string]interface{}),
-		RuleStats: make(map[string]*runtime.RuleStats),
-		FactStats: make(map[string]*runtime.FactStats),
-		Stats: runtime.EngineStats{
-			EngineStartTime: time.Now(),
-		},
+		Facts: make(map[string]interface{}),
 	}
 
 	msg := &redis.Message{
@@ -202,6 +181,6 @@ func TestRun(t *testing.T) {
 		mr.Publish("rex_updates", "test:key=value")
 	}()
 
-	err = run(ctx, args, &MockStoreFactory{}, &MockEngineFactory{}, &MockDashboardFactory{})
+	err = run(ctx, args, &MockStoreFactory{}, &MockEngineFactory{})
 	assert.NoError(t, err)
 }
