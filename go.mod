@@ -6,6 +6,7 @@ require (
 	github.com/alicebob/miniredis/v2 v2.33.0
 	github.com/brianvoe/gofakeit/v7 v7.0.4
 	github.com/redis/go-redis/v9 v9.5.3
+	github.com/robertkrimen/otto v0.4.0
 	github.com/rs/zerolog v1.33.0
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
@@ -37,5 +38,6 @@ require (
 	golang.org/x/sys v0.21.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/sourcemap.v1 v1.0.5 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

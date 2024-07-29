@@ -5,11 +5,17 @@ type Ruleset struct {
 	Rules []Rule `json:"rules"`
 }
 
+type Script struct {
+	Params []string `json:"params"`
+	Body   string   `json:"body"`
+}
+
 type Rule struct {
-	Name       string         `json:"name"`
-	Priority   int            `json:"priority"`
-	Conditions ConditionGroup `json:"conditions"`
-	Actions    []Action       `json:"actions"`
+	Name       string            `json:"name"`
+	Priority   int               `json:"priority"`
+	Conditions ConditionGroup    `json:"conditions"`
+	Actions    []Action          `json:"actions"`
+	Scripts    map[string]Script `json:"scripts,omitempty"`
 }
 
 type ConditionGroup struct {
@@ -46,6 +52,7 @@ type RuleExecutionIndex struct {
 	RuleName       string
 	ByteOffset     int
 	Priority       int
+	Scripts        map[string]Script
 }
 
 type FactRuleLookupIndex struct {

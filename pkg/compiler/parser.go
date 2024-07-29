@@ -4,6 +4,7 @@ package compiler
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"rgehrsitz/rex/pkg/logging"
@@ -23,6 +24,14 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 		if err := validateRule(&rule); err != nil {
 			return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid rule", err, map[string]interface{}{"rule_name": rule.Name})
 		}
+
+		// Validate and compile custom scripts
+		for scriptName, script := range rule.Scripts {
+			if err := validateAndCompileScript(scriptName, script); err != nil {
+				return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid script", err, map[string]interface{}{"rule_name": rule.Name, "script_name": scriptName})
+			}
+		}
+
 		ruleset.Rules[i] = rule
 
 		for j, action := range rule.Actions {
@@ -240,4 +249,18 @@ func isActionValueValid(actionType string, value interface{}) bool {
 	default:
 		return false
 	}
+}
+
+func validateAndCompileScript(name string, script Script) error {
+	// TODO: Implement script validation and compilation
+	// This could involve checking for syntax errors, disallowed operations, etc.
+	// For now, we'll just do a basic check on the script body
+	if script.Body == "" {
+		return fmt.Errorf("script body cannot be empty")
+	}
+	if name == "" {
+		return fmt.Errorf("script name cannot be empty")
+	}
+	// You might want to add more validation logic here
+	return nil
 }

@@ -7,9 +7,11 @@ import (
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/scripting"
 	"rgehrsitz/rex/pkg/store"
 	"strconv"
 	"strings"
+	"time"
 
 	"rgehrsitz/rex/pkg/logging"
 )
@@ -22,6 +24,7 @@ type Engine struct {
 	Facts               map[string]interface{}
 	store               store.Store
 	priorityThreshold   int
+	scriptEngine        *scripting.SafeVM
 }
 
 // New method to create an engine from a file
@@ -41,6 +44,7 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		Facts:               make(map[string]interface{}),
 		store:               store,
 		priorityThreshold:   priorityThreshold,
+		scriptEngine:        scripting.NewSafeVM(),
 	}
 
 	offset := 0
@@ -262,20 +266,28 @@ func (e *Engine) evaluateRule(ruleName string) error {
 
 	var ruleOffset int
 	var rulePriority int
+	var ruleScripts map[string]compiler.Script
 	found := false
-	for _, rule := range e.ruleExecutionIndex {
-		if rule.RuleName == ruleName {
-			ruleOffset = rule.ByteOffset
-			rulePriority = rule.Priority
+	for _, r := range e.ruleExecutionIndex {
+		if r.RuleName == ruleName {
+			ruleOffset = r.ByteOffset
+			rulePriority = r.Priority
+			ruleScripts = r.Scripts // Assuming RuleExecutionIndex now has a Scripts field
 			found = true
 			break
 		}
 	}
 
 	if !found {
-		err := logging.NewError(logging.ErrorTypeRuntime, "Rule not found in ruleExecutionIndex", nil, map[string]interface{}{"ruleName": ruleName})
-		logging.Logger.Warn().Err(err).Msg("Rule not found")
-		return err
+		return logging.NewError(logging.ErrorTypeRuntime, "Rule not found in ruleExecutionIndex", nil, map[string]interface{}{"ruleName": ruleName})
+	}
+
+	// Initialize scripts for this rule
+	for scriptName, script := range ruleScripts {
+		err := e.scriptEngine.SetScript(scriptName, script)
+		if err != nil {
+			return logging.NewError(logging.ErrorTypeRuntime, "Failed to set script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
+		}
 	}
 
 	logging.Logger.Debug().Str("ruleName", ruleName).Int("offset", ruleOffset).Int("priority", rulePriority).Msg("Found rule in ruleExecutionIndex")
@@ -325,7 +337,17 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			offset++
 			factName := string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
-			factValue = e.Facts[factName]
+
+			if script, ok := ruleScripts[factName]; ok {
+				// This is a custom script, we need to execute it
+				result, err := e.executeCustomScript(factName, script, relevantFacts)
+				if err != nil {
+					return logging.NewError(logging.ErrorTypeRuntime, "Failed to execute custom script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": factName})
+				}
+				factValue = result
+			} else {
+				factValue = e.Facts[factName]
+			}
 			relevantFacts[factName] = factValue
 			logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Loaded fact")
 		case compiler.LOAD_CONST_FLOAT:
@@ -550,4 +572,20 @@ func (e *Engine) Shutdown() {
 	// Shutdown performance monitoring
 
 	logging.Logger.Info().Msg("Engine shutdown complete")
+}
+
+func (e *Engine) executeCustomScript(scriptName string, script compiler.Script, facts map[string]interface{}) (interface{}, error) {
+	// Prepare parameters
+	params := make(map[string]interface{})
+	for _, paramName := range script.Params {
+		params[paramName] = facts[paramName]
+	}
+
+	// Execute the script
+	result, err := e.scriptEngine.RunScript(scriptName, params, 100*time.Millisecond)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
