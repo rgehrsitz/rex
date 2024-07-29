@@ -107,14 +107,7 @@ The configuration file is in JSON format and supports the following options:
     "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
-    "priority_threshold": 1,
-    "enable_performance_monitoring": true,
-    "update_interval": 5
-  },
-  "dashboard": {
-    "enabled": true,
-    "port": 8080,
-    "update_interval": 10
+    "priority_threshold": 1
   }
 }
 ```

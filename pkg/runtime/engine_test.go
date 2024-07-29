@@ -62,7 +62,7 @@ func TestProcessFactUpdate(t *testing.T) {
 	filename := createTestBytecodeFile(t, ruleset)
 	defer os.Remove(filename)
 
-	engine, err := NewEngineFromFile(filename, redisStore, 0, false)
+	engine, err := NewEngineFromFile(filename, redisStore, 0)
 	assert.NoError(t, err)
 
 	engine.ProcessFactUpdate("temperature", 35.0)
@@ -123,7 +123,7 @@ func TestMultipleRules(t *testing.T) {
 	filename := createTestBytecodeFile(t, ruleset)
 	defer os.Remove(filename)
 
-	engine, err := NewEngineFromFile(filename, redisStore, 0, false)
+	engine, err := NewEngineFromFile(filename, redisStore, 0)
 	assert.NoError(t, err)
 
 	engine.ProcessFactUpdate("temperature", 35.0)
@@ -302,7 +302,7 @@ func createTestEngine(redisStore *store.RedisStore, jsonRuleset string) *Engine 
 	compiler.WriteBytecodeToFile(filename, bytecodeFile)
 	defer os.Remove(filename)
 
-	engine, _ := NewEngineFromFile(filename, redisStore, 0, false)
+	engine, _ := NewEngineFromFile(filename, redisStore, 0)
 
 	// Synchronize engine's fact store with Redis store
 	facts, _ := redisStore.MGetFacts("temperature", "humidity", "pressure", "status")

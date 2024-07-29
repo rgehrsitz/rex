@@ -28,7 +28,7 @@ func (f *MockStoreFactory) NewStore(addr, password string, db int) store.Store {
 
 type MockEngineFactory struct{}
 
-func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*runtime.Engine, error) {
+func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
 	// Updated to include priorityThreshold parameter
 	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
 }
@@ -71,7 +71,6 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "password", config.RedisPassword)
 	assert.Equal(t, 1, config.RedisDB)
 	assert.Equal(t, []string{"rex_updates"}, config.RedisChannels)
-	assert.Equal(t, 10, config.EngineInterval)
 }
 
 func TestSetupDependencies(t *testing.T) {
@@ -106,9 +105,8 @@ func TestRunMainLoop(t *testing.T) {
 	defer mr.Close()
 
 	config := &Config{
-		RedisAddress:   mr.Addr(),
-		RedisChannels:  []string{"rex_updates"},
-		EngineInterval: 1,
+		RedisAddress:  mr.Addr(),
+		RedisChannels: []string{"rex_updates"},
 	}
 
 	deps := &RexDependencies{

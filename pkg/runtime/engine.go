@@ -12,26 +12,20 @@ import (
 	"strings"
 
 	"rgehrsitz/rex/pkg/logging"
-
-	"github.com/shirou/gopsutil/v4/process"
 )
 
 type Engine struct {
-	bytecode                    []byte
-	ruleExecutionIndex          []compiler.RuleExecutionIndex
-	factRuleIndex               map[string][]string
-	factDependencyIndex         []compiler.FactDependencyIndex
-	Facts                       map[string]interface{}
-	store                       store.Store
-	priorityThreshold           int
-	pid                         int32
-	proc                        *process.Process
-	enablePerformanceMonitoring bool
-	stopMonitoring              chan struct{}
+	bytecode            []byte
+	ruleExecutionIndex  []compiler.RuleExecutionIndex
+	factRuleIndex       map[string][]string
+	factDependencyIndex []compiler.FactDependencyIndex
+	Facts               map[string]interface{}
+	store               store.Store
+	priorityThreshold   int
 }
 
 // New method to create an engine from a file
-func NewEngineFromFile(filename string, store store.Store, priorityThreshold int, enablePerformanceMonitoring bool) (*Engine, error) {
+func NewEngineFromFile(filename string, store store.Store, priorityThreshold int) (*Engine, error) {
 
 	bytecode, err := os.ReadFile(filename)
 	if err != nil {
@@ -40,23 +34,14 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 
 	engine := &Engine{
-		bytecode:                    bytecode,
-		ruleExecutionIndex:          make([]compiler.RuleExecutionIndex, 0),
-		factRuleIndex:               make(map[string][]string),
-		factDependencyIndex:         make([]compiler.FactDependencyIndex, 0),
-		Facts:                       make(map[string]interface{}),
-		store:                       store,
-		priorityThreshold:           priorityThreshold,
-		pid:                         int32(os.Getpid()),
-		enablePerformanceMonitoring: enablePerformanceMonitoring,
-		stopMonitoring:              make(chan struct{}),
+		bytecode:            bytecode,
+		ruleExecutionIndex:  make([]compiler.RuleExecutionIndex, 0),
+		factRuleIndex:       make(map[string][]string),
+		factDependencyIndex: make([]compiler.FactDependencyIndex, 0),
+		Facts:               make(map[string]interface{}),
+		store:               store,
+		priorityThreshold:   priorityThreshold,
 	}
-
-	proc, err := process.NewProcess(engine.pid)
-	if err != nil {
-		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to create process", err, nil)
-	}
-	engine.proc = proc
 
 	offset := 0
 
@@ -161,10 +146,6 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 	go engine.StartFactProcessing()
 
 	logging.Logger.Info().Msg("Engine initialized from bytecode")
-
-	// if enablePerformanceMonitoring {
-	// 	engine.StartPerformanceMonitoring(time.Duration(EngineInterval) * time.Second) // or choose an appropriate interval
-	// }
 
 	return engine, nil
 }
@@ -433,15 +414,6 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			return err
 		}
 	}
-
-	// if e.enablePerformanceMonitoring {
-	// 	e.statsMutex.Lock()
-	// 	executionDuration := time.Since(startTime)
-	// 	if ruleStats, ok := e.RuleStats[ruleName]; ok {
-	// 		ruleStats.TotalExecutionTime += executionDuration
-	// 	}
-	// 	e.statsMutex.Unlock()
-	// }
 
 	logging.Logger.Debug().
 		Str("ruleName", ruleName).
