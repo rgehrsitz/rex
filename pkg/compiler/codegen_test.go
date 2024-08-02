@@ -515,3 +515,52 @@ func extractOpcodes(instructions []byte) []Opcode {
 	}
 	return opcodes
 }
+
+// Add this to codegen_test.go
+
+func TestGenerateBytecodeWithScripts(t *testing.T) {
+	ruleset := &Ruleset{
+		Rules: []Rule{
+			{
+				Name: "ScriptRule",
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{
+						{
+							Fact:     "temperature",
+							Operator: "GT",
+							Value:    30.0,
+						},
+					},
+				},
+				Actions: []Action{
+					{
+						Type:   "updateStore",
+						Target: "status",
+						Value:  "hot",
+					},
+				},
+				Scripts: map[string]Script{
+					"calculate_heat_index": {
+						Params: []string{"temperature", "humidity"},
+						Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
+					},
+				},
+			},
+		},
+	}
+
+	bytecodeFile := GenerateBytecode(ruleset)
+
+	// Check if SCRIPT_DEF opcode exists in the bytecode
+	scriptDefFound := false
+	for _, b := range bytecodeFile.Instructions {
+		if Opcode(b) == SCRIPT_DEF {
+			scriptDefFound = true
+			break
+		}
+	}
+
+	assert.True(t, scriptDefFound, "SCRIPT_DEF opcode not found in bytecode")
+
+	// You can add more specific checks here, such as verifying the script name, params, and body in the bytecode
+}

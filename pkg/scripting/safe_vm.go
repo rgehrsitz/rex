@@ -5,6 +5,7 @@ package scripting
 import (
 	"fmt"
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/logging"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ func NewSafeVM() *SafeVM {
 }
 
 func (s *SafeVM) SetScript(name string, script compiler.Script) error {
-	// We'll just store the script without trying to compile it
+	logging.Logger.Debug().Str("scriptName", name).Msg("Setting script")
 	s.scripts[name] = script
 	return nil
 }
@@ -46,11 +47,16 @@ func (s *SafeVM) SetScript(name string, script compiler.Script) error {
 func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout time.Duration) (interface{}, error) {
 	script, ok := s.scripts[name]
 	if !ok {
+		logging.Logger.Error().Str("scriptName", name).Msg("Script not found")
 		return nil, fmt.Errorf("script not found: %s", name)
 	}
 
+	logging.Logger.Debug().Str("scriptName", name).Interface("params", params).Msg("Running script")
+
 	// Create a new JavaScript function with the script body
 	funcDef := fmt.Sprintf("(function(%s) { %s })", strings.Join(script.Params, ","), script.Body)
+
+	logging.Logger.Debug().Str("scriptName", name).Str("funcDef", funcDef).Msg("Defined function")
 
 	resultChan := make(chan otto.Value, 1)
 	errChan := make(chan error, 1)

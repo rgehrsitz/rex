@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
@@ -263,16 +264,17 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	logging.Logger.Debug().
 		Str("ruleName", ruleName).
 		Msg("Starting rule evaluation")
+	logging.Logger.Debug().
+		Interface("facts", e.Facts).
+		Msg("Current facts")
 
 	var ruleOffset int
 	var rulePriority int
-	var ruleScripts map[string]compiler.Script
 	found := false
 	for _, r := range e.ruleExecutionIndex {
 		if r.RuleName == ruleName {
 			ruleOffset = r.ByteOffset
 			rulePriority = r.Priority
-			ruleScripts = r.Scripts // Assuming RuleExecutionIndex now has a Scripts field
 			found = true
 			break
 		}
@@ -280,14 +282,6 @@ func (e *Engine) evaluateRule(ruleName string) error {
 
 	if !found {
 		return logging.NewError(logging.ErrorTypeRuntime, "Rule not found in ruleExecutionIndex", nil, map[string]interface{}{"ruleName": ruleName})
-	}
-
-	// Initialize scripts for this rule
-	for scriptName, script := range ruleScripts {
-		err := e.scriptEngine.SetScript(scriptName, script)
-		if err != nil {
-			return logging.NewError(logging.ErrorTypeRuntime, "Failed to set script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
-		}
 	}
 
 	logging.Logger.Debug().Str("ruleName", ruleName).Int("offset", ruleOffset).Int("priority", rulePriority).Msg("Found rule in ruleExecutionIndex")
@@ -317,12 +311,14 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			offset += ruleNameLength
 			logging.Logger.Debug().Str("ruleName", ruleName).Msg("Encountered rule name")
 			continue
+
 		case compiler.PRIORITY:
 			bits := binary.LittleEndian.Uint32(e.bytecode[offset : offset+5])
 			rulePriority = int(bits)
 			offset += 4
 			logging.Logger.Debug().Int("priority", rulePriority).Msg("Encountered PRIORITY opcode")
 			continue
+
 		case compiler.RULE_END:
 			if ruleTriggered && rulePriority <= e.priorityThreshold {
 				logging.Logger.Info().
@@ -332,39 +328,35 @@ func (e *Engine) evaluateRule(ruleName string) error {
 					Msg("High-priority rule triggered")
 			}
 			return nil
+
 		case compiler.LOAD_FACT_FLOAT, compiler.LOAD_FACT_STRING, compiler.LOAD_FACT_BOOL:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			factName := string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 
-			if script, ok := ruleScripts[factName]; ok {
-				// This is a custom script, we need to execute it
-				result, err := e.executeCustomScript(factName, script, relevantFacts)
-				if err != nil {
-					return logging.NewError(logging.ErrorTypeRuntime, "Failed to execute custom script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": factName})
-				}
-				factValue = result
-			} else {
-				factValue = e.Facts[factName]
-			}
+			factValue = e.Facts[factName]
 			relevantFacts[factName] = factValue
 			logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Loaded fact")
+
 		case compiler.LOAD_CONST_FLOAT:
 			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
 			constValue = math.Float64frombits(bits)
 			offset += 8
 			logging.Logger.Debug().Float64("constValue", constValue.(float64)).Msg("Encountered LOAD_CONST_FLOAT opcode")
+
 		case compiler.LOAD_CONST_STRING:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			constValue = string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			logging.Logger.Debug().Str("constValue", constValue.(string)).Msg("Encountered LOAD_CONST_STRING opcode")
+
 		case compiler.LOAD_CONST_BOOL:
 			constValue = e.bytecode[offset] == 1
 			offset++
 			logging.Logger.Debug().Bool("constValue", constValue.(bool)).Msg("Encountered LOAD_CONST_BOOL opcode")
+
 		case compiler.EQ_FLOAT, compiler.EQ_STRING, compiler.EQ_BOOL,
 			compiler.NEQ_FLOAT, compiler.NEQ_STRING, compiler.NEQ_BOOL,
 			compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT,
@@ -374,6 +366,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 				ruleTriggered = true
 			}
 			logging.Logger.Debug().Bool("comparisonResult", comparisonResult).Msg("Comparison result")
+
 		case compiler.JUMP_IF_FALSE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
 			offset += 4
@@ -381,6 +374,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			if !comparisonResult {
 				offset = offset + jumpOffset
 			}
+
 		case compiler.JUMP_IF_TRUE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
 			offset += 4
@@ -388,12 +382,14 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			if comparisonResult {
 				offset = offset + jumpOffset
 			}
+
 		case compiler.ACTION_VALUE_FLOAT:
 			bits := binary.LittleEndian.Uint64(e.bytecode[offset : offset+8])
 			actionValue := math.Float64frombits(bits)
 			offset += 8
 			action.Value = actionValue
 			logging.Logger.Debug().Float64("actionValue", actionValue).Msg("Encountered ACTION_VALUE_FLOAT opcode")
+
 		case compiler.ACTION_VALUE_STRING:
 			nameLen := int(e.bytecode[offset])
 			offset++
@@ -401,13 +397,16 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			offset += nameLen
 			action.Value = actionValue
 			logging.Logger.Debug().Str("actionValue", actionValue).Msg("Encountered ACTION_VALUE_STRING opcode")
+
 		case compiler.ACTION_VALUE_BOOL:
 			actionValue := e.bytecode[offset] == 1
 			offset++
 			action.Value = actionValue
 			logging.Logger.Debug().Bool("actionValue", actionValue).Msg("Encountered ACTION_VALUE_BOOL opcode")
+
 		case compiler.ACTION_START:
 			logging.Logger.Debug().Msg("Encountered ACTION_START opcode")
+
 		case compiler.ACTION_END:
 			logging.Logger.Debug().Msg("Encountered ACTION_END opcode")
 			err := e.executeAction(action)
@@ -415,21 +414,100 @@ func (e *Engine) evaluateRule(ruleName string) error {
 				logging.Logger.Error().Err(err).Msg("Failed to execute action")
 				return err
 			}
+
 		case compiler.LABEL:
 			offset += 4
 			logging.Logger.Debug().Msg("Encountered LABEL opcode")
+
 		case compiler.ACTION_TYPE:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			action.Type = string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			logging.Logger.Debug().Str("actionType", action.Type).Msg("Encountered ACTION_TYPE opcode")
+
 		case compiler.ACTION_TARGET:
 			nameLen := int(e.bytecode[offset])
 			offset++
 			action.Target = string(e.bytecode[offset : offset+nameLen])
 			offset += nameLen
 			logging.Logger.Debug().Str("actionTarget", action.Target).Msg("Encountered ACTION_TARGET opcode")
+
+		case compiler.SCRIPT_DEF:
+			logging.Logger.Debug().Msg("Encountered SCRIPT_DEF opcode")
+			scriptNameLen := int(e.bytecode[offset])
+			offset++
+			scriptName := string(e.bytecode[offset : offset+scriptNameLen])
+			offset += scriptNameLen
+
+			paramsCount := int(e.bytecode[offset])
+			offset++
+			params := make([]string, paramsCount)
+			for i := 0; i < paramsCount; i++ {
+				paramLen := int(e.bytecode[offset])
+				offset++
+				params[i] = string(e.bytecode[offset : offset+paramLen])
+				offset += paramLen
+			}
+
+			bodyLen := int(e.bytecode[offset])
+			offset++
+			body := string(e.bytecode[offset : offset+bodyLen])
+			offset += bodyLen
+
+			script := compiler.Script{
+				Params: params,
+				Body:   body,
+			}
+			err := e.scriptEngine.SetScript(scriptName, script)
+			if err != nil {
+				return logging.NewError(logging.ErrorTypeRuntime, "Failed to set script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
+			}
+			logging.Logger.Debug().Str("scriptName", scriptName).Str("body", body).Strs("params", params).Msg("Script defined")
+
+		case compiler.SCRIPT_CALL:
+			logging.Logger.Debug().Msg("Encountered SCRIPT_CALL opcode")
+			scriptNameLen := int(e.bytecode[offset])
+			offset++
+			scriptName := string(e.bytecode[offset : offset+scriptNameLen])
+			offset += scriptNameLen
+
+			logging.Logger.Debug().Str("scriptName", scriptName).Msg("Calling script")
+
+			paramsCount := int(e.bytecode[offset])
+			offset++
+			params := make(map[string]interface{})
+			for i := 0; i < paramsCount; i++ {
+				paramNameLen := int(e.bytecode[offset])
+				offset++
+				paramName := string(e.bytecode[offset : offset+paramNameLen])
+				offset += paramNameLen
+
+				params[paramName] = e.Facts[paramName]
+			}
+
+			logging.Logger.Debug().Interface("scriptName", scriptName).Interface("params", params).Msg("Script parameters")
+			logging.Logger.Debug().Interface("params", params).Msg("Script parameters")
+
+			result, err := e.scriptEngine.RunScript(scriptName, params, 100*time.Millisecond)
+			if err != nil {
+				logging.Logger.Error().Err(err).Str("scriptName", scriptName).Interface("params", params).Msg("Failed to run script")
+				return logging.NewError(logging.ErrorTypeRuntime, "Failed to run script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
+			}
+
+			// Convert the result to a float64 if possible
+			if floatResult, err := strconv.ParseFloat(fmt.Sprintf("%v", result), 64); err == nil {
+				result = floatResult
+			}
+
+			e.Facts[scriptName] = result
+			logging.Logger.Debug().Str("scriptName", scriptName).Interface("result", result).Msg("Script execution result")
+
+			// Update the store with the script result
+			if err := e.store.SetFact(scriptName, result); err != nil {
+				logging.Logger.Error().Err(err).Str("scriptName", scriptName).Interface("result", result).Msg("Failed to update store with script result")
+			}
+
 		default:
 			err := logging.NewError(logging.ErrorTypeRuntime, "Unknown opcode encountered", nil, map[string]interface{}{"opcode": opcode})
 			logging.Logger.Warn().Err(err).Msg("Unknown opcode")
@@ -572,20 +650,4 @@ func (e *Engine) Shutdown() {
 	// Shutdown performance monitoring
 
 	logging.Logger.Info().Msg("Engine shutdown complete")
-}
-
-func (e *Engine) executeCustomScript(scriptName string, script compiler.Script, facts map[string]interface{}) (interface{}, error) {
-	// Prepare parameters
-	params := make(map[string]interface{})
-	for _, paramName := range script.Params {
-		params[paramName] = facts[paramName]
-	}
-
-	// Execute the script
-	result, err := e.scriptEngine.RunScript(scriptName, params, 100*time.Millisecond)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }

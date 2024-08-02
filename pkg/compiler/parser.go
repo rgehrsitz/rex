@@ -61,6 +61,12 @@ func validateRule(rule *Rule) error {
 	if len(rule.Actions) == 0 {
 		return logging.NewError(logging.ErrorTypeCompile, "At least one action is required", nil, map[string]interface{}{"rule_name": rule.Name})
 	}
+	// Validate scripts
+	for name, script := range rule.Scripts {
+		if err := validateScript(name, script); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -262,5 +268,18 @@ func validateAndCompileScript(name string, script Script) error {
 		return fmt.Errorf("script name cannot be empty")
 	}
 	// You might want to add more validation logic here
+	return nil
+}
+
+func validateScript(name string, script Script) error {
+	if name == "" {
+		return logging.NewError(logging.ErrorTypeCompile, "Script name is required", nil, nil)
+	}
+	if len(script.Params) == 0 {
+		return logging.NewError(logging.ErrorTypeCompile, "Script must have at least one parameter", nil, map[string]interface{}{"script_name": name})
+	}
+	if script.Body == "" {
+		return logging.NewError(logging.ErrorTypeCompile, "Script body is required", nil, map[string]interface{}{"script_name": name})
+	}
 	return nil
 }

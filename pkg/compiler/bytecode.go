@@ -115,6 +115,9 @@ const (
 	NUM_RULES
 	CONST_POOL_SIZE
 	PRIORITY
+
+	SCRIPT_DEF
+	SCRIPT_CALL
 )
 
 // hasOperands returns true if the opcode requires operands.
@@ -124,7 +127,7 @@ func (op Opcode) HasOperands() bool {
 		LOAD_FACT_FLOAT, LOAD_FACT_STRING, LOAD_FACT_BOOL,
 		JUMP, JUMP_IF_TRUE, JUMP_IF_FALSE, LABEL,
 		SEND_MESSAGE, TRIGGER_ACTION, UPDATE_FACT,
-		ACTION_START, RULE_START, PRIORITY:
+		ACTION_START, RULE_START, PRIORITY, SCRIPT_DEF, SCRIPT_CALL:
 		return true
 	default:
 		return false
@@ -160,6 +163,7 @@ func (op Opcode) String() string {
 		"ACTION_START", "ACTION_END",
 		"ACTION_TYPE", "ACTION_TARGET", "ACTION_VALUE_FLOAT", "ACTION_VALUE_STRING", "ACTION_VALUE_BOOL", "ACTION_VALUE_ARRAY", "ACTION_VALUE_OBJECT", "ACTION_COMMAND",
 		"HEADER_START", "HEADER_END", "CHECKSUM", "VERSION", "NUM_RULES", "CONST_POOL_SIZE", "PRIORITY",
+		"SCRIPT_DEF", "SCRIPT_CALL",
 	}
 	if op < EQ_FLOAT || op >= Opcode(len(names)) {
 		logging.Logger.Warn().Uint8("opcode", uint8(op)).Msg("Unknown opcode")

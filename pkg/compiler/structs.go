@@ -52,7 +52,6 @@ type RuleExecutionIndex struct {
 	RuleName       string
 	ByteOffset     int
 	Priority       int
-	Scripts        map[string]Script
 }
 
 type FactRuleLookupIndex struct {
