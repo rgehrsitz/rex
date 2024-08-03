@@ -4,6 +4,7 @@ package scripting
 
 import (
 	"fmt"
+	"math"
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/logging"
 	"strings"
@@ -109,6 +110,12 @@ func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout t
 	select {
 	case result := <-resultChan:
 		s.vm.Interrupt = nil
+		// Handle special float values
+		if resFloat, err := result.ToFloat(); err == nil {
+			if math.IsInf(resFloat, 0) || math.IsNaN(resFloat) {
+				return nil, fmt.Errorf("script result is not a valid number: %v", resFloat)
+			}
+		}
 		return result.Export()
 	case err := <-errChan:
 		s.vm.Interrupt = nil
@@ -117,4 +124,13 @@ func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout t
 		s.vm.Interrupt = nil
 		return nil, fmt.Errorf("script execution timed out")
 	}
+}
+
+func (s *SafeVM) RegisterGlobalFunction(name string, script compiler.Script) error {
+	funcDef := fmt.Sprintf("function %s(%s) { %s }", name, strings.Join(script.Params, ","), script.Body)
+	_, err := s.vm.Run(funcDef)
+	if err != nil {
+		return fmt.Errorf("failed to register global function: %w", err)
+	}
+	return nil
 }

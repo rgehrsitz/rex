@@ -1,3 +1,6 @@
+markdown
+Copy code
+
 # REX - Rules Engine eXtended <img src="rex_logo.svg" height="75px">
 
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
@@ -13,6 +16,7 @@ REX is designed to be used in conjunction with a key/value store such as Redis o
 - Support for various data types and comparison operations
 - Logical and control flow instructions
 - Action execution based on rules
+- **New:** Scripting capabilities using Otto (JavaScript engine)
 
 ## Getting Started
 
@@ -139,7 +143,7 @@ This tool doesn't have any command-line options. It connects to Redis at localho
 
 After running, it provides an interactive CLI with the following command:
 
-```
+```vbnet
 set <group:key> <value>
 ```
 
@@ -196,6 +200,7 @@ Example:
 - `cmd/rexd`: Main application entry point for the runtime engine
 - `pkg/compiler`: Contains the bytecode compiler and related functions
 - `pkg/runtime`: Contains the runtime engine and related functions
+- `pkg/scripting`: Contains the scripting engine and related functions using Otto
 - `pkg/store`: Contains the Redis store implementation
 - `pkg/logging`: Contains logging utilities
 - `tools/redis_setup`: Redis setup and CLI tool
@@ -241,7 +246,7 @@ A rule object has the following properties:
 - name: a unique string identifying the rule
 - priority: optional integer indicating the rule's priority (default: 10)
 - conditions: an object containing a single property:
-  - ANY or ALL: an array of condition groups
+- ANY or ALL: an array of condition groups
 - actions: an array of action objects
 
 ### Condition Group
@@ -255,35 +260,60 @@ A condition group is an object containing:
 
 A condition object has the following properties:
 
-- fact: a string identifying the fact to evaluate. Based on the way Redis works, the recommendation is 'channel:key' for the naming of facts.
+- fact: a string identifying the fact to evaluate. Based on the way Redis works, the recommendation is 'channel
+  ' for the naming of facts.
 - operator: a string indicating the comparison operator (EQ, NEQ, LT, LTE, GT, GTE, CONTAINS, NOT_CONTAINS).
 - value: the value to compare against.
 
-\*\*All condition objects not part of a grouping MUST be defined prior to any nested condition groups.
-\*\*The characters is a string must NOT include a colon ':' due to how Redis parses channels/keys
+  \*\*All condition objects not part of a grouping MUST be defined prior to any nested condition groups.
+
+  \*\*The characters in a string must NOT include a colon ':' due to how Redis parses channels/keys.
 
 ### Action Object
 
 An action object has the following properties:
 
 - type: a string indicating the action type ("updateStore" or "sendMessage") (sendMessage is not yet implemented).
-- fact: a string identifying the fact to update or send. Based on the way Redis works, the recommendation is 'channel:key' for the naming of facts.
+- fact: a string identifying the fact to update or send. Based on the way Redis works, the recommendation is 'channel
+  ' for the naming of facts.
 - value: the value to update or send.
 - customProperty: an optional object containing custom properties for the action.
 
-### Execution Order
+### Scripting
 
-Actions will be executed in the order they are defined in the rule.
+REX supports scripting using the Otto JavaScript engine. Scripts can be defined and executed as part of the rule actions. This allows for more complex logic and calculations.
 
-### Fact and Value Data Types
+### Defining Scripts
 
-Facts are strings. Values can be strings surrounded by quotation marks (e.g. "fact_a"), bools (e.g. true or false), or numbers with or without decimal points (e.g. 30.01, 30, -12.123).
+Scripts are defined in the Scripts section of a rule and can be referenced in actions. Here's an example:
 
-### Priority Ties
+```json
+{
+  "rules": [
+    {
+      "name": "rule-1",
+      "conditions": {
+        "all": [{ "fact": "temperature", "operator": "GT", "value": 30 }]
+      },
+      "actions": [
+        {
+          "type": "updateStore",
+          "target": "heat_index",
+          "value": "{calculate_heat_index}"
+        }
+      ],
+      "scripts": {
+        "calculate_heat_index": {
+          "params": ["temperature", "humidity"],
+          "body": "return temperature * 1.8 + 32 + (humidity / 100) * 10;"
+        }
+      }
+    }
+  ]
+}
+```
 
-Due to concurrent evaluations and other factors, no guarantees can be made regarding how priority ties are resolved. The engine will do its best to resolve all higher priority rules before lower ones, but no precedence can be guaranteed beyond that.
-
-### Example JSON Ruleset
+### Example JSON Ruleset with Scripts
 
 ```json
 {
@@ -325,7 +355,13 @@ Due to concurrent evaluations and other factors, no guarantees can be made regar
           "target": "temperature_status",
           "value": true
         }
-      ]
+      ],
+      "scripts": {
+        "calculate_heat_index": {
+          "params": ["temperature", "humidity"],
+          "body": "return temperature * 1.8 + 32 + (humidity / 100) * 10;"
+        }
+      }
     },
     {
       "name": "rule-2",
@@ -374,9 +410,17 @@ Due to concurrent evaluations and other factors, no guarantees can be made regar
 }
 ```
 
-This example JSON ruleset defines two rules, "rule-1" and "rule-2", with conditions and actions. The conditions are grouped using the "all" and "any" operators, and the actions are defined with the "updateStore" and "sendMessage" types.
+### Execution Order
 
-Note that the rule spec allows for nested condition groups, as seen in the example, where an "any" group is inside an "all" group. This allows for complex logical combinations of conditions.
+Actions will be executed in the order they are defined in the rule.
+
+### Fact and Value Data Types
+
+Facts are strings. Values can be strings surrounded by quotation marks (e.g. "fact_a"), bools (e.g. true or false), or numbers with or without decimal points (e.g. 30.01, 30, -12.123).
+
+### Priority Ties
+
+Due to concurrent evaluations and other factors, no guarantees can be made regarding how priority ties are resolved. The engine will do its best to resolve all higher priority rules before lower ones, but no precedence can be guaranteed beyond that.
 
 ## Testing
 

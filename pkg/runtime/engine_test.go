@@ -5,6 +5,7 @@ package runtime
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
@@ -311,4 +312,204 @@ func createTestEngine(redisStore *store.RedisStore, jsonRuleset string) *Engine 
 	}
 
 	return engine
+}
+
+func TestNestedScriptCalls(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	ruleset := &compiler.Ruleset{
+		Rules: []compiler.Rule{
+			{
+				Name: "nested_script_rule",
+				Conditions: compiler.ConditionGroup{
+					All: []*compiler.ConditionOrGroup{
+						{
+							Fact:     "temperature",
+							Operator: "GT",
+							Value:    30.0,
+						},
+					},
+				},
+				Actions: []compiler.Action{
+					{
+						Type:   "updateStore",
+						Target: "heat_index",
+						Value:  "{calculate_heat_index}",
+					},
+				},
+				Scripts: map[string]compiler.Script{
+					"calculate_heat_index": {
+						Params: []string{"temperature", "humidity"},
+						Body:   "return calculate_adjusted_index(temperature * 1.8 + 32, humidity);",
+					},
+					"calculate_adjusted_index": {
+						Params: []string{"heat_index", "humidity"},
+						Body:   "return heat_index + (humidity / 100) * 10;",
+					},
+				},
+			},
+		},
+	}
+
+	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	tempFile := "temp_nested_bytecode.bin"
+	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
+	assert.NoError(t, err)
+	defer os.Remove(tempFile)
+
+	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
+	assert.NoError(t, err)
+
+	// Register the nested script as a global function
+	err = engine.scriptEngine.RegisterGlobalFunction("calculate_adjusted_index", compiler.Script{
+		Params: []string{"heat_index", "humidity"},
+		Body:   "return heat_index + (humidity / 100) * 10;",
+	})
+	assert.NoError(t, err)
+
+	// Then set the main script
+	err = engine.scriptEngine.SetScript("calculate_heat_index", compiler.Script{
+		Params: []string{"temperature", "humidity"},
+		Body:   "return calculate_adjusted_index(temperature * 1.8 + 32, humidity);",
+	})
+	assert.NoError(t, err)
+
+	err = redisStore.SetFact("temperature", 35.0)
+	assert.NoError(t, err)
+	err = redisStore.SetFact("humidity", 60.0)
+	assert.NoError(t, err)
+
+	engine.ProcessFactUpdate("temperature", 35.0)
+
+	time.Sleep(100 * time.Millisecond)
+
+	heatIndex, exists := engine.Facts["calculate_heat_index"]
+	assert.True(t, exists, "Heat index calculation result not found in engine facts")
+	if exists {
+		t.Logf("Calculated heat index: %v", heatIndex)
+		assert.InDelta(t, 101.0, heatIndex.(float64), 0.1)
+	}
+}
+
+func TestScriptErrorHandling(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	ruleset := &compiler.Ruleset{
+		Rules: []compiler.Rule{
+			{
+				Name: "error_script_rule",
+				Conditions: compiler.ConditionGroup{
+					All: []*compiler.ConditionOrGroup{
+						{
+							Fact:     "temperature",
+							Operator: "GT",
+							Value:    30.0,
+						},
+					},
+				},
+				Actions: []compiler.Action{
+					{
+						Type:   "updateStore",
+						Target: "status",
+						Value:  "{error_script}",
+					},
+				},
+				Scripts: map[string]compiler.Script{
+					"error_script": {
+						Params: []string{"temperature"},
+						Body:   "return temperature.unknownMethod();",
+					},
+				},
+			},
+		},
+	}
+
+	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	tempFile := "temp_error_bytecode.bin"
+	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
+	assert.NoError(t, err)
+	defer os.Remove(tempFile)
+
+	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
+	assert.NoError(t, err)
+
+	err = engine.scriptEngine.SetScript("error_script", compiler.Script{
+		Params: []string{"temperature"},
+		Body:   "return temperature.unknownMethod();",
+	})
+	assert.NoError(t, err)
+
+	err = redisStore.SetFact("temperature", 35.0)
+	assert.NoError(t, err)
+
+	engine.ProcessFactUpdate("temperature", 35.0)
+
+	time.Sleep(100 * time.Millisecond)
+
+	status, exists := engine.Facts["status"]
+	assert.False(t, exists, "Error script execution should not result in a status fact")
+	assert.Nil(t, status)
+}
+
+func TestEdgeCases(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	ruleset := &compiler.Ruleset{
+		Rules: []compiler.Rule{
+			{
+				Name: "edge_case_script_rule",
+				Conditions: compiler.ConditionGroup{
+					All: []*compiler.ConditionOrGroup{
+						{
+							Fact:     "temperature",
+							Operator: "GT",
+							Value:    30.0,
+						},
+					},
+				},
+				Actions: []compiler.Action{
+					{
+						Type:   "updateStore",
+						Target: "status",
+						Value:  "{edge_case_script}",
+					},
+				},
+				Scripts: map[string]compiler.Script{
+					"edge_case_script": {
+						Params: []string{"temperature"},
+						Body:   "return temperature * 2 / 0;", // Division by zero
+					},
+				},
+			},
+		},
+	}
+
+	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	tempFile := "temp_edge_case_bytecode.bin"
+	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
+	assert.NoError(t, err)
+	defer os.Remove(tempFile)
+
+	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
+	assert.NoError(t, err)
+
+	err = engine.scriptEngine.SetScript("edge_case_script", compiler.Script{
+		Params: []string{"temperature"},
+		Body:   "return temperature * 2 / 0;", // Division by zero
+	})
+	assert.NoError(t, err)
+
+	err = redisStore.SetFact("temperature", 35.0)
+	assert.NoError(t, err)
+
+	engine.ProcessFactUpdate("temperature", 35.0)
+
+	time.Sleep(100 * time.Millisecond)
+
+	status, exists := engine.Facts["status"]
+	assert.False(t, exists, "Edge case script execution should not result in a status fact")
+	assert.Nil(t, status)
 }
