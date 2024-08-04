@@ -54,15 +54,19 @@ func (s *RedisStore) SetFact(key string, value interface{}) error {
 func (s *RedisStore) GetFact(key string) (interface{}, error) {
 	data, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {
+		logging.Logger.Debug().Str("key", key).Msg("Fact not found in Redis")
 		return nil, nil
 	} else if err != nil {
+		logging.Logger.Error().Err(err).Str("key", key).Msg("Failed to get fact from Redis")
 		return nil, err
 	}
 
 	var value interface{}
 	if err := json.Unmarshal([]byte(data), &value); err != nil {
+		logging.Logger.Error().Err(err).Str("key", key).Str("data", data).Msg("Failed to unmarshal fact data")
 		return nil, err
 	}
+	logging.Logger.Debug().Str("key", key).Interface("value", value).Msg("Retrieved fact from Redis")
 	return value, nil
 }
 
@@ -132,19 +136,24 @@ func (s *RedisStore) ReceiveFacts() <-chan *redis.Message {
 func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
+		logging.Logger.Error().Err(err).Str("key", key).Interface("value", value).Msg("Failed to marshal fact value")
 		return err
 	}
 	// Set the value in Redis
 	err = s.client.Set(ctx, key, data, 0).Err()
 	if err != nil {
+		logging.Logger.Error().Err(err).Str("key", key).Str("data", string(data)).Msg("Failed to set fact in Redis")
 		return err
 	}
 
 	// Need to break apart the key to get the group
 	group := strings.Split(key, ":")[0]
 	// Publish the value to a channel
-	err = s.client.Publish(ctx, group, fmt.Sprintf("%s=%s", key, data)).Err()
-	log.Printf("Published update to group %s: %s=%s", group, key, data)
-	//log.Printf("context: %v", ctx)
-	return err
+	err = s.client.Publish(ctx, group, fmt.Sprintf("%s=%s", key, string(data))).Err()
+	if err != nil {
+		logging.Logger.Error().Err(err).Str("group", group).Str("key", key).Str("data", string(data)).Msg("Failed to publish fact update")
+		return err
+	}
+	log.Printf("Published update to group %s: %s=%s", group, key, string(data))
+	return nil
 }

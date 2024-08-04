@@ -4,7 +4,6 @@ package runtime
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
@@ -25,7 +24,7 @@ type Engine struct {
 	Facts               map[string]interface{}
 	store               store.Store
 	priorityThreshold   int
-	scriptEngine        *scripting.SafeVM
+	ScriptEngine        *scripting.SafeVM
 }
 
 // New method to create an engine from a file
@@ -45,7 +44,7 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		Facts:               make(map[string]interface{}),
 		store:               store,
 		priorityThreshold:   priorityThreshold,
-		scriptEngine:        scripting.NewSafeVM(),
+		ScriptEngine:        scripting.NewSafeVM(),
 	}
 
 	offset := 0
@@ -459,7 +458,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 				Params: params,
 				Body:   body,
 			}
-			err := e.scriptEngine.SetScript(scriptName, script)
+			err := e.ScriptEngine.SetScript(scriptName, script)
 			if err != nil {
 				return logging.NewError(logging.ErrorTypeRuntime, "Failed to set script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
 			}
@@ -487,25 +486,16 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			}
 
 			logging.Logger.Debug().Interface("scriptName", scriptName).Interface("params", params).Msg("Script parameters")
-			logging.Logger.Debug().Interface("params", params).Msg("Script parameters")
 
-			result, err := e.scriptEngine.RunScript(scriptName, params, 100*time.Millisecond)
+			action.Value = map[string]interface{}{
+				"scriptName": scriptName,
+				"params":     params,
+			}
+
+			err := e.executeAction(action)
 			if err != nil {
 				logging.Logger.Error().Err(err).Str("scriptName", scriptName).Interface("params", params).Msg("Failed to run script")
 				return logging.NewError(logging.ErrorTypeRuntime, "Failed to run script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
-			}
-
-			// Convert the result to a float64 if possible
-			if floatResult, err := strconv.ParseFloat(fmt.Sprintf("%v", result), 64); err == nil {
-				result = floatResult
-			}
-
-			e.Facts[scriptName] = result
-			logging.Logger.Debug().Str("scriptName", scriptName).Interface("result", result).Msg("Script execution result")
-
-			// Update the store with the script result
-			if err := e.store.SetFact(scriptName, result); err != nil {
-				logging.Logger.Error().Err(err).Str("scriptName", scriptName).Interface("result", result).Msg("Failed to update store with script result")
 			}
 
 		default:
@@ -562,7 +552,6 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 	}
 }
 
-// executeAction now returns an error
 func (e *Engine) executeAction(action compiler.Action) error {
 	logging.Logger.Debug().
 		Str("actionType", action.Type).
@@ -575,25 +564,51 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		factName := action.Target
 		factValue := action.Value
 
+		// Check if the factValue is a script call
+		if scriptInfo, ok := factValue.(map[string]interface{}); ok {
+			if scriptName, ok := scriptInfo["scriptName"].(string); ok {
+				params := scriptInfo["params"].(map[string]interface{})
+				logging.Logger.Debug().
+					Str("scriptName", scriptName).
+					Interface("params", params).
+					Msg("Executing script")
+				result, err := e.ScriptEngine.RunScript(scriptName, params, 100*time.Millisecond)
+				if err != nil {
+					logging.Logger.Error().Err(err).Str("scriptName", scriptName).Msg("Failed to run script")
+					return err
+				}
+				factValue = result
+				logging.Logger.Debug().
+					Str("scriptName", scriptName).
+					Interface("scriptResult", result).
+					Msg("Script executed")
+			}
+		}
+
 		// Update the fact value in the local fact store
 		e.Facts[factName] = factValue
 
 		logging.Logger.Debug().
 			Str("factName", factName).
 			Interface("factValue", factValue).
-			Msg("Fact updated")
+			Msg("Fact updated in local store")
 
 		// Send the fact update to the store via a set and publish command
 		err := e.store.SetAndPublishFact(factName, factValue)
 		if err != nil {
-			logging.Logger.Error().Err(err).Str("factName", factName).Interface("factValue", factValue).Msg("Failed to update fact in store")
+			logging.Logger.Error().Err(err).Str("factName", factName).Interface("factValue", factValue).Msg("Failed to update fact in Redis store")
 			return err
 		}
 
-		logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in store")
+		logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in Redis store")
 
-		// Trigger the fact update processing if needed
-		// e.ProcessFactUpdate(factName, factValue)
+		// Verify the fact was stored correctly
+		storedValue, err := e.store.GetFact(factName)
+		if err != nil {
+			logging.Logger.Error().Err(err).Str("factName", factName).Msg("Failed to retrieve fact from Redis store")
+		} else {
+			logging.Logger.Debug().Str("factName", factName).Interface("storedValue", storedValue).Msg("Retrieved fact from Redis store")
+		}
 
 	default:
 		err := logging.NewError(logging.ErrorTypeRuntime, "Unknown action type encountered", nil, map[string]interface{}{"type": action.Type})

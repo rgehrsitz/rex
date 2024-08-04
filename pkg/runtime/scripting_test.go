@@ -72,7 +72,7 @@ func TestScriptingEndToEnd(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Set the script in the engine's script engine
-	err = engine.scriptEngine.SetScript("calculate_heat_index", compiler.Script{
+	err = engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
 		Params: []string{"temperature", "humidity"},
 		Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
 	})
@@ -105,7 +105,7 @@ func TestScriptingEndToEnd(t *testing.T) {
 	assert.Equal(t, "hot", status)
 
 	// Verify script execution
-	heatIndex, exists := engine.Facts["calculate_heat_index"]
+	heatIndex, exists := engine.Facts["heat_index"]
 	assert.True(t, exists, "Heat index calculation result not found in engine facts")
 	if exists {
 		t.Logf("Calculated heat index: %v", heatIndex)

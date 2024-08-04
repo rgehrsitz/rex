@@ -4,6 +4,7 @@ package main
 import (
 	"os"
 	"testing"
+	"time"
 
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/runtime"
@@ -572,4 +573,264 @@ func TestEndToEndComplexRuleChaining(t *testing.T) {
 	// Check final result
 	alert, _ := redisStore.GetFact("alert")
 	assert.Equal(t, "high_temp_and_humidity", alert)
+}
+
+func TestEndToEndWithScript(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	jsonData := []byte(`
+    {
+        "rules": [
+            {
+                "name": "rule-with-script",
+                "priority": 10,
+                "conditions": {
+                    "all": [
+                        {
+                            "fact": "temperature",
+                            "operator": "GT",
+                            "value": 30.1
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "type": "updateStore",
+                        "target": "temperature_status",
+                        "value": "{calculate_status}"
+                    }
+                ],
+                "scripts": {
+                    "calculate_status": {
+                        "params": ["temperature"],
+                        "body": "return temperature > 30 ? 'hot' : 'cold';"
+                    }
+                }
+            }
+        ]
+    }`)
+
+	engine := setupEngine(t, jsonData, redisStore)
+	err := engine.ScriptEngine.SetScript("calculate_status", compiler.Script{
+		Params: []string{"temperature"},
+		Body:   "return temperature > 30 ? 'hot' : 'cold';",
+	})
+	assert.NoError(t, err)
+
+	err = redisStore.SetFact("temperature", 31.0)
+	assert.NoError(t, err)
+
+	// Process fact update
+	engine.ProcessFactUpdate("temperature", 31.0)
+
+	// Wait for a short time to allow for async processing
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify the fact update
+	tempStatus, err := redisStore.GetFact("temperature_status")
+	assert.NoError(t, err)
+	t.Logf("Retrieved temperature_status: %v", tempStatus)
+
+	// Check all facts in Redis
+	allFacts, err := redisStore.MGetFacts("temperature", "temperature_status")
+	assert.NoError(t, err)
+	t.Logf("All facts in Redis: %v", allFacts)
+
+	assert.Equal(t, "hot", tempStatus, "Expected temperature_status to be 'hot'")
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
+}
+
+func TestScriptWithMultipleParams(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	jsonData := []byte(`
+	{
+		"rules": [
+			{
+				"name": "rule-with-script-multiple-params",
+				"priority": 10,
+				"conditions": {
+					"all": [
+						{
+							"fact": "temperature",
+							"operator": "GT",
+							"value": 30.1
+						},
+						{
+							"fact": "humidity",
+							"operator": "GT",
+							"value": 70
+						}
+					]
+				},
+				"actions": [
+					{
+						"type": "updateStore",
+						"target": "heat_index",
+						"value": "{calculate_heat_index}"
+					}
+				],
+				"scripts": {
+					"calculate_heat_index": {
+						"params": ["temperature", "humidity"],
+						"body": "return temperature * 1.8 + 32 + (humidity / 100) * 10;"
+					}
+				}
+			}
+		]
+	}`)
+
+	engine := setupEngine(t, jsonData, redisStore)
+	err := engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
+		Params: []string{"temperature", "humidity"},
+		Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
+	})
+	assert.NoError(t, err)
+
+	err = redisStore.SetFact("temperature", 31.0)
+	assert.NoError(t, err)
+	err = redisStore.SetFact("humidity", 75.0)
+	assert.NoError(t, err)
+
+	// Process fact update
+	engine.ProcessFactUpdate("temperature", 31.0)
+
+	// Wait for a short time to allow for async processing
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify the fact update
+	heatIndex, err := redisStore.GetFact("heat_index")
+	assert.NoError(t, err)
+	t.Logf("Retrieved heat_index: %v", heatIndex)
+
+	// Check all facts in Redis
+	allFacts, err := redisStore.MGetFacts("temperature", "humidity", "heat_index")
+	assert.NoError(t, err)
+	t.Logf("All facts in Redis: %v", allFacts)
+
+	if heatIndex != nil {
+		expectedHeatIndex := 31.0*1.8 + 32 + (75.0/100)*10
+		assert.InDelta(t, expectedHeatIndex, heatIndex.(float64), 0.1, "Heat index calculation is incorrect")
+	} else {
+		t.Error("heat_index is nil")
+	}
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
+}
+
+func TestScriptErrorHandling(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	jsonData := []byte(`
+	{
+		"rules": [
+			{
+				"name": "rule-with-error-script",
+				"priority": 10,
+				"conditions": {
+					"all": [
+						{
+							"fact": "temperature",
+							"operator": "GT",
+							"value": 30.1
+						}
+					]
+				},
+				"actions": [
+					{
+						"type": "updateStore",
+						"target": "status",
+						"value": "{error_script}"
+					}
+				],
+				"scripts": {
+					"error_script": {
+						"params": ["temperature"],
+						"body": "return temperature.unknownMethod();"
+					}
+				}
+			}
+		]
+	}`)
+
+	engine := setupEngine(t, jsonData, redisStore)
+	err := engine.ScriptEngine.SetScript("error_script", compiler.Script{
+		Params: []string{"temperature"},
+		Body:   "return temperature.unknownMethod();",
+	})
+	assert.NoError(t, err)
+
+	redisStore.SetFact("temperature", 31.0)
+
+	// Process fact update
+	engine.ProcessFactUpdate("temperature", 31.0)
+
+	// Verify no update in the store due to script error
+	status, _ := redisStore.GetFact("status")
+	assert.Nil(t, status)
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
+}
+
+func TestScriptEdgeCases(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	jsonData := []byte(`
+	{
+		"rules": [
+			{
+				"name": "rule-with-edge-case-script",
+				"priority": 10,
+				"conditions": {
+					"all": [
+						{
+							"fact": "temperature",
+							"operator": "GT",
+							"value": 30.1
+						}
+					]
+				},
+				"actions": [
+					{
+						"type": "updateStore",
+						"target": "status",
+						"value": "{edge_case_script}"
+					}
+				],
+				"scripts": {
+					"edge_case_script": {
+						"params": ["temperature"],
+						"body": "return temperature * 2 / 0;"
+					}
+				}
+			}
+		]
+	}`)
+
+	engine := setupEngine(t, jsonData, redisStore)
+	err := engine.ScriptEngine.SetScript("edge_case_script", compiler.Script{
+		Params: []string{"temperature"},
+		Body:   "return temperature * 2 / 0;",
+	})
+	assert.NoError(t, err)
+
+	redisStore.SetFact("temperature", 31.0)
+
+	// Process fact update
+	engine.ProcessFactUpdate("temperature", 31.0)
+
+	// Verify no update in the store due to edge case handling
+	status, _ := redisStore.GetFact("status")
+	assert.Nil(t, status)
+
+	// Clean up
+	os.Remove("e2e_test_bytecode.bin")
 }

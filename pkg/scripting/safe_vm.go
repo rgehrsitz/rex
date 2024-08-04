@@ -54,7 +54,6 @@ func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout t
 
 	logging.Logger.Debug().Str("scriptName", name).Interface("params", params).Msg("Running script")
 
-	// Create a new JavaScript function with the script body
 	funcDef := fmt.Sprintf("(function(%s) { %s })", strings.Join(script.Params, ","), script.Body)
 
 	logging.Logger.Debug().Str("scriptName", name).Str("funcDef", funcDef).Msg("Defined function")
@@ -73,22 +72,21 @@ func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout t
 			}
 		}()
 
-		s.vm.SetStackDepthLimit(1000) // Prevent infinite recursion
+		s.vm.SetStackDepthLimit(1000)
 
-		// Evaluate the function definition
 		value, err := s.vm.Eval(funcDef)
 		if err != nil {
 			errChan <- fmt.Errorf("error evaluating function: %w", err)
 			return
 		}
 
-		// Prepare arguments
 		args := make([]interface{}, len(script.Params))
 		for i, param := range script.Params {
 			args[i] = params[param]
 		}
 
-		// Call the function with the parameters
+		logging.Logger.Debug().Str("scriptName", name).Interface("args", args).Msg("Calling function with arguments")
+
 		result, err := value.Call(otto.NullValue(), args...)
 		if err != nil {
 			errChan <- err
@@ -110,18 +108,25 @@ func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout t
 	select {
 	case result := <-resultChan:
 		s.vm.Interrupt = nil
-		// Handle special float values
-		if resFloat, err := result.ToFloat(); err == nil {
-			if math.IsInf(resFloat, 0) || math.IsNaN(resFloat) {
-				return nil, fmt.Errorf("script result is not a valid number: %v", resFloat)
+		exportedResult, err := result.Export()
+		if err != nil {
+			return nil, fmt.Errorf("error exporting result: %w", err)
+		}
+		if floatResult, ok := exportedResult.(float64); ok {
+			if math.IsInf(floatResult, 0) || math.IsNaN(floatResult) {
+				logging.Logger.Warn().Str("scriptName", name).Float64("result", floatResult).Msg("Script produced Inf or NaN value")
+				return nil, fmt.Errorf("script produced invalid numeric result")
 			}
 		}
-		return result.Export()
+		logging.Logger.Debug().Str("scriptName", name).Interface("exportedResult", exportedResult).Msg("Script result")
+		return exportedResult, nil
 	case err := <-errChan:
 		s.vm.Interrupt = nil
+		logging.Logger.Error().Err(err).Str("scriptName", name).Msg("Script execution error")
 		return nil, err
-	case <-time.After(timeout + 10*time.Millisecond): // Give a little extra time for the interrupt to be processed
+	case <-time.After(timeout + 10*time.Millisecond):
 		s.vm.Interrupt = nil
+		logging.Logger.Error().Str("scriptName", name).Msg("Script execution timed out")
 		return nil, fmt.Errorf("script execution timed out")
 	}
 }

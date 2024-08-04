@@ -362,14 +362,14 @@ func TestNestedScriptCalls(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Register the nested script as a global function
-	err = engine.scriptEngine.RegisterGlobalFunction("calculate_adjusted_index", compiler.Script{
+	err = engine.ScriptEngine.RegisterGlobalFunction("calculate_adjusted_index", compiler.Script{
 		Params: []string{"heat_index", "humidity"},
 		Body:   "return heat_index + (humidity / 100) * 10;",
 	})
 	assert.NoError(t, err)
 
 	// Then set the main script
-	err = engine.scriptEngine.SetScript("calculate_heat_index", compiler.Script{
+	err = engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
 		Params: []string{"temperature", "humidity"},
 		Body:   "return calculate_adjusted_index(temperature * 1.8 + 32, humidity);",
 	})
@@ -384,7 +384,7 @@ func TestNestedScriptCalls(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	heatIndex, exists := engine.Facts["calculate_heat_index"]
+	heatIndex, exists := engine.Facts["heat_index"]
 	assert.True(t, exists, "Heat index calculation result not found in engine facts")
 	if exists {
 		t.Logf("Calculated heat index: %v", heatIndex)
@@ -435,7 +435,7 @@ func TestScriptErrorHandling(t *testing.T) {
 	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
 	assert.NoError(t, err)
 
-	err = engine.scriptEngine.SetScript("error_script", compiler.Script{
+	err = engine.ScriptEngine.SetScript("error_script", compiler.Script{
 		Params: []string{"temperature"},
 		Body:   "return temperature.unknownMethod();",
 	})
@@ -496,7 +496,7 @@ func TestEdgeCases(t *testing.T) {
 	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
 	assert.NoError(t, err)
 
-	err = engine.scriptEngine.SetScript("edge_case_script", compiler.Script{
+	err = engine.ScriptEngine.SetScript("edge_case_script", compiler.Script{
 		Params: []string{"temperature"},
 		Body:   "return temperature * 2 / 0;", // Division by zero
 	})
