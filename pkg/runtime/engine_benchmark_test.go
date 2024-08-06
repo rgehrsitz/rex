@@ -1,10 +1,12 @@
 package runtime
 
 import (
-	"encoding/hex"
+	"runtime"
 	"testing"
+	"time"
 
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/scripting"
 	"rgehrsitz/rex/pkg/store"
 
 	"github.com/alicebob/miniredis/v2"
@@ -21,36 +23,81 @@ func setupMiniRedis(b *testing.B) (*miniredis.Miniredis, *store.RedisStore) {
 	return s, redisStore
 }
 
-// hexBytecode is the hexadecimal representation of the real bytecode
-const hexBytecode = "01000000000000000000000001000000B8000000D10000001E010000241174656D70657261747572655F616C6572740F0B74656D7065726174757265130000000000003E4004196C0000000F0868756D6964697479130000000000004940021953000000282A0B75706461746553746F72652B1274656D70657261747572655F7374617475732D046869676829282A0B75706461746553746F72652B0B616C6572745F6C6576656C2C000000000000004029234C303031251100000074656D70657261747572655F616C657274000000000B00000074656D7065726174757265010000001100000074656D70657261747572655F616C657274080000006875"
-
-// createMockEngine creates a mock engine for benchmarking
-// createMockEngine creates a mock engine for benchmarking
-func createMockEngine(redisStore *store.RedisStore) *Engine {
-	realBytecode, _ := hex.DecodeString(hexBytecode)
-
-	engine := &Engine{
-		bytecode: realBytecode,
-		ruleExecutionIndex: []compiler.RuleExecutionIndex{
-			{RuleName: "temperature_alert", ByteOffset: 28},
-		},
-		factRuleIndex: map[string][]string{
-			"temperature": {"temperature_alert"},
-			"humidity":    {"temperature_alert"},
-		},
-		factDependencyIndex: []compiler.FactDependencyIndex{
+func createMockEngine(b *testing.B, redisStore *store.RedisStore) *Engine {
+	// Create a sample ruleset
+	ruleset := &compiler.Ruleset{
+		Rules: []compiler.Rule{
 			{
-				RuleName: "temperature_alert",
-				Facts:    []string{"temperature", "humidity"},
+				Name: "temperature_alert",
+				Conditions: compiler.ConditionGroup{
+					All: []*compiler.ConditionOrGroup{
+						{
+							Fact:     "temperature",
+							Operator: "GT",
+							Value:    30.0,
+						},
+						{
+							Fact:     "humidity",
+							Operator: "GT",
+							Value:    60.0,
+						},
+					},
+				},
+				Actions: []compiler.Action{
+					{
+						Type:   "updateStore",
+						Target: "temperature_status",
+						Value:  "high",
+					},
+					{
+						Type:   "updateStore",
+						Target: "heat_index",
+						Value:  "{calculate_heat_index}",
+					},
+				},
+				Scripts: map[string]compiler.Script{
+					"calculate_heat_index": {
+						Params: []string{"temperature", "humidity"},
+						Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
+					},
+				},
 			},
 		},
+	}
+
+	// Generate bytecode
+	bytecodeFile := compiler.GenerateBytecode(ruleset)
+
+	engine := &Engine{
+		bytecode:            bytecodeFile.Instructions,
+		ruleExecutionIndex:  bytecodeFile.RuleExecIndex,
+		factRuleIndex:       bytecodeFile.FactRuleLookupIndex,
+		factDependencyIndex: bytecodeFile.FactDependencyIndex,
 		Facts: map[string]interface{}{
 			"temperature":        25.0,
 			"humidity":           60.0,
 			"temperature_status": "",
-			"alert_level":        0,
+			"heat_index":         0.0,
 		},
-		store: redisStore,
+		store:        redisStore,
+		ScriptEngine: scripting.NewSafeVM(),
+	}
+
+	// Initialize Redis store with the same facts
+	for key, value := range engine.Facts {
+		err := redisStore.SetFact(key, value)
+		if err != nil {
+			b.Fatalf("Failed to set fact in Redis store: %v", err)
+		}
+	}
+
+	// Add the script to the engine
+	err := engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
+		Params: []string{"temperature", "humidity"},
+		Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
+	})
+	if err != nil {
+		b.Fatalf("Failed to set script: %v", err)
 	}
 
 	return engine
@@ -60,7 +107,7 @@ func BenchmarkProcessFactUpdate(b *testing.B) {
 	s, redisStore := setupMiniRedis(b)
 	defer s.Close()
 
-	engine := createMockEngine(redisStore)
+	engine := createMockEngine(b, redisStore)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -72,7 +119,7 @@ func BenchmarkEvaluateRule(b *testing.B) {
 	s, redisStore := setupMiniRedis(b)
 	defer s.Close()
 
-	engine := createMockEngine(redisStore)
+	engine := createMockEngine(b, redisStore)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -84,7 +131,7 @@ func BenchmarkCompare(b *testing.B) {
 	s, redisStore := setupMiniRedis(b)
 	defer s.Close()
 
-	engine := createMockEngine(redisStore)
+	engine := createMockEngine(b, redisStore)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -96,7 +143,7 @@ func BenchmarkExecuteAction(b *testing.B) {
 	s, redisStore := setupMiniRedis(b)
 	defer s.Close()
 
-	engine := createMockEngine(redisStore)
+	engine := createMockEngine(b, redisStore)
 	action := compiler.Action{
 		Type:   "updateStore",
 		Target: "temperature_status",
@@ -113,10 +160,54 @@ func BenchmarkFullRuleEvaluation(b *testing.B) {
 	s, redisStore := setupMiniRedis(b)
 	defer s.Close()
 
-	engine := createMockEngine(redisStore)
+	engine := createMockEngine(b, redisStore)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		engine.ProcessFactUpdate("temperature", float64(25+i%10))
+	}
+}
+
+func BenchmarkSetScript(b *testing.B) {
+	s, redisStore := setupMiniRedis(b)
+	defer s.Close()
+
+	engine := createMockEngine(b, redisStore)
+	script := compiler.Script{
+		Params: []string{"temperature", "humidity"},
+		Body:   "return temperature + humidity;",
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		engine.ScriptEngine.SetScript("calculate_heat_index", script)
+	}
+}
+
+func BenchmarkRunScript(b *testing.B) {
+	s, redisStore := setupMiniRedis(b)
+	defer s.Close()
+
+	engine := createMockEngine(b, redisStore)
+
+	expectedResult := 25.0*1.8 + 32 + (60.0/100)*10
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		start := time.Now()
+		initialGoroutines := runtime.NumGoroutine()
+		result, err := engine.ScriptEngine.RunScript("calculate_heat_index", map[string]interface{}{"temperature": 25.0, "humidity": 60.0}, 1*time.Second)
+		elapsed := time.Since(start)
+		finalGoroutines := runtime.NumGoroutine()
+
+		// Log and verify results
+		b.Logf("Script execution time: %s, Goroutines before: %d, after: %d", elapsed, initialGoroutines, finalGoroutines)
+		if err != nil {
+			b.Fatalf("Failed to run script: %v (elapsed time: %s)", err, elapsed)
+		}
+
+		if result != expectedResult {
+			b.Fatalf("Incorrect result: got %v, want %v (elapsed time: %s)", result, expectedResult, elapsed)
+		}
 	}
 }

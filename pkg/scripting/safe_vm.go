@@ -1,5 +1,3 @@
-// rex/pkg/scripting/safe_vm.go
-
 package scripting
 
 import (
@@ -15,7 +13,7 @@ import (
 
 type SafeVM struct {
 	vm      *otto.Otto
-	scripts map[string]compiler.Script // Change this to compiler.Script
+	scripts map[string]compiler.Script
 }
 
 func NewSafeVM() *SafeVM {
@@ -58,10 +56,15 @@ func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout t
 
 	logging.Logger.Debug().Str("scriptName", name).Str("funcDef", funcDef).Msg("Defined function")
 
-	resultChan := make(chan otto.Value, 1)
-	errChan := make(chan error, 1)
+	done := make(chan interface{})
+	errChan := make(chan error)
+
+	s.vm.Interrupt = make(chan func(), 1)
+	defer func() { s.vm.Interrupt = nil }()
 
 	go func() {
+		defer close(done)
+		defer close(errChan)
 		defer func() {
 			if r := recover(); r != nil {
 				if r == "Execution timeout" {
@@ -93,39 +96,28 @@ func (s *SafeVM) RunScript(name string, params map[string]interface{}, timeout t
 			return
 		}
 
-		resultChan <- result
-	}()
-
-	s.vm.Interrupt = make(chan func(), 1)
-
-	go func() {
-		time.Sleep(timeout)
-		s.vm.Interrupt <- func() {
-			panic("Execution timeout")
-		}
-	}()
-
-	select {
-	case result := <-resultChan:
-		s.vm.Interrupt = nil
 		exportedResult, err := result.Export()
 		if err != nil {
-			return nil, fmt.Errorf("error exporting result: %w", err)
+			errChan <- fmt.Errorf("error exporting result: %w", err)
+			return
 		}
 		if floatResult, ok := exportedResult.(float64); ok {
 			if math.IsInf(floatResult, 0) || math.IsNaN(floatResult) {
 				logging.Logger.Warn().Str("scriptName", name).Float64("result", floatResult).Msg("Script produced Inf or NaN value")
-				return nil, fmt.Errorf("script produced invalid numeric result")
+				errChan <- fmt.Errorf("script produced invalid numeric result")
+				return
 			}
 		}
-		logging.Logger.Debug().Str("scriptName", name).Interface("exportedResult", exportedResult).Msg("Script result")
-		return exportedResult, nil
+		done <- exportedResult
+	}()
+
+	select {
+	case result := <-done:
+		return result, nil
 	case err := <-errChan:
-		s.vm.Interrupt = nil
 		logging.Logger.Error().Err(err).Str("scriptName", name).Msg("Script execution error")
 		return nil, err
 	case <-time.After(timeout + 10*time.Millisecond):
-		s.vm.Interrupt = nil
 		logging.Logger.Error().Str("scriptName", name).Msg("Script execution timed out")
 		return nil, fmt.Errorf("script execution timed out")
 	}
