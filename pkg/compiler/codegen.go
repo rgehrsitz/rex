@@ -41,6 +41,7 @@ func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPosi
 				binary.LittleEndian.PutUint32(offsetBytes, uint32(offset))
 				copy(instr.Operands[len(instr.Operands)-4:], offsetBytes)
 				logging.Logger.Debug().Msgf("Replaced label %s with offset %d in instruction %d", label, offset, i)
+				releaseLabel(label) // Release the label after replacement
 			}
 		}
 		finalInstructions = append(finalInstructions, instr)
@@ -485,6 +486,9 @@ func determineOperandLength(opcode Opcode, operands []byte) int {
 	case LABEL:
 		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 4")
 		return 4 // 4 bytes for the fixed label widths
+	case PRIORITY:
+		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 4")
+		return 4 // 4 bytes for the priority
 	default:
 		logging.Logger.Debug().Str("opcode", opcode.String()).Msg("Returning operand length: 0")
 		return 0

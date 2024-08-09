@@ -37,3 +37,6 @@ pkg/runtime/test_engine_bytecode.bin
 pkg/runtime/test_engine_bytecode.bin
 cmd/rexd/output.bytecode
 pkg/logging/logs.txt
+cmd/rexc/test.ruleset.json
+cmd/rexc/rules.ruleset.json
+cmd/rexc/rules.json
