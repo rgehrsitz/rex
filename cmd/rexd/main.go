@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -166,8 +167,20 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 }
 
 func processMessage(engine *runtime.Engine, msg *redis.Message) error {
-	logging.Logger.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
+	log.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
 
+	// Try to parse the payload as JSON
+	var jsonData map[string]interface{}
+	if err := json.Unmarshal([]byte(msg.Payload), &jsonData); err == nil {
+		// Handle JSON payload
+		for key, value := range jsonData {
+			// Process each key-value pair in the JSON object
+			engine.ProcessFactUpdate(key, value)
+		}
+		return nil
+	}
+
+	// If payload is not JSON, try to parse it as key=value
 	parts := strings.Split(msg.Payload, "=")
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid payload format: %s", msg.Payload)

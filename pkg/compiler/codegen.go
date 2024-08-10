@@ -71,11 +71,25 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 	var bytecode []byte
 
 	for _, rule := range ruleset.Rules {
-		logging.Logger.Debug().Msgf("Processing rule: %s", rule.Name)
-		ruleBytecode := []byte{byte(RULE_START)}
 
-		// Append the rule name as an operand
-		ruleBytecode = append(ruleBytecode, byte(len(rule.Name)))
+		logging.Logger.Debug().
+			Str("ruleName", rule.Name).
+			Int("nameLength", len(rule.Name)).
+			Int("bytecodeLength", len(bytecode)).
+			Msg("Starting to generate bytecode for rule")
+
+		ruleBytecode := []byte{byte(RULE_START)}
+		nameLength := len(rule.Name)
+		if nameLength > 255 {
+			logging.Logger.Warn().
+				Str("ruleName", rule.Name).
+				Int("nameLength", nameLength).
+				Msg("Rule name exceeds 255 characters")
+			// Handle long names (e.g., use two bytes for length)
+			ruleBytecode = append(ruleBytecode, byte(nameLength>>8), byte(nameLength&0xff))
+		} else {
+			ruleBytecode = append(ruleBytecode, byte(nameLength))
+		}
 		ruleBytecode = append(ruleBytecode, []byte(rule.Name)...)
 
 		// Append the rule priority
@@ -375,11 +389,6 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 		opcode := Opcode(bytecode[i])
 		logging.Logger.Debug().Int("index", i).Str("opcode", opcode.String()).Msg("Processing opcode")
 		if opcode == RULE_START {
-			// Check that the next opcode is not another RULE_START
-			if i+1 < len(bytecode) && Opcode(bytecode[i+1]) == RULE_START {
-				logging.Logger.Error().Msg("Unexpected RULE_START after another RULE_START")
-				return nil, nil, nil
-			}
 
 			ruleNameLength := int(bytecode[i+1])
 			ruleName := string(bytecode[i+2 : i+2+ruleNameLength])
@@ -398,7 +407,7 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 				}
 			}
 
-			// Find the end of the rule using a state machine approach
+			// Find the end of the rule
 			for j := i + 2 + ruleNameLength; j < len(bytecode); j++ {
 				if Opcode(bytecode[j]) == RULE_END {
 					// Check that the next opcode is either another RULE_START or the end of the bytecode

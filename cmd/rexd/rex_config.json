@@ -9,7 +9,17 @@
     "address": "localhost:6379",
     "password": "",
     "database": 0,
-    "channels": ["weather", "system", "network", "energy", "water"]
+    "channels": [
+      "weather",
+      "system",
+      "network",
+      "energy",
+      "water",
+      "pressure",
+      "humidity",
+      "temperature",
+      "flow_rate"
+    ]
   },
   "engine": {
     "priority_threshold": 1
