@@ -140,8 +140,8 @@ func releaseLabel(label string) {
 // The `instructions` parameter is a pointer to a slice of `Instruction` structs where the generated instructions will be appended.
 // The `prefix` parameter is a string used to generate unique labels.
 func traverse(node Node, successLabel string, failLabel string, instructions *[]Instruction, prefix string) {
-	defer releaseLabel(successLabel)
-	defer releaseLabel(failLabel)
+	//	defer releaseLabel(successLabel)
+	//	defer releaseLabel(failLabel)
 
 	if len(node.All) > 0 {
 		nextFailLabel := failLabel
@@ -182,8 +182,8 @@ func generateInstructions(root Node, prefix string) []Instruction {
 	traverse(root, startLabel, failLabel, &instructions, prefix)
 	instructions = append(instructions, Instruction{Opcode: LABEL, Operands: []byte(startLabel)})
 	instructions = append(instructions, Instruction{Opcode: LABEL, Operands: []byte(failLabel)})
-	releaseLabel(startLabel)
-	releaseLabel(failLabel)
+	//	releaseLabel(startLabel)
+	//	releaseLabel(failLabel)
 	return instructions
 }
 
