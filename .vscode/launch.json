@@ -24,7 +24,7 @@
                 "-rules",
                 //"c:\\code\\rule_gen\\rules.json",
                 //"c:\\code\\rex\\tools\\rule_gen\\generated_ruleset.json",
-                "rules.json",
+                "rules2.ruleset.json",
                 "-loglevel",
                 "trace"
             ]
