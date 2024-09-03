@@ -166,6 +166,29 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 		e.Facts[factName] = factValue
 	}
 
+	// **NEW LOGIC START**: Check for wildcard patterns
+	if strings.Contains(factName, "*") {
+		logging.Logger.Debug().Str("factName", factName).Msg("Wildcard pattern detected in fact name")
+
+		// Retrieve all matching keys for the wildcard pattern
+		keys, err := e.store.ScanFacts(strings.ReplaceAll(factName, "*", "*"))
+		if err != nil {
+			logging.Logger.Error().Err(err).Str("factName", factName).Msg("Failed to scan wildcard facts from Redis")
+			return
+		}
+
+		// Query Redis for all matching facts
+		factValues, err := e.store.MGetFacts(keys...)
+		if err != nil {
+			logging.Logger.Error().Err(err).Strs("facts", keys).Msg("Failed to retrieve facts from Redis")
+			return
+		}
+
+		// Update the local store with all retrieved wildcard facts
+		for fact, value := range factValues {
+			e.Facts[fact] = value
+		}
+	}
 	// Find all rules that reference the updated fact
 	ruleNames, ok := e.factRuleIndex[factName]
 	if !ok {
@@ -496,6 +519,36 @@ func (e *Engine) evaluateRule(ruleName string) error {
 			if err != nil {
 				logging.Logger.Error().Err(err).Str("scriptName", scriptName).Interface("params", params).Msg("Failed to run script")
 				return logging.NewError(logging.ErrorTypeRuntime, "Failed to run script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
+			}
+
+		case compiler.WILDCARD_SCAN:
+			// Extract the pattern length
+			patternLength := int(e.bytecode[offset])
+			offset++
+
+			// Extract the pattern string
+			pattern := string(e.bytecode[offset : offset+patternLength])
+			offset += patternLength
+
+			logging.Logger.Debug().Str("pattern", pattern).Msg("Executing WILDCARD_SCAN opcode")
+
+			// Perform the scan using the pattern
+			keys, err := e.store.ScanFacts(pattern)
+			if err != nil {
+				logging.Logger.Error().Err(err).Str("pattern", pattern).Msg("Failed to perform wildcard scan in Redis")
+				return err
+			}
+
+			// Retrieve all matching facts
+			factValues, err := e.store.MGetFacts(keys...)
+			if err != nil {
+				logging.Logger.Error().Err(err).Strs("keys", keys).Msg("Failed to retrieve facts from Redis")
+				return err
+			}
+
+			// Update local facts with retrieved values
+			for fact, value := range factValues {
+				e.Facts[fact] = value
 			}
 
 		default:

@@ -5,9 +5,11 @@ package store
 import "github.com/redis/go-redis/v9"
 
 type Store interface {
-	SetFact(key string, value interface{}) error
-	SetAndPublishFact(key string, value interface{}) error
-	GetFact(key string) (interface{}, error)
 	MGetFacts(keys ...string) (map[string]interface{}, error)
-	ReceiveFacts() <-chan *redis.Message // Add this line
+	SetFact(key string, value interface{}) error
+	GetFact(key string) (interface{}, error)
+	SetAndPublishFact(key string, value interface{}) error
+	Subscribe(channels ...string) *redis.PubSub
+	ReceiveFacts() <-chan *redis.Message
+	ScanFacts(pattern string) ([]string, error)
 }

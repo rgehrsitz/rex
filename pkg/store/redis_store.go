@@ -157,3 +157,24 @@ func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 	log.Printf("Published update to group %s: %s=%s", group, key, string(data))
 	return nil
 }
+
+// Scan for facts matching a pattern.
+func (s *RedisStore) ScanFacts(pattern string) ([]string, error) {
+	var cursor uint64
+	var keys []string
+	for {
+		var err error
+		var result []string
+		result, cursor, err = s.client.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			logging.Logger.Error().Err(err).Str("pattern", pattern).Msg("Failed to scan facts from Redis")
+			return nil, err
+		}
+		keys = append(keys, result...)
+		if cursor == 0 {
+			break
+		}
+	}
+	logging.Logger.Debug().Str("pattern", pattern).Int("keysFound", len(keys)).Msg("Scanned keys from Redis")
+	return keys, nil
+}

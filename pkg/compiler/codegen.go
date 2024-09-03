@@ -118,6 +118,28 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 		// Generate instructions from the condition tree
 		instructions := generateInstructions(conditionNode, "L")
 
+		var newInstructions []Instruction
+		for _, instr := range instructions {
+			condition := string(instr.Operands)
+			parts := strings.Split(condition, " ")
+
+			if len(parts) == 4 {
+				fact := parts[0]
+				if strings.Contains(fact, "*") {
+					// Create a WILDCARD_SCAN operation for wildcard conditions
+					newInstructions = append(newInstructions, Instruction{
+						Opcode:   WILDCARD_SCAN,
+						Operands: append([]byte{byte(len(fact))}, []byte(fact)...),
+					})
+				} else {
+					newInstructions = append(newInstructions, instr)
+				}
+			} else {
+				newInstructions = append(newInstructions, instr)
+			}
+		}
+		instructions = newInstructions
+
 		// Optimize the generated instructions
 		instructions = OptimizeInstructions(instructions)
 		instructions = CombineJIFJIT(instructions)
