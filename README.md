@@ -354,6 +354,11 @@ Scripts are defined in the Scripts section of a rule and can be referenced in ac
           "type": "updateStore",
           "target": "temperature_status",
           "value": true
+        },
+        {
+          "type": "updateStore",
+          "target": "heat_index",
+          "value": "{calculate_heat_index}"
         }
       ],
       "scripts": {
@@ -365,7 +370,7 @@ Scripts are defined in the Scripts section of a rule and can be referenced in ac
     },
     {
       "name": "rule-2",
-      "priority": 15,
+      "priority": 5,
       "conditions": {
         "all": [
           {
