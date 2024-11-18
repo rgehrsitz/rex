@@ -219,40 +219,23 @@ func TestScanFactsSingleCharacterWildcard(t *testing.T) {
 	assert.Empty(t, keys, "Expected no keys to be found for the pattern 'temperature:???'")
 }
 
-//var ctx = context.Background()
+// TestScanFactsMixedWildcards checks if ScanFacts correctly handles patterns with mixed wildcards.
+func TestScanFactsMixedWildcards(t *testing.T) {
+	// Start a mock Redis server
+	s, err := miniredis.Run()
+	assert.NoError(t, err)
+	defer s.Close()
 
-func setupRedis() (*RedisStore, func(), error) {
-	// Create a Redis client connected to your local Redis server
+	// Create a Redis client connected to the mock server
 	redisClient := redis.NewClient(&redis.Options{
-		Addr: "localhost:6379", // Adjust this if your Redis server runs on a different host or port
+		Addr: s.Addr(),
 	})
-
-	// Clear the Redis database before running each test
-	err := redisClient.FlushDB(ctx).Err()
-	if err != nil {
-		return nil, nil, err
-	}
-
 	store := &RedisStore{client: redisClient}
 
-	// Return the store and a teardown function to close the connection
-	return store, func() {
-		redisClient.Close()
-	}, nil
-}
-
-func TestScanFactsMixedWildcards(t *testing.T) {
-	store, teardown, err := setupRedis()
-	assert.NoError(t, err)
-	defer teardown()
-
-	// Add test data to the real Redis server
-	err = store.client.Set(ctx, "user:1234:active", "true", 0).Err()
-	assert.NoError(t, err)
-	err = store.client.Set(ctx, "user:1235:inactive", "false", 0).Err()
-	assert.NoError(t, err)
-	err = store.client.Set(ctx, "user:1236:active", "true", 0).Err()
-	assert.NoError(t, err)
+	// Add test data to the mock Redis server
+	s.Set("user:1234:active", "true")
+	s.Set("user:1235:inactive", "false")
+	s.Set("user:1236:active", "true")
 
 	// Test case: Mixed wildcards pattern "user:12*:?ctive"
 	// Ensure we are testing the correct pattern interpretation by Redis
