@@ -9,6 +9,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *RedisStore) {
@@ -126,12 +127,35 @@ func TestRedisStoreMGetFacts(t *testing.T) {
 func TestSubscribe(t *testing.T) {
 	s, store := setupMiniredis(t)
 	defer s.Close()
+	defer store.Close()
 
-	pubsub := store.Subscribe("test_channel")
+	pubsub, err := store.Subscribe(context.Background(), "test_channel")
+	assert.NoError(t, err)
 	assert.NotNil(t, pubsub)
 
 	// Clean up
 	pubsub.Close()
+}
+
+func TestSubscribeHonorsContext(t *testing.T) {
+	s, store := setupMiniredis(t)
+	defer s.Close()
+	defer store.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	pubsub, err := store.Subscribe(ctx, "test_channel")
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, pubsub)
+}
+
+func TestCloseReleasesClient(t *testing.T) {
+	s, store := setupMiniredis(t)
+	defer s.Close()
+
+	assert.NoError(t, store.Close())
+	assert.Error(t, store.SetFact("test_fact", "value"))
 }
 
 func TestSetAndPublishFact(t *testing.T) {
@@ -142,10 +166,11 @@ func TestSetAndPublishFact(t *testing.T) {
 	value := "test_value"
 
 	// Subscribe to the channel before publishing
-	pubsub := store.Subscribe("test")
+	pubsub, err := store.Subscribe(context.Background(), "test")
+	require.NoError(t, err)
 	defer pubsub.Close()
 
-	err := store.SetAndPublishFact(key, value)
+	err = store.SetAndPublishFact(key, value)
 	assert.NoError(t, err)
 
 	// Verify the fact was set
@@ -183,10 +208,11 @@ func TestSetAndPublishFactWithDifferentTypes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Subscribe to the channel before publishing
-			pubsub := store.Subscribe("test")
+			pubsub, err := store.Subscribe(context.Background(), "test")
+			require.NoError(t, err)
 			defer pubsub.Close()
 
-			err := store.SetAndPublishFact(tc.key, tc.value)
+			err = store.SetAndPublishFact(tc.key, tc.value)
 			assert.NoError(t, err)
 
 			// Verify the fact was set

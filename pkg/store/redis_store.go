@@ -40,6 +40,11 @@ func NewRedisStore(addr, password string, db int) *RedisStore {
 	return &RedisStore{client: client}
 }
 
+// Close releases the Redis client resources held by the store.
+func (s *RedisStore) Close() error {
+	return s.client.Close()
+}
+
 // SetFact sets a fact in the Redis store with the specified key and value.
 // The value is serialized to JSON before being stored.
 // Returns an error if there was a problem serializing the value or setting it in the store.
@@ -101,7 +106,7 @@ func (s *RedisStore) MGetFacts(keys ...string) (map[string]interface{}, error) {
 	return facts, nil
 }
 
-func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
+func (s *RedisStore) Subscribe(ctx context.Context, channels ...string) (*redis.PubSub, error) {
 	logging.Logger.Info().Strs("channels", channels).Msg("Subscribing to Redis channels")
 
 	pubsub := s.client.Subscribe(ctx, channels...)
@@ -110,11 +115,12 @@ func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
 	_, err := pubsub.Receive(ctx)
 	if err != nil {
 		logging.Logger.Error().Err(err).Msg("Failed to subscribe to Redis channels")
-		return nil
+		_ = pubsub.Close()
+		return nil, fmt.Errorf("subscribe to Redis channels: %w", err)
 	}
 
 	logging.Logger.Info().Strs("channels", channels).Msg("Successfully subscribed to Redis channels")
-	return pubsub
+	return pubsub, nil
 }
 
 func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
