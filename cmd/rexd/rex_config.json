@@ -2,8 +2,8 @@
   "bytecode_file": "output.bytecode",
   "logging": {
     "level": "info",
-    "destination": "console",
-    "timeFormat": "unixnano"
+    "output": "console",
+    "time_format": "unixnano"
   },
   "redis": {
     "address": "localhost:6379",
