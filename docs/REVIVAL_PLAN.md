@@ -8,7 +8,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 
 - `go test ./...`, `go test -race ./...`, `go vet ./...`, and all command builds pass.
 - Statement coverage is 76.8% overall; compiler, runtime, scripting, Redis-store, end-to-end, and benchmark tests already exist.
-- The repository has no CI, release workflow, container setup, or project task runner.
+- The repository had legacy GitHub Actions, but no maintained CI baseline, release workflow, container setup, or project task runner.
 - The direct dependency set is dated. In particular, `github.com/redis/go-redis/v9` v9.5.3 has a reachable vulnerability fixed in v9.6.3.
 - A vulnerability scan also found reachable standard-library issues in the Go 1.26.0 toolchain used for the assessment; Go 1.26.6 or newer fixes those findings.
 

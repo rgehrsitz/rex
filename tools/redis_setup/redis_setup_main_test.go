@@ -5,10 +5,12 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConnectToRedis(t *testing.T) {
@@ -78,12 +80,17 @@ func TestProcessCommand(t *testing.T) {
 	// Test publish
 	pubsub := rdb.Subscribe(context.Background(), "test")
 	defer pubsub.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	_, err = pubsub.Receive(ctx)
+	require.NoError(t, err)
 
 	err = processCommand(rdb, "set test:key2 value2")
 	assert.NoError(t, err)
 
-	msg, err := pubsub.ReceiveMessage(context.Background())
-	assert.NoError(t, err)
+	msg, err := pubsub.ReceiveMessage(ctx)
+	require.NoError(t, err)
 	assert.Equal(t, "test", msg.Channel)
 	assert.Equal(t, "test:key2=value2", msg.Payload)
 }
