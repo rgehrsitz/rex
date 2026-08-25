@@ -181,7 +181,7 @@ func processMessage(engine *runtime.Engine, msg *redis.Message) error {
 	}
 
 	// If payload is not JSON, try to parse it as key=value
-	parts := strings.Split(msg.Payload, "=")
+	parts := strings.SplitN(msg.Payload, "=", 2)
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid payload format: %s", msg.Payload)
 	}
