@@ -74,6 +74,8 @@ func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFa
 	if err != nil {
 		return fmt.Errorf("failed to setup dependencies: %w", err)
 	}
+	defer deps.Store.Close()
+	defer deps.Engine.Shutdown()
 
 	return runMainLoop(ctx, deps, config)
 }
@@ -125,6 +127,7 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 
 	engine, err := engineFactory.NewEngine(config.BytecodeFile, store, config.PriorityThreshold)
 	if err != nil {
+		_ = store.Close()
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
 
@@ -143,11 +146,15 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 		return fmt.Errorf("store is not a RedisStore")
 	}
 
-	pubsub := redisStore.Subscribe(config.RedisChannels...)
+	pubsub, err := redisStore.Subscribe(ctx, config.RedisChannels...)
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to Redis channels: %w", err)
+	}
 	defer pubsub.Close()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
 
 	log.Info().Msg("REX runtime engine started")
 

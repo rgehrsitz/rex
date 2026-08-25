@@ -38,6 +38,8 @@ type eventConsumerProbeStore struct {
 	receiveCalls chan struct{}
 }
 
+func (s *eventConsumerProbeStore) Close() error { return nil }
+
 func (s *eventConsumerProbeStore) SetFact(string, interface{}) error { return nil }
 
 func (s *eventConsumerProbeStore) SetAndPublishFact(string, interface{}) error { return nil }
