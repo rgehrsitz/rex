@@ -10,6 +10,8 @@ Copy code
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
 REX is designed to be used in conjunction with a key/value store such as Redis or NATS, where REX subscribes to and receives updates from the key/value store, evaluates the updated value, then updates and publishes applicable results back to the store.
 
+For the project's current maintenance priorities and roadmap, see the [revival plan](docs/REVIVAL_PLAN.md).
+
 ## Features
 
 - Define rules using JSON
