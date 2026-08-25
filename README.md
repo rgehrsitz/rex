@@ -1,14 +1,9 @@
-markdown
-Copy code
-
 # REX - Rules Engine eXtended <img src="rex_logo.svg" height="75px">
 
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
-[![Auto Wiki](https://img.shields.io/badge/Auto_Wiki-Mutable.ai-blue)](https://wiki.mutable.ai/rgehrsitz/rex)
-[![codecov](https://codecov.io/gh/rgehrsitz/rex/branch/main/graph/badge.svg?token=YOURTOKEN)](https://codecov.io/gh/rgehrsitz/rex)
 
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
-REX is designed to be used in conjunction with a key/value store such as Redis or NATS, where REX subscribes to and receives updates from the key/value store, evaluates the updated value, then updates and publishes applicable results back to the store.
+REX currently uses Redis as its fact store and event transport: it receives fact updates, evaluates applicable rules, and publishes resulting updates.
 
 For the project's current maintenance priorities and roadmap, see the [revival plan](docs/REVIVAL_PLAN.md).
 
@@ -24,7 +19,7 @@ For the project's current maintenance priorities and roadmap, see the [revival p
 
 ### Prerequisites
 
-- Go 1.20 or higher
+- Go 1.26.6 or higher
 - Redis server running on localhost:6379 (for default configuration)
 
 ### Installation
@@ -71,7 +66,7 @@ Command-line options:
 Example:
 
 ```bash
-./rexc -rules examples/rules2.json -loglevel debug -logoutput file
+./rexc -rules examples/rules2.ruleset.json -loglevel debug -logoutput file
 ```
 
 ### 2. Runtime Engine (rexd)
@@ -103,8 +98,8 @@ The configuration file is in JSON format and supports the following options:
   "bytecode_file": "output.bytecode",
   "logging": {
     "level": "debug",
-    "destination": "console",
-    "timeFormat": "unixnano"
+    "output": "console",
+    "time_format": "unixnano"
   },
   "redis": {
     "address": "localhost:6379",

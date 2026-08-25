@@ -21,13 +21,13 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 
 ## Now: safety and maintenance baseline
 
-- [ ] Adopt a supported, patched Go toolchain and record the supported Go policy in `go.mod`, CI, and the README.
-- [ ] Upgrade `go-redis` to at least v9.6.3; prefer the current v9 release after running the full suite.
-- [ ] Update the remaining direct dependencies in a dedicated compatibility change.
-- [ ] Add CI that runs formatting checks, `go test ./...`, `go test -race ./...`, `go vet ./...`, `govulncheck ./...`, and command builds.
-- [ ] Add scheduled dependency-update automation.
-- [ ] Replace the placeholder content in `SECURITY.md` with real supported-version and contact information.
-- [ ] Correct stale README claims and examples: Go version, nonexistent example path, placeholder Codecov token, and the NATS claim.
+- [x] Adopt a supported, patched Go toolchain and record the supported Go policy in `go.mod`, CI, and the README.
+- [x] Upgrade `go-redis` to at least v9.6.3; prefer the current v9 release after running the full suite.
+- [x] Update the remaining direct dependencies in a dedicated compatibility change.
+- [x] Add CI that runs formatting checks, `go test ./...`, `go test -race ./...`, `go vet ./...`, `govulncheck ./...`, and command builds.
+- [x] Add scheduled dependency-update automation.
+- [x] Replace the placeholder content in `SECURITY.md` with real supported-version and contact information.
+- [x] Correct stale README claims and examples: Go version, nonexistent example path, placeholder Codecov token, and the NATS claim.
 
 **Completion criteria:** a clean clone has a documented toolchain, reproducible validation commands, automated checks on every change, and no known reachable dependency vulnerability.
 
