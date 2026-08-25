@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
@@ -30,6 +32,44 @@ func createTestBytecodeFile(t *testing.T, ruleset *compiler.Ruleset) string {
 	err := compiler.WriteBytecodeToFile(filename, bytecode)
 	assert.NoError(t, err)
 	return filename
+}
+
+type eventConsumerProbeStore struct {
+	receiveCalls chan struct{}
+}
+
+func (s *eventConsumerProbeStore) SetFact(string, interface{}) error { return nil }
+
+func (s *eventConsumerProbeStore) SetAndPublishFact(string, interface{}) error { return nil }
+
+func (s *eventConsumerProbeStore) GetFact(string) (interface{}, error) { return nil, nil }
+
+func (s *eventConsumerProbeStore) MGetFacts(...string) (map[string]interface{}, error) {
+	return nil, nil
+}
+
+// ReceiveFacts remains on this test double solely to detect an accidental
+// reintroduction of engine-owned event consumption.
+func (s *eventConsumerProbeStore) ReceiveFacts() <-chan *redis.Message {
+	s.receiveCalls <- struct{}{}
+	return make(chan *redis.Message)
+}
+
+func TestNewEngineFromFileDoesNotConsumeEvents(t *testing.T) {
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{Name: "rule"}}}
+	filename := createTestBytecodeFile(t, ruleset)
+	defer os.Remove(filename)
+
+	store := &eventConsumerProbeStore{receiveCalls: make(chan struct{}, 1)}
+	engine, err := NewEngineFromFile(filename, store, 0)
+	require.NoError(t, err)
+	require.NotNil(t, engine)
+
+	select {
+	case <-store.receiveCalls:
+		t.Fatal("engine must not own event consumption")
+	case <-time.After(50 * time.Millisecond):
+	}
 }
 
 func TestProcessFactUpdate(t *testing.T) {
@@ -379,10 +419,10 @@ func TestNestedScriptCalls(t *testing.T) {
 	assert.NoError(t, err)
 	err = redisStore.SetFact("humidity", 60.0)
 	assert.NoError(t, err)
+	err = redisStore.SetFact("heat_index", 0.0)
+	assert.NoError(t, err)
 
 	engine.ProcessFactUpdate("temperature", 35.0)
-
-	time.Sleep(100 * time.Millisecond)
 
 	heatIndex, exists := engine.Facts["heat_index"]
 	assert.True(t, exists, "Heat index calculation result not found in engine facts")

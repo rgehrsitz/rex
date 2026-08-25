@@ -33,7 +33,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 
 ## Next: make the runtime reliable
 
-- [ ] Make `rexd` the only owner of the Redis subscription. Remove the engine's hidden, hard-coded subscription loop.
+- [x] Make `rexd` the only owner of the Redis subscription. Remove the engine's hidden, hard-coded subscription loop.
 - [ ] Pass `context.Context` through store and runtime operations, and add explicit close/shutdown methods for clients and subscriptions.
 - [ ] Keep Redis transport types out of the engine-facing store interface.
 - [ ] Define one canonical event format and decode JSON values consistently, including strings and booleans.

@@ -117,22 +117,6 @@ func (s *RedisStore) Subscribe(channels ...string) *redis.PubSub {
 	return pubsub
 }
 
-func (s *RedisStore) ReceiveFacts() <-chan *redis.Message {
-	logging.Logger.Info().Msg("Setting up fact reception from Redis")
-	pubsub := s.client.Subscribe(ctx, "weather", "system", "network", "energy", "water")
-
-	// Verify the subscription was successful
-	_, err := pubsub.Receive(ctx)
-	if err != nil {
-		logging.Logger.Error().Err(err).Msg("Failed to subscribe to Redis channels")
-		return nil
-	}
-
-	logging.Logger.Info().Msg("Successfully subscribed to Redis channels")
-
-	return pubsub.Channel()
-}
-
 func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {

@@ -150,6 +150,18 @@ func TestProcessMessage(t *testing.T) {
 	assert.Equal(t, "value", engine.Facts["test:key"])
 }
 
+func TestProcessMessagePreservesEqualsInValue(t *testing.T) {
+	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+
+	err := processMessage(engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: "test:key=\"a=b\"",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "\"a=b\"", engine.Facts["test:key"])
+}
+
 func TestRun(t *testing.T) {
 	// Reset the flag set before each test run
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
