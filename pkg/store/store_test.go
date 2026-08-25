@@ -134,17 +134,6 @@ func TestSubscribe(t *testing.T) {
 	pubsub.Close()
 }
 
-func TestReceiveFacts(t *testing.T) {
-	s, store := setupMiniredis(t)
-	defer s.Close()
-
-	ch := store.ReceiveFacts()
-	assert.NotNil(t, ch)
-
-	// Clean up
-	store.client.Close()
-}
-
 func TestSetAndPublishFact(t *testing.T) {
 	s, store := setupMiniredis(t)
 	defer s.Close()

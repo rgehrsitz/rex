@@ -9,7 +9,6 @@ import (
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/scripting"
 	"rgehrsitz/rex/pkg/store"
-	"strconv"
 	"strings"
 	"time"
 
@@ -146,8 +145,6 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 		})
 		logging.Logger.Debug().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
 	}
-
-	go engine.StartFactProcessing()
 
 	logging.Logger.Info().Msg("Engine initialized from bytecode")
 
@@ -622,41 +619,6 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		Msg("Finished executing action")
 
 	return nil
-}
-
-func (e *Engine) StartFactProcessing() {
-	logging.Logger.Info().Msg("Starting fact processing loop")
-	factChan := e.store.ReceiveFacts()
-
-	for msg := range factChan {
-		logging.Logger.Debug().
-			Str("channel", msg.Channel).
-			Str("payload", msg.Payload).
-			Msg("Received fact update")
-
-		parts := strings.SplitN(msg.Payload, "=", 2)
-		if len(parts) != 2 {
-			logging.Logger.Warn().
-				Str("payload", msg.Payload).
-				Msg("Invalid fact update format")
-			continue
-		}
-
-		factName := parts[0]
-		factValue := parts[1]
-
-		// Convert factValue to appropriate type
-		var value interface{}
-		if floatVal, err := strconv.ParseFloat(factValue, 64); err == nil {
-			value = floatVal
-		} else if boolVal, err := strconv.ParseBool(factValue); err == nil {
-			value = boolVal
-		} else {
-			value = factValue
-		}
-
-		e.ProcessFactUpdate(factName, value)
-	}
 }
 
 func (e *Engine) Shutdown() {
