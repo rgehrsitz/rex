@@ -158,6 +158,22 @@ func TestCloseReleasesClient(t *testing.T) {
 	assert.Error(t, store.SetFact("test_fact", "value"))
 }
 
+func TestFactOperationsHonorContext(t *testing.T) {
+	s, store := setupMiniredis(t)
+	defer s.Close()
+	defer store.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	assert.ErrorIs(t, store.SetFactContext(ctx, "test_fact", "value"), context.Canceled)
+	_, err := store.GetFactContext(ctx, "test_fact")
+	assert.ErrorIs(t, err, context.Canceled)
+	_, err = store.MGetFactsContext(ctx, "test_fact")
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.ErrorIs(t, store.SetAndPublishFactContext(ctx, "test:fact", "value"), context.Canceled)
+}
+
 func TestSetAndPublishFact(t *testing.T) {
 	s, store := setupMiniredis(t)
 	defer s.Close()

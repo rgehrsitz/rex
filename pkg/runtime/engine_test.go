@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -38,7 +39,46 @@ type eventConsumerProbeStore struct {
 	receiveCalls chan struct{}
 }
 
+type contextCaptureStore struct {
+	setAndPublishContext context.Context
+	getContext           context.Context
+}
+
+func (s *contextCaptureStore) Close() error { return nil }
+
+func (s *contextCaptureStore) SetFactContext(context.Context, string, interface{}) error { return nil }
+
+func (s *contextCaptureStore) SetAndPublishFactContext(ctx context.Context, _ string, _ interface{}) error {
+	s.setAndPublishContext = ctx
+	return nil
+}
+
+func (s *contextCaptureStore) GetFactContext(ctx context.Context, _ string) (interface{}, error) {
+	s.getContext = ctx
+	return nil, nil
+}
+
+func (s *contextCaptureStore) MGetFactsContext(context.Context, ...string) (map[string]interface{}, error) {
+	return nil, nil
+}
+
 func (s *eventConsumerProbeStore) Close() error { return nil }
+
+func (s *eventConsumerProbeStore) SetFactContext(context.Context, string, interface{}) error {
+	return nil
+}
+
+func (s *eventConsumerProbeStore) SetAndPublishFactContext(context.Context, string, interface{}) error {
+	return nil
+}
+
+func (s *eventConsumerProbeStore) GetFactContext(context.Context, string) (interface{}, error) {
+	return nil, nil
+}
+
+func (s *eventConsumerProbeStore) MGetFactsContext(context.Context, ...string) (map[string]interface{}, error) {
+	return nil, nil
+}
 
 func (s *eventConsumerProbeStore) SetFact(string, interface{}) error { return nil }
 
@@ -72,6 +112,32 @@ func TestNewEngineFromFileDoesNotConsumeEvents(t *testing.T) {
 		t.Fatal("engine must not own event consumption")
 	case <-time.After(50 * time.Millisecond):
 	}
+}
+
+func TestExecuteActionContextPassesContextToStore(t *testing.T) {
+	store := &contextCaptureStore{}
+	engine := &Engine{Facts: make(map[string]interface{}), store: store}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := engine.executeActionContext(ctx, compiler.Action{
+		Type:   "updateStore",
+		Target: "status",
+		Value:  "ready",
+	})
+	require.NoError(t, err)
+	assert.Same(t, ctx, store.setAndPublishContext)
+	assert.Same(t, ctx, store.getContext)
+}
+
+func TestProcessFactUpdateContextHonorsCancellation(t *testing.T) {
+	engine := &Engine{Facts: make(map[string]interface{}), store: &contextCaptureStore{}}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := engine.ProcessFactUpdateContext(ctx, "temperature", 35.0)
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.NotContains(t, engine.Facts, "temperature")
 }
 
 func TestProcessFactUpdate(t *testing.T) {

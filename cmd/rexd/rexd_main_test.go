@@ -22,13 +22,13 @@ import (
 // Mock implementations for testing purposes
 type MockStoreFactory struct{}
 
-func (f *MockStoreFactory) NewStore(addr, password string, db int) store.Store {
+func (f *MockStoreFactory) NewStore(addr, password string, db int) store.ContextStore {
 	return store.NewRedisStore(addr, password, db)
 }
 
 type MockEngineFactory struct{}
 
-func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
+func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.ContextStore, priorityThreshold int) (*runtime.Engine, error) {
 	// Updated to include priorityThreshold parameter
 	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
 }
@@ -144,7 +144,7 @@ func TestProcessMessage(t *testing.T) {
 		Payload: "test:key=value",
 	}
 
-	err = processMessage(engine, msg)
+	err = processMessage(context.Background(), engine, msg)
 	require.NoError(t, err)
 
 	assert.Equal(t, "value", engine.Facts["test:key"])
@@ -153,7 +153,7 @@ func TestProcessMessage(t *testing.T) {
 func TestProcessMessagePreservesEqualsInValue(t *testing.T) {
 	engine := &runtime.Engine{Facts: make(map[string]interface{})}
 
-	err := processMessage(engine, &redis.Message{
+	err := processMessage(context.Background(), engine, &redis.Message{
 		Channel: "rex_updates",
 		Payload: "test:key=\"a=b\"",
 	})
