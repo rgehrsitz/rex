@@ -36,8 +36,8 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Make `rexd` the only owner of the Redis subscription. Remove the engine's hidden, hard-coded subscription loop.
 - [x] Make `rexd` subscriptions honor its root context and close Redis clients and engines on shutdown.
 - [x] Pass caller contexts through runtime fact/action operations and Redis fact-store calls.
-- [ ] Keep Redis transport types out of the engine-facing store interface.
-- [ ] Define one canonical event format and decode JSON values consistently, including strings and booleans.
+- [x] Keep Redis transport types out of the engine-facing store interface.
+- [x] Define a canonical JSON fact-event format and decode JSON values consistently, including strings and booleans.
 - [ ] Make comparison failures return a structured error or `false`; never panic from an unchecked type assertion.
 - [ ] Add cancellation, signal-handling, duplicate-delivery, malformed-event, and shutdown integration tests.
 

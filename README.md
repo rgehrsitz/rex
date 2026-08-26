@@ -119,6 +119,20 @@ Example:
 ./rexd -config cmd/rexd/rex_config.json
 ```
 
+### Fact Event Format
+
+`rexd` consumes and the Redis store publishes JSON objects that map fact keys to their JSON values. For example, publishing the following event updates a numeric fact, a boolean fact, and a string fact without type conversion:
+
+```json
+{
+  "weather:temperature": 30.5,
+  "weather:alert": true,
+  "weather:status": "storm watch"
+}
+```
+
+During migration, `rexd` also accepts the legacy `key=value` form. Its value is decoded as JSON when possible, so `weather:status="storm watch"` is a string and `weather:alert=true` is a boolean. New producers should publish the JSON-object format.
+
 ### 3. Redis Setup (redis_setup)
 
 Purpose:

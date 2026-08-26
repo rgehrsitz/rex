@@ -147,6 +147,11 @@ func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, v
 		logging.Logger.Error().Err(err).Str("key", key).Interface("value", value).Msg("Failed to marshal fact value")
 		return err
 	}
+	event, err := json.Marshal(map[string]interface{}{key: value})
+	if err != nil {
+		logging.Logger.Error().Err(err).Str("key", key).Interface("value", value).Msg("Failed to marshal fact event")
+		return err
+	}
 	// Set the value in Redis
 	err = s.client.Set(ctx, key, data, 0).Err()
 	if err != nil {
@@ -157,11 +162,11 @@ func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, v
 	// Need to break apart the key to get the group
 	group := strings.Split(key, ":")[0]
 	// Publish the value to a channel
-	err = s.client.Publish(ctx, group, fmt.Sprintf("%s=%s", key, string(data))).Err()
+	err = s.client.Publish(ctx, group, string(event)).Err()
 	if err != nil {
-		logging.Logger.Error().Err(err).Str("group", group).Str("key", key).Str("data", string(data)).Msg("Failed to publish fact update")
+		logging.Logger.Error().Err(err).Str("group", group).Str("key", key).Str("event", string(event)).Msg("Failed to publish fact update")
 		return err
 	}
-	log.Printf("Published update to group %s: %s=%s", group, key, string(data))
+	log.Printf("Published update to group %s: %s", group, string(event))
 	return nil
 }

@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"sort"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -192,7 +191,7 @@ func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Mess
 		return nil
 	}
 
-	// If payload is not JSON, try to parse it as key=value
+	// Accept legacy key=value messages during the JSON-event migration.
 	parts := strings.SplitN(msg.Payload, "=", 2)
 	if len(parts) != 2 {
 		return fmt.Errorf("invalid payload format: %s", msg.Payload)
@@ -202,11 +201,7 @@ func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Mess
 	value := parts[1]
 
 	var typedValue interface{}
-	if value == "true" || value == "false" {
-		typedValue = value == "true"
-	} else if num, err := strconv.ParseFloat(value, 64); err == nil {
-		typedValue = num
-	} else {
+	if err := json.Unmarshal([]byte(value), &typedValue); err != nil {
 		typedValue = value
 	}
 
