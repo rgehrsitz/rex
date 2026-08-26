@@ -6,6 +6,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"math"
 	"os"
 	"testing"
 	"time"
@@ -159,7 +160,33 @@ func TestProcessMessagePreservesEqualsInValue(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, "\"a=b\"", engine.Facts["test:key"])
+	assert.Equal(t, "a=b", engine.Facts["test:key"])
+}
+
+func TestProcessMessageDecodesJSONValues(t *testing.T) {
+	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+
+	err := processMessage(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: `{"test:string":"a=b","test:bool":true,"test:number":3.5}`,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "a=b", engine.Facts["test:string"])
+	assert.Equal(t, true, engine.Facts["test:bool"])
+	assert.Equal(t, 3.5, engine.Facts["test:number"])
+}
+
+func TestProcessMessagePreservesLegacyFloatValues(t *testing.T) {
+	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+
+	err := processMessage(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: "test:number=NaN",
+	})
+	require.NoError(t, err)
+
+	assert.True(t, math.IsNaN(engine.Facts["test:number"].(float64)))
 }
 
 func TestSortedKeys(t *testing.T) {

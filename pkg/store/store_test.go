@@ -4,6 +4,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -198,8 +199,9 @@ func TestSetAndPublishFact(t *testing.T) {
 	msg, err := pubsub.ReceiveMessage(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, "test", msg.Channel)
-	expectedPayload := fmt.Sprintf("%s=\"%s\"", key, value) // Account for JSON encoding of string
-	assert.Equal(t, expectedPayload, msg.Payload)
+	var event map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(msg.Payload), &event))
+	assert.Equal(t, value, event[key])
 
 	// Verify the value in miniredis
 	storedValue, err := s.Get(key)
@@ -241,14 +243,9 @@ func TestSetAndPublishFactWithDifferentTypes(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, "test", msg.Channel)
 
-			var expectedPayload string
-			switch v := tc.value.(type) {
-			case string:
-				expectedPayload = fmt.Sprintf("%s=\"%s\"", tc.key, v)
-			default:
-				expectedPayload = fmt.Sprintf("%s=%v", tc.key, v)
-			}
-			assert.Equal(t, expectedPayload, msg.Payload)
+			var event map[string]interface{}
+			require.NoError(t, json.Unmarshal([]byte(msg.Payload), &event))
+			assert.Equal(t, tc.value, event[tc.key])
 
 			// Verify the value in miniredis
 			storedValue, err := s.Get(tc.key)
