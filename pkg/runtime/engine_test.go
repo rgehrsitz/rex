@@ -310,6 +310,60 @@ func TestCompare(t *testing.T) {
 	}
 }
 
+func TestCompareRejectsInvalidTypesWithoutPanicking(t *testing.T) {
+	engine := &Engine{}
+
+	tests := []struct {
+		name       string
+		factValue  interface{}
+		constValue interface{}
+		opcode     compiler.Opcode
+	}{
+		{"float fact is string", "5", 5.0, compiler.EQ_FLOAT},
+		{"float constant is string", 5.0, "5", compiler.NEQ_FLOAT},
+		{"string fact is bool", true, "true", compiler.CONTAINS_STRING},
+		{"boolean constant is string", true, "true", compiler.EQ_BOOL},
+		{"nil value", nil, 5.0, compiler.GT_FLOAT},
+		{"unknown opcode", "value", "value", compiler.Opcode(255)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				assert.False(t, engine.compare(tt.factValue, tt.constValue, tt.opcode))
+			})
+		})
+	}
+}
+
+func TestProcessFactUpdateSkipsActionForMalformedComparison(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	engine := createTestEngine(redisStore, `{
+        "rules": [{
+            "name": "temperature_rule",
+            "conditions": {
+                "all": [{
+                    "fact": "temperature",
+                    "operator": "GT",
+                    "value": 30
+                }]
+            },
+            "actions": [{
+                "type": "updateStore",
+                "target": "status",
+                "value": "hot"
+            }]
+        }]
+    }`)
+
+	assert.NotPanics(t, func() {
+		engine.ProcessFactUpdate("temperature", "not-a-number")
+	})
+	assert.False(t, s.Exists("status"))
+}
+
 func TestProcessFactUpdateSimpleRule(t *testing.T) {
 	s, redisStore := setupMiniredis(t)
 	defer s.Close()

@@ -38,7 +38,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Pass caller contexts through runtime fact/action operations and Redis fact-store calls.
 - [x] Keep Redis transport types out of the engine-facing store interface.
 - [x] Define a canonical JSON fact-event format and decode JSON values consistently, including strings and booleans.
-- [ ] Make comparison failures return a structured error or `false`; never panic from an unchecked type assertion.
+- [x] Make comparison failures return `false`; never panic from an unchecked type assertion.
 - [ ] Add cancellation, signal-handling, duplicate-delivery, malformed-event, and shutdown integration tests.
 
 **Completion criteria:** every running resource has an owner and shutdown path; an event is consumed once by the configured path; malformed data cannot crash `rexd`.

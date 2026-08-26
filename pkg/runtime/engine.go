@@ -532,43 +532,76 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 	return nil
 }
 
-// compare compares the given `factValue` and `constValue` based on the provided `opcode`.
-// It returns true if the comparison is successful, otherwise false.
+// compare compares the given factValue and constValue based on the provided opcode.
+// It returns false when either value does not match the opcode's expected type.
 func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opcode) bool {
-	if factValue == nil || constValue == nil {
-		logging.Logger.Warn().Msgf("Nil value encountered in comparison: factValue=%v, constValue=%v", factValue, constValue)
-		return false
-	}
-
 	switch opcode {
-	case compiler.EQ_FLOAT:
-		return factValue.(float64) == constValue.(float64)
-	case compiler.EQ_STRING:
-		return factValue.(string) == constValue.(string)
-	case compiler.EQ_BOOL:
-		return factValue.(bool) == constValue.(bool)
-	case compiler.NEQ_FLOAT:
-		return factValue.(float64) != constValue.(float64)
-	case compiler.NEQ_STRING:
-		return factValue.(string) != constValue.(string)
-	case compiler.NEQ_BOOL:
-		return factValue.(bool) != constValue.(bool)
-	case compiler.LT_FLOAT:
-		return factValue.(float64) < constValue.(float64)
-	case compiler.LTE_FLOAT:
-		return factValue.(float64) <= constValue.(float64)
-	case compiler.GT_FLOAT:
-		return factValue.(float64) > constValue.(float64)
-	case compiler.GTE_FLOAT:
-		return factValue.(float64) >= constValue.(float64)
-	case compiler.CONTAINS_STRING:
-		return strings.Contains(factValue.(string), constValue.(string))
-	case compiler.NOT_CONTAINS_STRING:
-		return !strings.Contains(factValue.(string), constValue.(string))
+	case compiler.EQ_FLOAT, compiler.NEQ_FLOAT, compiler.LT_FLOAT, compiler.LTE_FLOAT, compiler.GT_FLOAT, compiler.GTE_FLOAT:
+		fact, factOK := factValue.(float64)
+		constant, constantOK := constValue.(float64)
+		if !factOK || !constantOK {
+			return e.invalidComparison(factValue, constValue, opcode)
+		}
+
+		switch opcode {
+		case compiler.EQ_FLOAT:
+			return fact == constant
+		case compiler.NEQ_FLOAT:
+			return fact != constant
+		case compiler.LT_FLOAT:
+			return fact < constant
+		case compiler.LTE_FLOAT:
+			return fact <= constant
+		case compiler.GT_FLOAT:
+			return fact > constant
+		case compiler.GTE_FLOAT:
+			return fact >= constant
+		}
+
+	case compiler.EQ_STRING, compiler.NEQ_STRING, compiler.CONTAINS_STRING, compiler.NOT_CONTAINS_STRING:
+		fact, factOK := factValue.(string)
+		constant, constantOK := constValue.(string)
+		if !factOK || !constantOK {
+			return e.invalidComparison(factValue, constValue, opcode)
+		}
+
+		switch opcode {
+		case compiler.EQ_STRING:
+			return fact == constant
+		case compiler.NEQ_STRING:
+			return fact != constant
+		case compiler.CONTAINS_STRING:
+			return strings.Contains(fact, constant)
+		case compiler.NOT_CONTAINS_STRING:
+			return !strings.Contains(fact, constant)
+		}
+
+	case compiler.EQ_BOOL, compiler.NEQ_BOOL:
+		fact, factOK := factValue.(bool)
+		constant, constantOK := constValue.(bool)
+		if !factOK || !constantOK {
+			return e.invalidComparison(factValue, constValue, opcode)
+		}
+
+		if opcode == compiler.EQ_BOOL {
+			return fact == constant
+		}
+		return fact != constant
+
 	default:
 		logging.Logger.Warn().Uint8("opcode", uint8(opcode)).Msg("Unknown comparison opcode")
-		return false
 	}
+
+	return false
+}
+
+func (e *Engine) invalidComparison(factValue, constValue interface{}, opcode compiler.Opcode) bool {
+	logging.Logger.Warn().
+		Uint8("opcode", uint8(opcode)).
+		Interface("factValue", factValue).
+		Interface("constValue", constValue).
+		Msg("Comparison values do not match the expected type")
+	return false
 }
 
 func (e *Engine) executeAction(action compiler.Action) error {
