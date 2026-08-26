@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -37,18 +38,18 @@ type Config struct {
 
 // RexDependencies represents the external dependencies of the application
 type RexDependencies struct {
-	Store  store.Store
+	Store  store.ContextStore
 	Engine *runtime.Engine
 }
 
 // StoreFactory is an interface for creating a store
 type StoreFactory interface {
-	NewStore(addr, password string, db int) store.Store
+	NewStore(addr, password string, db int) store.ContextStore
 }
 
 // EngineFactory is an interface for creating an engine
 type EngineFactory interface {
-	NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error)
+	NewEngine(bytecodeFile string, store store.ContextStore, priorityThreshold int) (*runtime.Engine, error)
 }
 
 func main() {
@@ -161,7 +162,7 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 	for {
 		select {
 		case msg := <-pubsub.Channel():
-			if err := processMessage(deps.Engine, msg); err != nil {
+			if err := processMessage(ctx, deps.Engine, msg); err != nil {
 				log.Error().Err(err).Msg("Failed to process message")
 			}
 		case <-sigChan:
@@ -173,16 +174,20 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 	}
 }
 
-func processMessage(engine *runtime.Engine, msg *redis.Message) error {
+func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Message) error {
 	log.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
 
 	// Try to parse the payload as JSON
 	var jsonData map[string]interface{}
 	if err := json.Unmarshal([]byte(msg.Payload), &jsonData); err == nil {
 		// Handle JSON payload
-		for key, value := range jsonData {
+		keys := sortedKeys(jsonData)
+		for _, key := range keys {
+			value := jsonData[key]
 			// Process each key-value pair in the JSON object
-			engine.ProcessFactUpdate(key, value)
+			if err := engine.ProcessFactUpdateContext(ctx, key, value); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -205,20 +210,28 @@ func processMessage(engine *runtime.Engine, msg *redis.Message) error {
 		typedValue = value
 	}
 
-	engine.ProcessFactUpdate(key, typedValue)
-	return nil
+	return engine.ProcessFactUpdateContext(ctx, key, typedValue)
+}
+
+func sortedKeys(values map[string]interface{}) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // RealStoreFactory implements StoreFactory
 type RealStoreFactory struct{}
 
-func (f *RealStoreFactory) NewStore(addr, password string, db int) store.Store {
+func (f *RealStoreFactory) NewStore(addr, password string, db int) store.ContextStore {
 	return store.NewRedisStore(addr, password, db)
 }
 
 // RealEngineFactory implements EngineFactory
 type RealEngineFactory struct{}
 
-func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.Store, priorityThreshold int) (*runtime.Engine, error) {
+func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.ContextStore, priorityThreshold int) (*runtime.Engine, error) {
 	return runtime.NewEngineFromFile(bytecodeFile, store, priorityThreshold)
 }

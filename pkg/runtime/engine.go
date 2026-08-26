@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"context"
 	"encoding/binary"
 	"math"
 	"os"
@@ -21,13 +22,13 @@ type Engine struct {
 	factRuleIndex       map[string][]string
 	factDependencyIndex []compiler.FactDependencyIndex
 	Facts               map[string]interface{}
-	store               store.Store
+	store               store.ContextStore
 	priorityThreshold   int
 	ScriptEngine        *scripting.SafeVM
 }
 
 // New method to create an engine from a file
-func NewEngineFromFile(filename string, store store.Store, priorityThreshold int) (*Engine, error) {
+func NewEngineFromFile(filename string, store store.ContextStore, priorityThreshold int) (*Engine, error) {
 
 	bytecode, err := os.ReadFile(filename)
 	if err != nil {
@@ -152,6 +153,18 @@ func NewEngineFromFile(filename string, store store.Store, priorityThreshold int
 }
 
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
+	if err := e.ProcessFactUpdateContext(context.Background(), factName, factValue); err != nil {
+		logging.Logger.Error().Err(err).Str("factName", factName).Msg("Failed to process fact update")
+	}
+}
+
+// ProcessFactUpdateContext evaluates rules affected by a fact update with a
+// caller-owned context for store operations and action execution.
+func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, factValue interface{}) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Processing fact update")
 
 	// Update the fact value in the store
@@ -167,7 +180,7 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	ruleNames, ok := e.factRuleIndex[factName]
 	if !ok {
 		logging.Logger.Debug().Str("factName", factName).Msg("No rules found for the updated fact")
-		return
+		return nil
 	}
 
 	logging.Logger.Debug().Str("factName", factName).Strs("ruleNames", ruleNames).Msg("Found rules referencing the updated fact")
@@ -196,10 +209,10 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	var err error
 	// Query the KV store for the required facts
 	if len(factKeys) > 0 {
-		factValues, err = e.store.MGetFacts(factKeys...)
+		factValues, err = e.store.MGetFactsContext(ctx, factKeys...)
 		logging.Logger.Debug().Strs("facts", factKeys).Interface("values", factValues).Msg("Retrieved facts from KV store")
 		if err != nil {
-			logging.Logger.Error().Err(err).Msg("Failed to retrieve facts from KV store")
+			return err
 		}
 	}
 
@@ -245,18 +258,23 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 	// Evaluate each rule
 	for _, ruleName := range ruleNames {
 		logging.Logger.Debug().Str("ruleName", ruleName).Msg("Evaluating rule")
-		err := e.evaluateRule(ruleName)
+		err := e.evaluateRuleContext(ctx, ruleName)
 		if err != nil {
 			logging.Logger.Error().Err(err).Str("ruleName", ruleName).Msg("Failed to evaluate rule")
 			// Handle the error as needed, e.g., stop processing further rules
-			return
+			return err
 		}
 	}
 
 	logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Finished processing fact update")
+	return nil
 }
 
 func (e *Engine) evaluateRule(ruleName string) error {
+	return e.evaluateRuleContext(context.Background(), ruleName)
+}
+
+func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error {
 	logging.Logger.Debug().
 		Str("ruleName", ruleName).
 		Msg("Starting rule evaluation")
@@ -293,6 +311,10 @@ func (e *Engine) evaluateRule(ruleName string) error {
 	ruleTriggered := false
 
 	for offset < len(e.bytecode) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		opcode := compiler.Opcode(e.bytecode[offset])
 		offset++
 
@@ -405,7 +427,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 
 		case compiler.ACTION_END:
 			logging.Logger.Debug().Msg("Encountered ACTION_END opcode")
-			err := e.executeAction(action)
+			err := e.executeActionContext(ctx, action)
 			if err != nil {
 				logging.Logger.Error().Err(err).Msg("Failed to execute action")
 				return err
@@ -489,7 +511,7 @@ func (e *Engine) evaluateRule(ruleName string) error {
 				"params":     params,
 			}
 
-			err := e.executeAction(action)
+			err := e.executeActionContext(ctx, action)
 			if err != nil {
 				logging.Logger.Error().Err(err).Str("scriptName", scriptName).Interface("params", params).Msg("Failed to run script")
 				return logging.NewError(logging.ErrorTypeRuntime, "Failed to run script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
@@ -550,6 +572,14 @@ func (e *Engine) compare(factValue, constValue interface{}, opcode compiler.Opco
 }
 
 func (e *Engine) executeAction(action compiler.Action) error {
+	return e.executeActionContext(context.Background(), action)
+}
+
+func (e *Engine) executeActionContext(ctx context.Context, action compiler.Action) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	logging.Logger.Debug().
 		Str("actionType", action.Type).
 		Str("actionTarget", action.Target).
@@ -582,6 +612,10 @@ func (e *Engine) executeAction(action compiler.Action) error {
 			}
 		}
 
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
 		// Update the fact value in the local fact store
 		e.Facts[factName] = factValue
 
@@ -591,7 +625,7 @@ func (e *Engine) executeAction(action compiler.Action) error {
 			Msg("Fact updated in local store")
 
 		// Send the fact update to the store via a set and publish command
-		err := e.store.SetAndPublishFact(factName, factValue)
+		err := e.store.SetAndPublishFactContext(ctx, factName, factValue)
 		if err != nil {
 			logging.Logger.Error().Err(err).Str("factName", factName).Interface("factValue", factValue).Msg("Failed to update fact in Redis store")
 			return err
@@ -600,7 +634,7 @@ func (e *Engine) executeAction(action compiler.Action) error {
 		logging.Logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in Redis store")
 
 		// Verify the fact was stored correctly
-		storedValue, err := e.store.GetFact(factName)
+		storedValue, err := e.store.GetFactContext(ctx, factName)
 		if err != nil {
 			logging.Logger.Error().Err(err).Str("factName", factName).Msg("Failed to retrieve fact from Redis store")
 		} else {

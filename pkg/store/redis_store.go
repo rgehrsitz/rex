@@ -13,8 +13,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-var ctx = context.Background()
-
 type RedisStore struct {
 	client *redis.Client
 }
@@ -30,7 +28,7 @@ func NewRedisStore(addr, password string, db int) *RedisStore {
 		DB:       db,
 	})
 
-	_, err := client.Ping(ctx).Result()
+	_, err := client.Ping(context.Background()).Result()
 	if err != nil {
 		logging.Logger.Fatal().Err(err).Msg("Failed to connect to Redis")
 	}
@@ -49,6 +47,11 @@ func (s *RedisStore) Close() error {
 // The value is serialized to JSON before being stored.
 // Returns an error if there was a problem serializing the value or setting it in the store.
 func (s *RedisStore) SetFact(key string, value interface{}) error {
+	return s.SetFactContext(context.Background(), key, value)
+}
+
+// SetFactContext sets a fact using the caller's context.
+func (s *RedisStore) SetFactContext(ctx context.Context, key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -57,6 +60,11 @@ func (s *RedisStore) SetFact(key string, value interface{}) error {
 }
 
 func (s *RedisStore) GetFact(key string) (interface{}, error) {
+	return s.GetFactContext(context.Background(), key)
+}
+
+// GetFactContext retrieves a fact using the caller's context.
+func (s *RedisStore) GetFactContext(ctx context.Context, key string) (interface{}, error) {
 	data, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {
 		logging.Logger.Debug().Str("key", key).Msg("Fact not found in Redis")
@@ -76,6 +84,11 @@ func (s *RedisStore) GetFact(key string) (interface{}, error) {
 }
 
 func (s *RedisStore) MGetFacts(keys ...string) (map[string]interface{}, error) {
+	return s.MGetFactsContext(context.Background(), keys...)
+}
+
+// MGetFactsContext retrieves facts using the caller's context.
+func (s *RedisStore) MGetFactsContext(ctx context.Context, keys ...string) (map[string]interface{}, error) {
 	results, err := s.client.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, err
@@ -124,6 +137,11 @@ func (s *RedisStore) Subscribe(ctx context.Context, channels ...string) (*redis.
 }
 
 func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
+	return s.SetAndPublishFactContext(context.Background(), key, value)
+}
+
+// SetAndPublishFactContext updates and publishes a fact using the caller's context.
+func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		logging.Logger.Error().Err(err).Str("key", key).Interface("value", value).Msg("Failed to marshal fact value")
