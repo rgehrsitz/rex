@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -202,7 +203,11 @@ func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Mess
 
 	var typedValue interface{}
 	if err := json.Unmarshal([]byte(value), &typedValue); err != nil {
-		typedValue = value
+		if number, err := strconv.ParseFloat(value, 64); err == nil {
+			typedValue = number
+		} else {
+			typedValue = value
+		}
 	}
 
 	return engine.ProcessFactUpdateContext(ctx, key, typedValue)
