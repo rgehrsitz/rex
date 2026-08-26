@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -180,7 +181,9 @@ func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Mess
 	var jsonData map[string]interface{}
 	if err := json.Unmarshal([]byte(msg.Payload), &jsonData); err == nil {
 		// Handle JSON payload
-		for key, value := range jsonData {
+		keys := sortedKeys(jsonData)
+		for _, key := range keys {
+			value := jsonData[key]
 			// Process each key-value pair in the JSON object
 			if err := engine.ProcessFactUpdateContext(ctx, key, value); err != nil {
 				return err
@@ -208,6 +211,15 @@ func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Mess
 	}
 
 	return engine.ProcessFactUpdateContext(ctx, key, typedValue)
+}
+
+func sortedKeys(values map[string]interface{}) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // RealStoreFactory implements StoreFactory

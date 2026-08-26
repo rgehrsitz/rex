@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"context"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -42,6 +43,7 @@ type eventConsumerProbeStore struct {
 type contextCaptureStore struct {
 	setAndPublishContext context.Context
 	getContext           context.Context
+	mGetErr              error
 }
 
 func (s *contextCaptureStore) Close() error { return nil }
@@ -59,7 +61,7 @@ func (s *contextCaptureStore) GetFactContext(ctx context.Context, _ string) (int
 }
 
 func (s *contextCaptureStore) MGetFactsContext(context.Context, ...string) (map[string]interface{}, error) {
-	return nil, nil
+	return nil, s.mGetErr
 }
 
 func (s *eventConsumerProbeStore) Close() error { return nil }
@@ -138,6 +140,22 @@ func TestProcessFactUpdateContextHonorsCancellation(t *testing.T) {
 	err := engine.ProcessFactUpdateContext(ctx, "temperature", 35.0)
 	assert.ErrorIs(t, err, context.Canceled)
 	assert.NotContains(t, engine.Facts, "temperature")
+}
+
+func TestProcessFactUpdateContextReturnsStoreError(t *testing.T) {
+	storeErr := errors.New("store unavailable")
+	engine := &Engine{
+		Facts:         make(map[string]interface{}),
+		store:         &contextCaptureStore{mGetErr: storeErr},
+		factRuleIndex: map[string][]string{"temperature": {"temperature_rule"}},
+		factDependencyIndex: []compiler.FactDependencyIndex{{
+			RuleName: "temperature_rule",
+			Facts:    []string{"temperature", "humidity"},
+		}},
+	}
+
+	err := engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
+	assert.ErrorIs(t, err, storeErr)
 }
 
 func TestProcessFactUpdate(t *testing.T) {

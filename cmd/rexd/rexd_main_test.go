@@ -162,6 +162,14 @@ func TestProcessMessagePreservesEqualsInValue(t *testing.T) {
 	assert.Equal(t, "\"a=b\"", engine.Facts["test:key"])
 }
 
+func TestSortedKeys(t *testing.T) {
+	assert.Equal(t, []string{"a", "b", "c"}, sortedKeys(map[string]interface{}{
+		"b": true,
+		"c": true,
+		"a": true,
+	}))
+}
+
 func TestRun(t *testing.T) {
 	// Reset the flag set before each test run
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
