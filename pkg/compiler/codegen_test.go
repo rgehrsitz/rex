@@ -564,3 +564,25 @@ func TestGenerateBytecodeWithScripts(t *testing.T) {
 
 	// You can add more specific checks here, such as verifying the script name, params, and body in the bytecode
 }
+
+func TestGenerateBytecodeEncodesZeroParamsForUndefinedActionScript(t *testing.T) {
+	ruleset := &Ruleset{Rules: []Rule{{
+		Name: "UndefinedActionScript",
+		Conditions: ConditionGroup{All: []*ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []Action{{
+			Type:   "updateStore",
+			Target: "status",
+			Value:  "{missing_script}",
+		}},
+	}}}
+
+	bytecode := GenerateBytecode(ruleset)
+	want := append([]byte{byte(SCRIPT_CALL), byte(len("missing_script"))}, []byte("missing_script")...)
+	want = append(want, 0)
+
+	assert.True(t, bytes.Contains(bytecode.Instructions, want))
+}
