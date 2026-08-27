@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"syscall"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
 )
@@ -32,6 +34,38 @@ type MockEngineFactory struct{}
 func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.ContextStore, priorityThreshold int) (*runtime.Engine, error) {
 	// Updated to include priorityThreshold parameter
 	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
+}
+
+type actionCountingStore struct {
+	publishCount int
+}
+
+func (s *actionCountingStore) Close() error { return nil }
+
+func (s *actionCountingStore) SetFactContext(context.Context, string, interface{}) error { return nil }
+
+func (s *actionCountingStore) SetAndPublishFactContext(context.Context, string, interface{}) error {
+	s.publishCount++
+	return nil
+}
+
+func (s *actionCountingStore) GetFactContext(context.Context, string) (interface{}, error) {
+	return nil, nil
+}
+
+func (s *actionCountingStore) MGetFactsContext(context.Context, ...string) (map[string]interface{}, error) {
+	return map[string]interface{}{}, nil
+}
+
+func newTestRuntimeEngine(t *testing.T, ruleset *compiler.Ruleset, factStore store.ContextStore) *runtime.Engine {
+	t.Helper()
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+
+	engine, err := runtime.NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+	return engine
 }
 
 func TestParseConfig(t *testing.T) {
@@ -126,6 +160,55 @@ func TestRunMainLoop(t *testing.T) {
 
 	err = runMainLoop(ctx, deps, config)
 	assert.NoError(t, err)
+}
+
+func TestConsumeMessagesStopsOnCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := consumeMessages(ctx, &runtime.Engine{Facts: make(map[string]interface{})}, make(chan *redis.Message), nil)
+	assert.NoError(t, err)
+}
+
+func TestConsumeMessagesStopsOnSignal(t *testing.T) {
+	signals := make(chan os.Signal, 1)
+	signals <- syscall.SIGTERM
+
+	err := consumeMessages(context.Background(), &runtime.Engine{Facts: make(map[string]interface{})}, make(chan *redis.Message), signals)
+	assert.NoError(t, err)
+}
+
+func TestConsumeMessagesContinuesAfterMalformedEvent(t *testing.T) {
+	messages := make(chan *redis.Message, 2)
+	messages <- &redis.Message{Channel: "rex_updates", Payload: "not a fact event"}
+	messages <- &redis.Message{Channel: "rex_updates", Payload: `{"test:key":"value"}`}
+	close(messages)
+
+	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	err := consumeMessages(context.Background(), engine, messages, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "value", engine.Facts["test:key"])
+}
+
+func TestConsumeMessagesProcessesDuplicateDeliveries(t *testing.T) {
+	factStore := &actionCountingStore{}
+	engine := newTestRuntimeEngine(t, &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}, factStore)
+
+	messages := make(chan *redis.Message, 2)
+	messages <- &redis.Message{Channel: "rex_updates", Payload: `{"temperature":35}`}
+	messages <- &redis.Message{Channel: "rex_updates", Payload: `{"temperature":35}`}
+	close(messages)
+
+	require.NoError(t, consumeMessages(context.Background(), engine, messages, nil))
+	assert.Equal(t, 2, factStore.publishCount)
 }
 
 func TestProcessMessage(t *testing.T) {
