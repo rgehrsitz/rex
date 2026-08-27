@@ -145,6 +145,16 @@ During migration, `rexd` also accepts the legacy `key=value` form. Its value is 
 
 These trace records identify facts, rules, action types, and targets, but deliberately omit arbitrary fact and action values. Other diagnostic records—including the existing high-priority rule message—may contain values, so use those logs only while investigating a trusted deployment.
 
+### Health and Metrics
+
+Set `observability.enabled` to `true` to expose local HTTP endpoints at `observability.address` (default: `127.0.0.1:8080`):
+
+- `/healthz` confirms that the daemon process is serving HTTP.
+- `/readyz` returns `200` only after the Redis subscription is active; otherwise it returns `503`.
+- `/metrics` emits Prometheus text-format counters for received and failed events, event-processing duration, rule fires, and action outcomes.
+
+The endpoint is disabled by default so an upgrade does not unexpectedly open a port. Redis Pub/Sub has no retained queue or producer timestamp, so `rex_event_queue_lag_seconds` is emitted as `NaN` rather than a misleading value. Use the processing-duration metrics for this transport; queue lag requires a queued transport such as Redis Streams.
+
 ### Cycle Safety
 
 `rexd` limits each rule evaluation to `engine.max_actions_per_evaluation` actions (default: `32`) and limits a chain of Rex-derived Redis events to `engine.max_event_hops` hops (default: `16`). Derived updates carry an internal `_rex` envelope containing the existing trace ID and incremented hop; independent producers can continue sending the canonical JSON fact-object format unchanged. An event over its hop limit is rejected before rule evaluation.

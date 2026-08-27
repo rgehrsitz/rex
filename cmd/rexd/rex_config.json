@@ -26,5 +26,9 @@
     "scripts_enabled": false,
     "max_actions_per_evaluation": 32,
     "max_event_hops": 16
+  },
+  "observability": {
+    "enabled": false,
+    "address": "127.0.0.1:8080"
   }
 }
