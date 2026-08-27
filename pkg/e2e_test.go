@@ -612,6 +612,7 @@ func TestEndToEndWithScript(t *testing.T) {
     }`)
 
 	engine := setupEngine(t, jsonData, redisStore)
+	engine.SetScriptsEnabled(true)
 	err := engine.ScriptEngine.SetScript("calculate_status", compiler.Script{
 		Params: []string{"temperature"},
 		Body:   "return temperature > 30 ? 'hot' : 'cold';",
@@ -685,6 +686,7 @@ func TestScriptWithMultipleParams(t *testing.T) {
 	}`)
 
 	engine := setupEngine(t, jsonData, redisStore)
+	engine.SetScriptsEnabled(true)
 	err := engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
 		Params: []string{"temperature", "humidity"},
 		Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
@@ -760,6 +762,7 @@ func TestScriptErrorHandling(t *testing.T) {
 	}`)
 
 	engine := setupEngine(t, jsonData, redisStore)
+	engine.SetScriptsEnabled(true)
 	err := engine.ScriptEngine.SetScript("error_script", compiler.Script{
 		Params: []string{"temperature"},
 		Body:   "return temperature.unknownMethod();",
@@ -816,6 +819,7 @@ func TestScriptEdgeCases(t *testing.T) {
 	}`)
 
 	engine := setupEngine(t, jsonData, redisStore)
+	engine.SetScriptsEnabled(true)
 	err := engine.ScriptEngine.SetScript("edge_case_script", compiler.Script{
 		Params: []string{"temperature"},
 		Body:   "return temperature * 2 / 0;",

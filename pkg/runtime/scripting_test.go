@@ -3,6 +3,7 @@
 package runtime
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
@@ -70,6 +71,7 @@ func TestScriptingEndToEnd(t *testing.T) {
 
 	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
 	assert.NoError(t, err)
+	engine.SetScriptsEnabled(true)
 
 	// Set the script in the engine's script engine
 	err = engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
@@ -115,4 +117,19 @@ func TestScriptingEndToEnd(t *testing.T) {
 	// Log all keys in Redis store
 	keys := s.Keys()
 	t.Logf("All keys in Redis store: %v", keys)
+}
+
+func TestScriptExecutionIsDisabledByDefault(t *testing.T) {
+	engine := &Engine{}
+	err := engine.executeActionContext(context.Background(), compiler.Action{
+		Type:   "updateStore",
+		Target: "status",
+		Value: map[string]interface{}{
+			"scriptName": "calculate_status",
+			"params":     map[string]interface{}{},
+		},
+	})
+
+	assert.ErrorIs(t, err, ErrScriptsDisabled)
+	assert.Contains(t, err.Error(), "engine.scripts_enabled=true")
 }

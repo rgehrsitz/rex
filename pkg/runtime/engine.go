@@ -5,6 +5,7 @@ package runtime
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -17,6 +18,10 @@ import (
 	"rgehrsitz/rex/pkg/logging"
 )
 
+// ErrScriptsDisabled is returned when a rule tries to evaluate a script while
+// script execution has not been explicitly enabled for the engine.
+var ErrScriptsDisabled = errors.New("script execution is disabled")
+
 type Engine struct {
 	bytecode            []byte
 	ruleExecutionIndex  []compiler.RuleExecutionIndex
@@ -25,7 +30,18 @@ type Engine struct {
 	Facts               map[string]interface{}
 	store               store.ContextStore
 	priorityThreshold   int
+	scriptsEnabled      bool
 	ScriptEngine        *scripting.SafeVM
+}
+
+// SetScriptsEnabled controls whether this engine may evaluate embedded
+// JavaScript. Scripts are disabled by default because the in-process Otto VM is
+// not an isolation boundary. Enable them only for rulesets from trusted authors.
+func (e *Engine) SetScriptsEnabled(enabled bool) {
+	e.scriptsEnabled = enabled
+	if enabled {
+		logging.Logger.Warn().Msg("Script execution enabled for trusted rulesets")
+	}
 }
 
 // New method to create an engine from a file
@@ -631,6 +647,9 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 		// Check if the factValue is a script call
 		if scriptInfo, ok := factValue.(map[string]interface{}); ok {
 			if scriptName, ok := scriptInfo["scriptName"].(string); ok {
+				if !e.scriptsEnabled {
+					return fmt.Errorf("%w; set engine.scripts_enabled=true only for trusted rulesets", ErrScriptsDisabled)
+				}
 				params := scriptInfo["params"].(map[string]interface{})
 				logging.Logger.Debug().
 					Str("scriptName", scriptName).

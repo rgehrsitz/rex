@@ -670,6 +670,7 @@ func TestNestedScriptCalls(t *testing.T) {
 
 	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
 	assert.NoError(t, err)
+	engine.SetScriptsEnabled(true)
 
 	// Register the nested script as a global function
 	err = engine.ScriptEngine.RegisterGlobalFunction("calculate_adjusted_index", compiler.Script{
@@ -744,6 +745,7 @@ func TestScriptErrorHandling(t *testing.T) {
 
 	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
 	assert.NoError(t, err)
+	engine.SetScriptsEnabled(true)
 
 	err = engine.ScriptEngine.SetScript("error_script", compiler.Script{
 		Params: []string{"temperature"},
@@ -805,6 +807,7 @@ func TestEdgeCases(t *testing.T) {
 
 	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
 	assert.NoError(t, err)
+	engine.SetScriptsEnabled(true)
 
 	err = engine.ScriptEngine.SetScript("edge_case_script", compiler.Script{
 		Params: []string{"temperature"},

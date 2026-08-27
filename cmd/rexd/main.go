@@ -34,6 +34,7 @@ type Config struct {
 	RedisDB           int
 	RedisChannels     []string
 	PriorityThreshold int
+	ScriptsEnabled    bool
 }
 
 // RexDependencies represents the external dependencies of the application
@@ -93,6 +94,7 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
 	viper.SetDefault("engine.priority_threshold", 1)
+	viper.SetDefault("engine.scripts_enabled", false)
 
 	if *configFile == "" {
 		viper.SetConfigName("rex_config")
@@ -120,6 +122,7 @@ func parseConfig(args []string) (*Config, error) {
 		RedisDB:           viper.GetInt("redis.database"),
 		RedisChannels:     viper.GetStringSlice("redis.channels"),
 		PriorityThreshold: viper.GetInt("engine.priority_threshold"),
+		ScriptsEnabled:    viper.GetBool("engine.scripts_enabled"),
 	}, nil
 }
 
@@ -131,6 +134,7 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 		_ = store.Close()
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
+	engine.SetScriptsEnabled(config.ScriptsEnabled)
 
 	return &RexDependencies{
 		Store:  store,

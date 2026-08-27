@@ -14,6 +14,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -71,6 +72,8 @@ func newTestRuntimeEngine(t *testing.T, ruleset *compiler.Ruleset, factStore sto
 func TestParseConfig(t *testing.T) {
 	// Reset the flag set before each test run
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
 
 	configFile, err := os.CreateTemp("", "rex_config.json")
 	require.NoError(t, err)
@@ -85,6 +88,7 @@ func TestParseConfig(t *testing.T) {
 		"redis.password": "password",
 		"redis.database": 1,
 		"redis.channels": ["rex_updates"],
+		"engine.scripts_enabled": true,
 		"engine.update_interval": 10,
 		"dashboard.enabled": true,
 		"dashboard.port": 9090,
@@ -106,6 +110,24 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "password", config.RedisPassword)
 	assert.Equal(t, 1, config.RedisDB)
 	assert.Equal(t, []string{"rex_updates"}, config.RedisChannels)
+	assert.True(t, config.ScriptsEnabled)
+}
+
+func TestParseConfigDefaultsScriptsDisabled(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	configFile, err := os.CreateTemp("", "rex_config.json")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Remove(configFile.Name()) })
+	_, err = configFile.WriteString(`{"bytecode_file":"test.bytecode"}`)
+	require.NoError(t, err)
+	require.NoError(t, configFile.Close())
+
+	config, err := parseConfig([]string{"rexd", "--config", configFile.Name()})
+	require.NoError(t, err)
+	assert.False(t, config.ScriptsEnabled)
 }
 
 func TestSetupDependencies(t *testing.T) {

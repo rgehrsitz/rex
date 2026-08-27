@@ -57,7 +57,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 
 The present Otto timeout only returns from the caller; it does not stop an infinite JavaScript execution. The VM is also shared mutable state. Before expanding scripts, choose one path:
 
-1. **Trusted scripts only (recommended for the next release):** disable scripts by default, label them clearly as trusted-only, and preserve the feature for controlled deployments.
+1. **Trusted scripts only (selected for the next release):** scripts are disabled by default and may be enabled with `engine.scripts_enabled` only for controlled deployments with fully trusted rulesets.
 2. **Isolated execution:** run scripts in a separate constrained process with a hard timeout and memory/CPU limits. This is necessary for untrusted rule authors.
 3. **Remove scripts:** retain a smaller, safer declarative rules engine.
 
