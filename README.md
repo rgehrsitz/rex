@@ -6,6 +6,8 @@ REX is a rules engine designed to process complex conditions and actions using a
 REX currently uses Redis as its fact store and event transport: it receives fact updates, evaluates applicable rules, and publishes resulting updates.
 
 For the project's current maintenance priorities and roadmap, see the [revival plan](docs/REVIVAL_PLAN.md).
+For the compiled-artifact format, compatibility contract, and upgrade guidance,
+see the [bytecode compatibility guide](docs/BYTECODE_COMPATIBILITY.md).
 
 ## Features
 
