@@ -71,6 +71,7 @@ type contextCaptureStore struct {
 	getContext           context.Context
 	setAndPublishErr     error
 	mGetErr              error
+	publishCount         int
 }
 
 func captureStructuredLogs(t *testing.T) *bytes.Buffer {
@@ -114,6 +115,7 @@ func (s *contextCaptureStore) SetFactContext(context.Context, string, interface{
 
 func (s *contextCaptureStore) SetAndPublishFactContext(ctx context.Context, _ string, _ interface{}) error {
 	s.setAndPublishContext = ctx
+	s.publishCount++
 	return s.setAndPublishErr
 }
 
@@ -429,6 +431,35 @@ func TestExecuteActionContextTraceRecordsFailure(t *testing.T) {
 	assert.Equal(t, "trace-action-failure", action["trace_id"])
 	assert.Equal(t, "updateStore", action["action_type"])
 	assert.Equal(t, "status", action["action_target"])
+}
+
+func TestProcessFactUpdateContextEnforcesActionLimit(t *testing.T) {
+	factStore := &contextCaptureStore{}
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{
+			{Type: "updateStore", Target: "first_status", Value: "hot"},
+			{Type: "updateStore", Target: "second_status", Value: "hot"},
+		},
+	}}}
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+	assert.Equal(t, DefaultMaxActionsPerEvaluation, engine.maxActionsPerEvaluation)
+	engine.SetMaxActionsPerEvaluation(1)
+
+	err = engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
+	require.ErrorContains(t, err, "exceeded action limit of 1")
+	assert.Equal(t, 1, factStore.publishCount)
+	assert.Equal(t, "hot", engine.Facts["first_status"])
+	assert.NotContains(t, engine.Facts, "second_status")
 }
 
 func TestProcessFactUpdate(t *testing.T) {

@@ -145,6 +145,12 @@ During migration, `rexd` also accepts the legacy `key=value` form. Its value is 
 
 These trace records identify facts, rules, action types, and targets, but deliberately omit arbitrary fact and action values. Other diagnostic records—including the existing high-priority rule message—may contain values, so use those logs only while investigating a trusted deployment.
 
+### Cycle Safety
+
+`rexd` limits each rule evaluation to `engine.max_actions_per_evaluation` actions (default: `32`) and limits a chain of Rex-derived Redis events to `engine.max_event_hops` hops (default: `16`). Derived updates carry an internal `_rex` envelope containing the existing trace ID and incremented hop; independent producers can continue sending the canonical JSON fact-object format unchanged. An event over its hop limit is rejected before rule evaluation.
+
+These controls bound accidental feedback loops, but they do not make actions exactly-once. Rules and external action consumers should remain idempotent: use stable business keys, tolerate duplicate updates, and avoid non-idempotent side effects (such as creating a new record) without a deduplication key.
+
 ### 3. Redis Setup (redis_setup)
 
 Purpose:

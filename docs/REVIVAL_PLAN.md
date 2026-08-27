@@ -69,7 +69,7 @@ Do not present the current in-process execution as a security boundary.
 - [ ] Provide a one-command Redis demo, ideally via Docker Compose, with a smoke test and sample events.
 - [x] Add structured traces explaining a rule evaluation and action outcome.
 - [ ] Add health checks and metrics for event throughput, evaluation latency, rule fires, action failures, and queue lag.
-- [ ] Add cycle protection, action limits, and idempotency guidance for chained rules.
+- [x] Add cycle protection, action limits, and idempotency guidance for chained rules.
 - [ ] Publish versioned binaries, checksums, release notes, and a compatibility matrix.
 
 ## Possible product directions

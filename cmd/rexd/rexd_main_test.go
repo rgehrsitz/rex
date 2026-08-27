@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
 )
@@ -44,11 +45,13 @@ type actionCountingStore struct {
 type traceCapturingEngine struct {
 	factNames []string
 	traceIDs  []string
+	hops      []int
 }
 
 func (e *traceCapturingEngine) ProcessFactUpdateContext(ctx context.Context, factName string, _ interface{}) error {
 	e.factNames = append(e.factNames, factName)
 	e.traceIDs = append(e.traceIDs, runtime.TraceIDFromContext(ctx))
+	e.hops = append(e.hops, runtime.EventHopFromContext(ctx))
 	return nil
 }
 
@@ -122,6 +125,8 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, 1, config.RedisDB)
 	assert.Equal(t, []string{"rex_updates"}, config.RedisChannels)
 	assert.True(t, config.ScriptsEnabled)
+	assert.Equal(t, 32, config.MaxActionsPerEvaluation)
+	assert.Equal(t, 16, config.MaxEventHops)
 }
 
 func TestParseConfigDefaultsScriptsDisabled(t *testing.T) {
@@ -150,11 +155,13 @@ func TestSetupDependencies(t *testing.T) {
 	defer mr.Close()
 
 	config := &Config{
-		BytecodeFile:      "test.bytecode",
-		RedisAddress:      mr.Addr(),
-		RedisPassword:     "",
-		RedisDB:           0,
-		PriorityThreshold: 5, // Add PriorityThreshold to the config
+		BytecodeFile:            "test.bytecode",
+		RedisAddress:            mr.Addr(),
+		RedisPassword:           "",
+		RedisDB:                 0,
+		PriorityThreshold:       5, // Add PriorityThreshold to the config
+		MaxActionsPerEvaluation: 32,
+		MaxEventHops:            16,
 	}
 
 	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{})
@@ -306,6 +313,52 @@ func TestProcessMessageAssignsOneTraceIDToAllFactsInEvent(t *testing.T) {
 	require.Len(t, engine.traceIDs, 2)
 	assert.NotEmpty(t, engine.traceIDs[0])
 	assert.Equal(t, engine.traceIDs[0], engine.traceIDs[1])
+	assert.Equal(t, []int{0, 0}, engine.hops)
+}
+
+func TestProcessMessagePreservesDerivedEventMetadata(t *testing.T) {
+	engine := &traceCapturingEngine{}
+	payload, err := eventcontext.EncodeFactUpdate(
+		eventcontext.WithMetadata(context.Background(), eventcontext.Metadata{TraceID: "event-42", Hop: 2}),
+		"status",
+		"hot",
+	)
+	require.NoError(t, err)
+
+	err = processMessageWithMaxEventHops(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: string(payload),
+	}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"event-42"}, engine.traceIDs)
+	assert.Equal(t, []int{3}, engine.hops)
+}
+
+func TestProcessMessageRejectsEventsBeyondHopLimit(t *testing.T) {
+	engine := &traceCapturingEngine{}
+	payload, err := eventcontext.EncodeFactUpdate(
+		eventcontext.WithMetadata(context.Background(), eventcontext.Metadata{TraceID: "event-42", Hop: 2}),
+		"status",
+		"hot",
+	)
+	require.NoError(t, err)
+
+	err = processMessageWithMaxEventHops(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: string(payload),
+	}, 2)
+	require.ErrorContains(t, err, "exceeded maximum hop count")
+	assert.Empty(t, engine.factNames)
+}
+
+func TestProcessMessageRejectsMalformedEventEnvelope(t *testing.T) {
+	engine := &traceCapturingEngine{}
+	err := processMessage(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: `{"_rex":{"hop":1},"facts":{"status":"hot"}}`,
+	})
+	require.ErrorContains(t, err, "missing trace_id")
+	assert.Empty(t, engine.factNames)
 }
 
 func TestProcessMessagePreservesLegacyFloatValues(t *testing.T) {

@@ -23,6 +23,8 @@
   },
   "engine": {
     "priority_threshold": 1,
-    "scripts_enabled": false
+    "scripts_enabled": false,
+    "max_actions_per_evaluation": 32,
+    "max_event_hops": 16
   }
 }
