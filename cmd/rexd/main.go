@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sort"
@@ -14,27 +16,31 @@ import (
 	"strings"
 	"sync/atomic"
 	"syscall"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 
 	"rgehrsitz/rex/pkg/logging"
+	"rgehrsitz/rex/pkg/observability"
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
 )
 
 // Config represents the application configuration
 type Config struct {
-	BytecodeFile      string
-	LogLevel          string
-	LogDestination    string
-	LogTimeFormat     string
-	RedisAddress      string
-	RedisPassword     string
-	RedisDB           int
-	RedisChannels     []string
-	PriorityThreshold int
-	ScriptsEnabled    bool
+	BytecodeFile         string
+	LogLevel             string
+	LogDestination       string
+	LogTimeFormat        string
+	RedisAddress         string
+	RedisPassword        string
+	RedisDB              int
+	RedisChannels        []string
+	PriorityThreshold    int
+	ScriptsEnabled       bool
+	ObservabilityEnabled bool
+	ObservabilityAddress string
 }
 
 // RexDependencies represents the external dependencies of the application
@@ -85,7 +91,9 @@ func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFa
 	defer deps.Store.Close()
 	defer deps.Engine.Shutdown()
 
-	return runMainLoop(ctx, deps, config)
+	metrics := observability.NewMetrics()
+	deps.Engine.SetExecutionObserver(metrics)
+	return runMainLoopWithObservability(ctx, deps, config, metrics)
 }
 
 func parseConfig(args []string) (*Config, error) {
@@ -101,6 +109,8 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
 	viper.SetDefault("engine.priority_threshold", 1)
 	viper.SetDefault("engine.scripts_enabled", false)
+	viper.SetDefault("observability.enabled", false)
+	viper.SetDefault("observability.address", "127.0.0.1:8080")
 
 	if *configFile == "" {
 		viper.SetConfigName("rex_config")
@@ -119,16 +129,18 @@ func parseConfig(args []string) (*Config, error) {
 	}
 
 	return &Config{
-		BytecodeFile:      viper.GetString("bytecode_file"),
-		LogLevel:          viper.GetString("logging.level"),
-		LogDestination:    viper.GetString("logging.output"),
-		LogTimeFormat:     viper.GetString("logging.time_format"),
-		RedisAddress:      viper.GetString("redis.address"),
-		RedisPassword:     viper.GetString("redis.password"),
-		RedisDB:           viper.GetInt("redis.database"),
-		RedisChannels:     viper.GetStringSlice("redis.channels"),
-		PriorityThreshold: viper.GetInt("engine.priority_threshold"),
-		ScriptsEnabled:    viper.GetBool("engine.scripts_enabled"),
+		BytecodeFile:         viper.GetString("bytecode_file"),
+		LogLevel:             viper.GetString("logging.level"),
+		LogDestination:       viper.GetString("logging.output"),
+		LogTimeFormat:        viper.GetString("logging.time_format"),
+		RedisAddress:         viper.GetString("redis.address"),
+		RedisPassword:        viper.GetString("redis.password"),
+		RedisDB:              viper.GetInt("redis.database"),
+		RedisChannels:        viper.GetStringSlice("redis.channels"),
+		PriorityThreshold:    viper.GetInt("engine.priority_threshold"),
+		ScriptsEnabled:       viper.GetBool("engine.scripts_enabled"),
+		ObservabilityEnabled: viper.GetBool("observability.enabled"),
+		ObservabilityAddress: viper.GetString("observability.address"),
 	}, nil
 }
 
@@ -149,8 +161,24 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 }
 
 func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) error {
+	return runMainLoopWithObservability(ctx, deps, config, nil)
+}
+
+func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, config *Config, metrics *observability.Metrics) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	if metrics == nil {
+		metrics = observability.NewMetrics()
+	}
+	deps.Engine.SetExecutionObserver(metrics)
+
+	server, err := startObservabilityServer(config, metrics)
+	if err != nil {
+		return err
+	}
+	if server != nil {
+		defer shutdownObservabilityServer(server)
+	}
 
 	redisStore, ok := deps.Store.(*store.RedisStore)
 	if !ok {
@@ -162,16 +190,55 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 		return fmt.Errorf("failed to subscribe to Redis channels: %w", err)
 	}
 	defer pubsub.Close()
+	metrics.SetReady(true)
+	defer metrics.SetReady(false)
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
 
 	logging.Logger.Info().Msg("REX runtime engine started")
-	return consumeMessages(ctx, deps.Engine, pubsub.Channel(), sigChan)
+	return consumeMessagesWithMetrics(ctx, deps.Engine, pubsub.Channel(), sigChan, metrics)
+}
+
+func startObservabilityServer(config *Config, metrics *observability.Metrics) (*http.Server, error) {
+	if !config.ObservabilityEnabled {
+		return nil, nil
+	}
+
+	listener, err := net.Listen("tcp", config.ObservabilityAddress)
+	if err != nil {
+		return nil, fmt.Errorf("listen for observability endpoints on %s: %w", config.ObservabilityAddress, err)
+	}
+
+	server := &http.Server{
+		Addr:              listener.Addr().String(),
+		Handler:           metrics.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+			logging.Logger.Error().Err(err).Str("address", config.ObservabilityAddress).Msg("Observability server stopped unexpectedly")
+		}
+	}()
+
+	logging.Logger.Info().Str("address", config.ObservabilityAddress).Msg("Observability endpoints enabled")
+	return server, nil
+}
+
+func shutdownObservabilityServer(server *http.Server) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := server.Shutdown(ctx); err != nil {
+		logging.Logger.Error().Err(err).Msg("Failed to stop observability server")
+	}
 }
 
 func consumeMessages(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal) error {
+	return consumeMessagesWithMetrics(ctx, engine, messages, signals, nil)
+}
+
+func consumeMessagesWithMetrics(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal, metrics *observability.Metrics) error {
 	for {
 		select {
 		case msg, ok := <-messages:
@@ -181,7 +248,12 @@ func consumeMessages(ctx context.Context, engine *runtime.Engine, messages <-cha
 			if msg == nil {
 				continue
 			}
-			if err := processMessage(ctx, engine, msg); err != nil {
+			started := time.Now()
+			err := processMessage(ctx, engine, msg)
+			if metrics != nil {
+				metrics.RecordEvent(time.Since(started), err)
+			}
+			if err != nil {
 				logging.Logger.Error().Err(err).Msg("Failed to process message")
 			}
 		case <-signals:
