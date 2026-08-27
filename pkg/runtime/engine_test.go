@@ -161,8 +161,10 @@ func TestNewEngineFromFileAcceptsUndefinedActionScript(t *testing.T) {
 
 func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 	tests := []struct {
-		name   string
-		mutate func([]byte) []byte
+		name                string
+		mutate              func([]byte) []byte
+		recalculateChecksum bool
+		wantError           string
 	}{
 		{
 			name: "truncated header",
@@ -176,6 +178,8 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				binary.LittleEndian.PutUint32(data[0:4], compiler.Version+1)
 				return data
 			},
+			recalculateChecksum: true,
+			wantError:           "unsupported bytecode version",
 		},
 		{
 			name: "out of bounds rule index offset",
@@ -183,6 +187,8 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				binary.LittleEndian.PutUint32(data[16:20], uint32(len(data)+1))
 				return data
 			},
+			recalculateChecksum: true,
+			wantError:           "invalid bytecode section offsets",
 		},
 		{
 			name: "truncated rule index string",
@@ -191,6 +197,7 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				binary.LittleEndian.PutUint32(data[offset:offset+4], ^uint32(0))
 				return data
 			},
+			recalculateChecksum: true,
 		},
 		{
 			name: "unknown instruction opcode",
@@ -198,6 +205,7 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				data[compiler.HeaderSize] = 0xff
 				return data
 			},
+			recalculateChecksum: true,
 		},
 		{
 			name: "declared rule count mismatch",
@@ -205,12 +213,24 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				binary.LittleEndian.PutUint32(data[12:16], 2)
 				return data
 			},
+			recalculateChecksum: true,
+		},
+		{
+			name: "checksum mismatch",
+			mutate: func(data []byte) []byte {
+				data[compiler.HeaderSize] ^= 0xff
+				return data
+			},
+			wantError: "bytecode checksum mismatch",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			data := tt.mutate(validBytecode(t))
+			if tt.recalculateChecksum {
+				binary.LittleEndian.PutUint32(data[compiler.ChecksumOffset:compiler.ChecksumOffset+compiler.ChecksumSize], compiler.CalculateBytecodeChecksum(data))
+			}
 			filename := t.TempDir() + "/invalid.bytecode"
 			require.NoError(t, os.WriteFile(filename, data, 0o600))
 
@@ -218,6 +238,9 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				engine, err := NewEngineFromFile(filename, &contextCaptureStore{}, 0)
 				assert.Nil(t, engine)
 				assert.Error(t, err)
+				if tt.wantError != "" {
+					assert.ErrorContains(t, err, tt.wantError)
+				}
 			})
 		})
 	}

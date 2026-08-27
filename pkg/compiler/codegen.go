@@ -337,7 +337,6 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 	return BytecodeFile{
 		Header: Header{
 			Version:       Version,
-			Checksum:      Checksum,
 			ConstPoolSize: ConstPoolSize,
 			NumRules:      uint32(len(ruleset.Rules)),
 		},

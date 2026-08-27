@@ -5,6 +5,7 @@ package runtime
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
@@ -35,7 +36,7 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to read bytecode file", err, map[string]interface{}{"filename": filename})
 	}
 	if err := validateBytecode(bytecode); err != nil {
-		return nil, logging.NewError(logging.ErrorTypeRuntime, "Invalid bytecode file", err, map[string]interface{}{"filename": filename})
+		return nil, logging.NewError(logging.ErrorTypeRuntime, fmt.Sprintf("Invalid bytecode file: %v", err), err, map[string]interface{}{"filename": filename})
 	}
 	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 

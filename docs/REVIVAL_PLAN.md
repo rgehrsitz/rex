@@ -46,7 +46,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 ## Then: make compiled artifacts trustworthy
 
 - [x] Create a bytecode decoder that validates header version, offsets, lengths, instruction boundaries, and declared counts before execution.
-- [ ] Replace the placeholder checksum with an actual integrity check, or explicitly remove it from the format.
+- [x] Replace the placeholder checksum with an actual CRC-32 integrity check.
 - [ ] Sort map-derived data before serialization so compiling the same ruleset produces identical bytecode.
 - [ ] Add fuzz tests for ruleset parsing and bytecode decoding, plus corrupt/truncated-artifact regression tests.
 - [ ] Document bytecode compatibility and an artifact versioning policy.
