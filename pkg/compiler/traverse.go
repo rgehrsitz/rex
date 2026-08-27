@@ -23,9 +23,9 @@ type Condition struct {
 	Value    interface{}
 }
 
-var labelCounter = 0
-var usedLabels = map[string]bool{}
-var availableLabels = []string{}
+type labelAllocator struct {
+	next int
+}
 
 // convertConditionGroupToNode converts a ConditionGroup to a Node.
 // It iterates over the conditions and condition groups in the given ConditionGroup,
@@ -113,25 +113,10 @@ func convertValue(value interface{}) interface{} {
 	}
 }
 
-func getNextLabel(prefix string) string {
-	var label string
-	if len(availableLabels) > 0 {
-		label = availableLabels[0]
-		availableLabels = availableLabels[1:]
-	} else {
-		label = fmt.Sprintf("%s%03d", prefix, labelCounter)
-		labelCounter++
-	}
-	usedLabels[label] = true
+func (a *labelAllocator) nextLabel(prefix string) string {
+	label := fmt.Sprintf("%s%03d", prefix, a.next)
+	a.next++
 	return label
-}
-
-// releaseLabel releases a label back to the pool of available labels.
-func releaseLabel(label string) {
-	if _, exists := usedLabels[label]; exists {
-		delete(usedLabels, label)
-		availableLabels = append(availableLabels, label)
-	}
 }
 
 // traverse is a recursive function that traverses a tree-like structure represented by the given `node`.
@@ -139,18 +124,16 @@ func releaseLabel(label string) {
 // The `successLabel` and `failLabel` parameters specify the labels to jump to in case of success or failure, respectively.
 // The `instructions` parameter is a pointer to a slice of `Instruction` structs where the generated instructions will be appended.
 // The `prefix` parameter is a string used to generate unique labels.
-func traverse(node Node, successLabel string, failLabel string, instructions *[]Instruction, prefix string) {
-	//	defer releaseLabel(successLabel)
-	//	defer releaseLabel(failLabel)
+func traverse(node Node, successLabel string, failLabel string, instructions *[]Instruction, prefix string, allocator *labelAllocator) {
 
 	if len(node.All) > 0 {
 		nextFailLabel := failLabel
 		for i, child := range node.All {
 			nextSuccessLabel := successLabel
 			if i != len(node.All)-1 {
-				nextSuccessLabel = getNextLabel(prefix)
+				nextSuccessLabel = allocator.nextLabel(prefix)
 			}
-			traverse(child, nextSuccessLabel, nextFailLabel, instructions, prefix)
+			traverse(child, nextSuccessLabel, nextFailLabel, instructions, prefix, allocator)
 			if i != len(node.All)-1 {
 				*instructions = append(*instructions, Instruction{Opcode: LABEL, Operands: []byte(nextSuccessLabel)})
 			}
@@ -159,9 +142,9 @@ func traverse(node Node, successLabel string, failLabel string, instructions *[]
 		for i, child := range node.Any {
 			nextFailLabel := failLabel
 			if i != len(node.Any)-1 {
-				nextFailLabel = getNextLabel(prefix)
+				nextFailLabel = allocator.nextLabel(prefix)
 			}
-			traverse(child, successLabel, nextFailLabel, instructions, prefix)
+			traverse(child, successLabel, nextFailLabel, instructions, prefix, allocator)
 			if i != len(node.Any)-1 {
 				*instructions = append(*instructions, Instruction{Opcode: LABEL, Operands: []byte(nextFailLabel)})
 			}
@@ -177,13 +160,12 @@ func traverse(node Node, successLabel string, failLabel string, instructions *[]
 // It takes a root Node, a prefix string, and returns a slice of Instruction.
 func generateInstructions(root Node, prefix string) []Instruction {
 	instructions := []Instruction{}
-	startLabel := getNextLabel(prefix)
-	failLabel := getNextLabel(prefix)
-	traverse(root, startLabel, failLabel, &instructions, prefix)
+	allocator := &labelAllocator{}
+	startLabel := allocator.nextLabel(prefix)
+	failLabel := allocator.nextLabel(prefix)
+	traverse(root, startLabel, failLabel, &instructions, prefix, allocator)
 	instructions = append(instructions, Instruction{Opcode: LABEL, Operands: []byte(startLabel)})
 	instructions = append(instructions, Instruction{Opcode: LABEL, Operands: []byte(failLabel)})
-	//	releaseLabel(startLabel)
-	//	releaseLabel(failLabel)
 	return instructions
 }
 
@@ -267,8 +249,6 @@ func RemoveUnusedLabels(instructions []Instruction) []Instruction {
 		if instr.Opcode == LABEL {
 			label := string(instr.Operands)
 			if !usedLabels[label] {
-				// Release the unused label
-				releaseLabel(label)
 				// Skip the label if it's not used by any jump instruction
 				logging.Logger.Debug().Msgf("Removing unused label: %s", label)
 				continue
