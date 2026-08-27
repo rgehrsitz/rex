@@ -8,6 +8,8 @@ REX currently uses Redis as its fact store and event transport: it receives fact
 For the project's current maintenance priorities and roadmap, see the [revival plan](docs/REVIVAL_PLAN.md).
 For the compiled-artifact format, compatibility contract, and upgrade guidance,
 see the [bytecode compatibility guide](docs/BYTECODE_COMPATIBILITY.md).
+For platform, toolchain, and runtime expectations, see the
+[compatibility matrix](docs/COMPATIBILITY.md).
 
 ## Features
 
@@ -114,7 +116,13 @@ The configuration file is in JSON format and supports the following options:
   },
   "engine": {
     "priority_threshold": 1,
-    "scripts_enabled": false
+    "scripts_enabled": false,
+    "max_actions_per_evaluation": 32,
+    "max_event_hops": 16
+  },
+  "observability": {
+    "enabled": false,
+    "address": "127.0.0.1:8080"
   }
 }
 ```
@@ -230,6 +238,13 @@ Example:
 3. Set up your Redis instance and initialize it with `redis_setup` if needed.
 4. Run `rexd` with the compiled bytecode to start the rules engine.
 5. The engine will listen for updates from Redis, evaluate rules, and perform actions accordingly.
+
+## Releases
+
+Pushing an annotated `vX.Y.Z` tag from a reviewed `main` commit publishes
+versioned archives for Linux, macOS, and Windows, together with a SHA-256
+manifest and GitHub-generated release notes. See the [release guide](docs/RELEASING.md)
+for the tag and verification procedure.
 
 ## Development
 
