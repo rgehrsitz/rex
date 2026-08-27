@@ -158,14 +158,23 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 	defer signal.Stop(sigChan)
 
 	log.Info().Msg("REX runtime engine started")
+	return consumeMessages(ctx, deps.Engine, pubsub.Channel(), sigChan)
+}
 
+func consumeMessages(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal) error {
 	for {
 		select {
-		case msg := <-pubsub.Channel():
-			if err := processMessage(ctx, deps.Engine, msg); err != nil {
+		case msg, ok := <-messages:
+			if !ok {
+				return nil
+			}
+			if msg == nil {
+				continue
+			}
+			if err := processMessage(ctx, engine, msg); err != nil {
 				log.Error().Err(err).Msg("Failed to process message")
 			}
-		case <-sigChan:
+		case <-signals:
 			log.Info().Msg("Shutting down REX runtime engine")
 			return nil
 		case <-ctx.Done():
