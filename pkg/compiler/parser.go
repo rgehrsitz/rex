@@ -22,7 +22,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	}
 	for i, rule := range ruleset.Rules {
 		if err := validateRule(&rule); err != nil {
-			return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid rule", err, map[string]interface{}{"rule_name": rule.Name})
+			return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid rule: %v", err), err, map[string]interface{}{"rule_name": rule.Name})
 		}
 
 		// Validate and compile custom scripts
@@ -51,6 +51,9 @@ func validateRule(rule *Rule) error {
 	logging.Logger.Debug().Str("rule", rule.Name).Msg("Validating rule")
 	if rule.Name == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Rule name is required", nil, nil)
+	}
+	if len(rule.Name) > MaxBytecodeStringLength {
+		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Rule name exceeds bytecode limit of %d bytes", MaxBytecodeStringLength), nil, map[string]interface{}{"rule_name_length": len(rule.Name)})
 	}
 	if rule.Priority < 0 {
 		return logging.NewError(logging.ErrorTypeCompile, "Rule priority must be non-negative", nil, map[string]interface{}{"rule_name": rule.Name})

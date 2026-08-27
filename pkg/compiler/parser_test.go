@@ -623,6 +623,30 @@ func TestValidateRule(t *testing.T) {
 			expectedErr: "COMPILE: Rule name is required",
 		},
 		{
+			name: "Maximum Bytecode Name Length",
+			rule: Rule{
+				Name:     strings.Repeat("a", MaxBytecodeStringLength),
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "",
+		},
+		{
+			name: "Rule Name Exceeds Bytecode Limit",
+			rule: Rule{
+				Name:     strings.Repeat("a", MaxBytecodeStringLength+1),
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "COMPILE: Rule name exceeds bytecode limit of 255 bytes",
+		},
+		{
 			name: "Negative Priority",
 			rule: Rule{
 				Name:     "NegativePriority",
@@ -668,6 +692,20 @@ func TestValidateRule(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParseRejectsRuleNameExceedingBytecodeLimit(t *testing.T) {
+	jsonData := []byte(fmt.Sprintf(`{
+		"rules": [{
+			"name": %q,
+			"conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
+			"actions": [{"type": "updateStore", "target": "alarm", "value": true}]
+		}]
+	}`, strings.Repeat("a", MaxBytecodeStringLength+1)))
+
+	_, err := Parse(jsonData)
+	assert.ErrorContains(t, err, "Invalid rule")
+	assert.ErrorContains(t, err, "Rule name exceeds bytecode limit of 255 bytes")
 }
 
 func TestValidateConditionOrGroup(t *testing.T) {

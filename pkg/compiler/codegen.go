@@ -80,16 +80,7 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 
 		ruleBytecode := []byte{byte(RULE_START)}
 		nameLength := len(rule.Name)
-		if nameLength > 255 {
-			logging.Logger.Warn().
-				Str("ruleName", rule.Name).
-				Int("nameLength", nameLength).
-				Msg("Rule name exceeds 255 characters")
-			// Handle long names (e.g., use two bytes for length)
-			ruleBytecode = append(ruleBytecode, byte(nameLength>>8), byte(nameLength&0xff))
-		} else {
-			ruleBytecode = append(ruleBytecode, byte(nameLength))
-		}
+		ruleBytecode = append(ruleBytecode, byte(nameLength))
 		ruleBytecode = append(ruleBytecode, []byte(rule.Name)...)
 
 		// Append the rule priority

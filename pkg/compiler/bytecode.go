@@ -18,6 +18,10 @@ const (
 	Checksum      = 0
 	ConstPoolSize = 0
 	HeaderSize    = 28
+
+	// MaxBytecodeStringLength is the largest string representable by the
+	// instruction format's one-byte string-length prefix.
+	MaxBytecodeStringLength = 255
 )
 
 // BytecodeFile represents a bytecode file that contains the compiled instructions
