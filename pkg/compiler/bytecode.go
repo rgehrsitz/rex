@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"os"
+	"sort"
 	"strings"
 
 	"rgehrsitz/rex/pkg/logging"
@@ -254,7 +255,13 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 
 	// Calculate and write the Fact Rule Lookup Index
 	bytecodeFile.Header.FactRuleIndexOffset = uint32(buf.Len())
-	for factName, rules := range bytecodeFile.FactRuleLookupIndex {
+	factNames := make([]string, 0, len(bytecodeFile.FactRuleLookupIndex))
+	for factName := range bytecodeFile.FactRuleLookupIndex {
+		factNames = append(factNames, factName)
+	}
+	sort.Strings(factNames)
+	for _, factName := range factNames {
+		rules := bytecodeFile.FactRuleLookupIndex[factName]
 		if err := writeString(buf, factName); err != nil {
 			return err
 		}
