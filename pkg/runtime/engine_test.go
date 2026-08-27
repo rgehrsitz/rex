@@ -4,6 +4,7 @@ package runtime
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"os"
 	"testing"
@@ -34,6 +35,26 @@ func createTestBytecodeFile(t *testing.T, ruleset *compiler.Ruleset) string {
 	err := compiler.WriteBytecodeToFile(filename, bytecode)
 	assert.NoError(t, err)
 	return filename
+}
+
+func validBytecode(t *testing.T) []byte {
+	t.Helper()
+
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}
+	filename := t.TempDir() + "/valid.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+
+	data, err := os.ReadFile(filename)
+	require.NoError(t, err)
+	return data
 }
 
 type eventConsumerProbeStore struct {
@@ -113,6 +134,70 @@ func TestNewEngineFromFileDoesNotConsumeEvents(t *testing.T) {
 	case <-store.receiveCalls:
 		t.Fatal("engine must not own event consumption")
 	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func([]byte) []byte
+	}{
+		{
+			name: "truncated header",
+			mutate: func(data []byte) []byte {
+				return data[:compiler.HeaderSize-1]
+			},
+		},
+		{
+			name: "unsupported version",
+			mutate: func(data []byte) []byte {
+				binary.LittleEndian.PutUint32(data[0:4], compiler.Version+1)
+				return data
+			},
+		},
+		{
+			name: "out of bounds rule index offset",
+			mutate: func(data []byte) []byte {
+				binary.LittleEndian.PutUint32(data[16:20], uint32(len(data)+1))
+				return data
+			},
+		},
+		{
+			name: "truncated rule index string",
+			mutate: func(data []byte) []byte {
+				offset := binary.LittleEndian.Uint32(data[16:20])
+				binary.LittleEndian.PutUint32(data[offset:offset+4], ^uint32(0))
+				return data
+			},
+		},
+		{
+			name: "unknown instruction opcode",
+			mutate: func(data []byte) []byte {
+				data[compiler.HeaderSize] = 0xff
+				return data
+			},
+		},
+		{
+			name: "declared rule count mismatch",
+			mutate: func(data []byte) []byte {
+				binary.LittleEndian.PutUint32(data[12:16], 2)
+				return data
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data := tt.mutate(validBytecode(t))
+			filename := t.TempDir() + "/invalid.bytecode"
+			require.NoError(t, os.WriteFile(filename, data, 0o600))
+
+			assert.NotPanics(t, func() {
+				engine, err := NewEngineFromFile(filename, &contextCaptureStore{}, 0)
+				assert.Nil(t, engine)
+				assert.Error(t, err)
+			})
+		})
 	}
 }
 

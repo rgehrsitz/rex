@@ -34,6 +34,9 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 	if err != nil {
 		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to read bytecode file", err, map[string]interface{}{"filename": filename})
 	}
+	if err := validateBytecode(bytecode); err != nil {
+		return nil, logging.NewError(logging.ErrorTypeRuntime, "Invalid bytecode file", err, map[string]interface{}{"filename": filename})
+	}
 	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 
 	engine := &Engine{
