@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"syscall"
 	"testing"
@@ -19,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/observability"
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
 )
@@ -100,6 +103,8 @@ func TestParseConfig(t *testing.T) {
 		"redis.database": 1,
 		"redis.channels": ["rex_updates"],
 		"engine.scripts_enabled": true,
+		"observability.enabled": true,
+		"observability.address": "127.0.0.1:9091",
 		"engine.update_interval": 10,
 		"dashboard.enabled": true,
 		"dashboard.port": 9090,
@@ -122,6 +127,8 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, 1, config.RedisDB)
 	assert.Equal(t, []string{"rex_updates"}, config.RedisChannels)
 	assert.True(t, config.ScriptsEnabled)
+	assert.True(t, config.ObservabilityEnabled)
+	assert.Equal(t, "127.0.0.1:9091", config.ObservabilityAddress)
 }
 
 func TestParseConfigDefaultsScriptsDisabled(t *testing.T) {
@@ -242,6 +249,37 @@ func TestConsumeMessagesProcessesDuplicateDeliveries(t *testing.T) {
 
 	require.NoError(t, consumeMessages(context.Background(), engine, messages, nil))
 	assert.Equal(t, 2, factStore.publishCount)
+}
+
+func TestConsumeMessagesRecordsEventMetrics(t *testing.T) {
+	messages := make(chan *redis.Message, 2)
+	messages <- &redis.Message{Channel: "rex_updates", Payload: `{"temperature":35}`}
+	messages <- &redis.Message{Channel: "rex_updates", Payload: "not a fact event"}
+	close(messages)
+
+	metrics := observability.NewMetrics()
+	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	require.NoError(t, consumeMessagesWithMetrics(context.Background(), engine, messages, nil, metrics))
+
+	response := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	assert.Contains(t, response.Body.String(), "rex_events_received_total 2")
+	assert.Contains(t, response.Body.String(), "rex_event_failures_total 1")
+}
+
+func TestStartObservabilityServerServesHealthEndpoint(t *testing.T) {
+	metrics := observability.NewMetrics()
+	server, err := startObservabilityServer(&Config{
+		ObservabilityEnabled: true,
+		ObservabilityAddress: "127.0.0.1:0",
+	}, metrics)
+	require.NoError(t, err)
+	t.Cleanup(func() { shutdownObservabilityServer(server) })
+
+	response, err := http.Get("http://" + server.Addr + "/healthz")
+	require.NoError(t, err)
+	defer response.Body.Close()
+	assert.Equal(t, http.StatusOK, response.StatusCode)
 }
 
 func TestProcessMessage(t *testing.T) {

@@ -27,6 +27,7 @@ type Engine struct {
 	priorityThreshold   int
 	scriptsEnabled      bool
 	ScriptEngine        *scripting.SafeVM
+	executionObserver   ExecutionObserver
 }
 
 // SetScriptsEnabled controls whether this engine may evaluate embedded
@@ -476,6 +477,9 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 
 		case compiler.ACTION_END:
 			logger.Debug().Msg("Encountered ACTION_END opcode")
+			if actionsAttempted == 0 {
+				e.recordRuleFired(ruleName)
+			}
 			actionsAttempted++
 			err := e.executeActionContext(ctx, action)
 			if err != nil {
@@ -670,11 +674,22 @@ func (e *Engine) executeAction(action compiler.Action) error {
 	return e.executeActionContext(context.Background(), action)
 }
 
-func (e *Engine) executeActionContext(ctx context.Context, action compiler.Action) error {
+func (e *Engine) executeActionContext(ctx context.Context, action compiler.Action) (err error) {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	logger := traceLogger(ctx)
+	skipped := false
+	defer func() {
+		switch {
+		case err != nil:
+			e.recordActionFailed(action, err)
+		case skipped:
+			e.recordActionSkipped(action)
+		default:
+			e.recordActionSucceeded(action)
+		}
+	}()
 
 	logger.Debug().
 		Str("actionType", action.Type).
@@ -698,6 +713,7 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 						Str("scriptName", scriptName).
 						Str("actionTarget", factName).
 						Msg("Skipping script action because script execution is disabled; enable engine.scripts_enabled only for trusted rulesets")
+					skipped = true
 					return nil
 				}
 				params, ok := scriptInfo["params"].(map[string]interface{})

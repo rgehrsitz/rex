@@ -73,6 +73,29 @@ type contextCaptureStore struct {
 	mGetErr              error
 }
 
+type recordingExecutionObserver struct {
+	rulesFired       []string
+	actionsSucceeded []string
+	actionsSkipped   []string
+	actionFailures   []string
+}
+
+func (o *recordingExecutionObserver) RuleFired(ruleName string) {
+	o.rulesFired = append(o.rulesFired, ruleName)
+}
+
+func (o *recordingExecutionObserver) ActionSucceeded(actionType string) {
+	o.actionsSucceeded = append(o.actionsSucceeded, actionType)
+}
+
+func (o *recordingExecutionObserver) ActionSkipped(actionType string) {
+	o.actionsSkipped = append(o.actionsSkipped, actionType)
+}
+
+func (o *recordingExecutionObserver) ActionFailed(actionType string, _ error) {
+	o.actionFailures = append(o.actionFailures, actionType)
+}
+
 func captureStructuredLogs(t *testing.T) *bytes.Buffer {
 	t.Helper()
 
@@ -429,6 +452,36 @@ func TestExecuteActionContextTraceRecordsFailure(t *testing.T) {
 	assert.Equal(t, "trace-action-failure", action["trace_id"])
 	assert.Equal(t, "updateStore", action["action_type"])
 	assert.Equal(t, "status", action["action_target"])
+}
+
+func TestExecutionObserverReceivesRuleAndActionOutcomes(t *testing.T) {
+	factStore := &contextCaptureStore{}
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+	observer := &recordingExecutionObserver{}
+	engine.SetExecutionObserver(observer)
+
+	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+	assert.Equal(t, []string{"temperature_rule"}, observer.rulesFired)
+	assert.Equal(t, []string{"updateStore"}, observer.actionsSucceeded)
+	assert.Empty(t, observer.actionsSkipped)
+	assert.Empty(t, observer.actionFailures)
+
+	factStore.setAndPublishErr = errors.New("redis unavailable")
+	require.Error(t, engine.executeActionContext(context.Background(), compiler.Action{Type: "updateStore", Target: "status", Value: "hot"}))
+	assert.Equal(t, []string{"updateStore"}, observer.actionFailures)
 }
 
 func TestProcessFactUpdate(t *testing.T) {

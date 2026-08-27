@@ -24,5 +24,9 @@
   "engine": {
     "priority_threshold": 1,
     "scripts_enabled": false
+  },
+  "observability": {
+    "enabled": false,
+    "address": "127.0.0.1:8080"
   }
 }
