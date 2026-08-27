@@ -31,9 +31,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ github.ref_name }}
-        run: >-
-          gh release create "$VERSION"
-          dist/*.tar.gz dist/*.zip dist/checksums.txt
-          --verify-tag
-          --generate-notes
-          --title "REX $VERSION"
+        run: |
+          prerelease=()
+          if [[ "$VERSION" == *-* ]]; then
+            prerelease=(--prerelease)
+          fi
+          gh release create "$VERSION" \
+            dist/*.tar.gz dist/*.zip dist/checksums.txt \
+            --verify-tag \
+            --generate-notes \
+            --title "REX $VERSION" \
+            "${prerelease[@]}"
