@@ -31,6 +31,9 @@ func validateBytecode(data []byte) error {
 	if header.constPoolSize != compiler.ConstPoolSize {
 		return fmt.Errorf("unsupported constant pool size %d", header.constPoolSize)
 	}
+	if header.checksum != compiler.CalculateBytecodeChecksum(data) {
+		return fmt.Errorf("bytecode checksum mismatch")
+	}
 
 	ruleExecOffset := int(header.ruleExecIndexOffset)
 	factRuleOffset := int(header.factRuleIndexOffset)

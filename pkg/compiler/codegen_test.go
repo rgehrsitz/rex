@@ -93,7 +93,7 @@ func TestGenerateBytecodeComplexNestedConditions(t *testing.T) {
 	}
 
 	// Check header
-	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
 	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
 
 	// Find RULE_START
@@ -444,7 +444,7 @@ func TestGenerateBytecodeSimpleRule(t *testing.T) {
 	bytecodeFile := GenerateBytecode(ruleset)
 
 	assert.NotNil(t, bytecodeFile)
-	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
 	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
 	assert.NotEmpty(t, bytecodeFile.Instructions)
 	assert.Len(t, bytecodeFile.RuleExecIndex, 1)
@@ -493,7 +493,7 @@ func TestGenerateBytecodeComplexRule(t *testing.T) {
 	bytecodeFile := GenerateBytecode(ruleset)
 
 	assert.NotNil(t, bytecodeFile)
-	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
 	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
 	assert.NotEmpty(t, bytecodeFile.Instructions)
 	assert.Len(t, bytecodeFile.RuleExecIndex, 1)
