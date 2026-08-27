@@ -34,7 +34,8 @@ jobs:
           VERSION: v0.0.0-ci
         run: ./scripts/release/build-archives.sh
       - name: Verify release checksums
-        run: sha256sum --check dist/checksums.txt
+        working-directory: dist
+        run: sha256sum --check checksums.txt
 
   vulnerability-scan:
     name: Scan for known vulnerabilities

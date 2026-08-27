@@ -26,7 +26,8 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: ./scripts/release/build-archives.sh
       - name: Verify checksums
-        run: sha256sum --check dist/checksums.txt
+        working-directory: dist
+        run: sha256sum --check checksums.txt
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
