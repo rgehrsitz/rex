@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/compiler"
 )
@@ -119,17 +120,53 @@ func TestScriptingEndToEnd(t *testing.T) {
 	t.Logf("All keys in Redis store: %v", keys)
 }
 
-func TestScriptExecutionIsDisabledByDefault(t *testing.T) {
-	engine := &Engine{}
+func TestDisabledScriptActionDoesNotBlockOtherRules(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{
+		{
+			Name: "script_rule",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+				Fact: "temperature", Operator: "GT", Value: 30.0,
+			}}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "script_status", Value: "{calculate_status}"}},
+			Scripts: map[string]compiler.Script{
+				"calculate_status": {Params: []string{"temperature"}, Body: "return 'hot';"},
+			},
+		},
+		{
+			Name: "regular_rule",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+				Fact: "temperature", Operator: "GT", Value: 30.0,
+			}}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "regular_status", Value: "processed"}},
+		},
+	}}
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, redisStore, 0)
+	require.NoError(t, err)
+	require.NoError(t, redisStore.SetFact("temperature", 35.0))
+
+	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+
+	regularStatus, err := redisStore.GetFact("regular_status")
+	require.NoError(t, err)
+	assert.Equal(t, "processed", regularStatus)
+	assert.NotContains(t, engine.Facts, "script_status")
+}
+
+func TestEnabledScriptActionRejectsMalformedParameters(t *testing.T) {
+	engine := &Engine{scriptsEnabled: true}
 	err := engine.executeActionContext(context.Background(), compiler.Action{
 		Type:   "updateStore",
 		Target: "status",
 		Value: map[string]interface{}{
 			"scriptName": "calculate_status",
-			"params":     map[string]interface{}{},
+			"params":     "not-a-parameter-map",
 		},
 	})
 
-	assert.ErrorIs(t, err, ErrScriptsDisabled)
-	assert.Contains(t, err.Error(), "engine.scripts_enabled=true")
+	assert.EqualError(t, err, `invalid script action parameters for "calculate_status"`)
 }

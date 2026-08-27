@@ -5,7 +5,6 @@ package runtime
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 	"os"
@@ -17,10 +16,6 @@ import (
 
 	"rgehrsitz/rex/pkg/logging"
 )
-
-// ErrScriptsDisabled is returned when a rule tries to evaluate a script while
-// script execution has not been explicitly enabled for the engine.
-var ErrScriptsDisabled = errors.New("script execution is disabled")
 
 type Engine struct {
 	bytecode            []byte
@@ -648,9 +643,16 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 		if scriptInfo, ok := factValue.(map[string]interface{}); ok {
 			if scriptName, ok := scriptInfo["scriptName"].(string); ok {
 				if !e.scriptsEnabled {
-					return fmt.Errorf("%w; set engine.scripts_enabled=true only for trusted rulesets", ErrScriptsDisabled)
+					logging.Logger.Warn().
+						Str("scriptName", scriptName).
+						Str("actionTarget", factName).
+						Msg("Skipping script action because script execution is disabled; enable engine.scripts_enabled only for trusted rulesets")
+					return nil
 				}
-				params := scriptInfo["params"].(map[string]interface{})
+				params, ok := scriptInfo["params"].(map[string]interface{})
+				if !ok {
+					return fmt.Errorf("invalid script action parameters for %q", scriptName)
+				}
 				logging.Logger.Debug().
 					Str("scriptName", scriptName).
 					Interface("params", params).
