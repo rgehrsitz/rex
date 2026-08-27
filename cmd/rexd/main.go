@@ -12,10 +12,10 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 
 	"rgehrsitz/rex/pkg/logging"
@@ -53,12 +53,18 @@ type EngineFactory interface {
 	NewEngine(bytecodeFile string, store store.ContextStore, priorityThreshold int) (*runtime.Engine, error)
 }
 
+type factUpdateProcessor interface {
+	ProcessFactUpdateContext(ctx context.Context, factName string, factValue interface{}) error
+}
+
+var messageTraceSequence atomic.Uint64
+
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	if err := run(ctx, os.Args, &RealStoreFactory{}, &RealEngineFactory{}); err != nil {
-		log.Fatal().Err(err).Msg("Application failed")
+		logging.Logger.Fatal().Err(err).Msg("Application failed")
 	}
 }
 
@@ -109,7 +115,7 @@ func parseConfig(args []string) (*Config, error) {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok || *configFile != "" {
 			return nil, fmt.Errorf("error reading config file: %w", err)
 		}
-		log.Info().Msg("No configuration file found, using defaults")
+		logging.Logger.Info().Msg("No configuration file found, using defaults")
 	}
 
 	return &Config{
@@ -161,7 +167,7 @@ func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) err
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(sigChan)
 
-	log.Info().Msg("REX runtime engine started")
+	logging.Logger.Info().Msg("REX runtime engine started")
 	return consumeMessages(ctx, deps.Engine, pubsub.Channel(), sigChan)
 }
 
@@ -176,10 +182,10 @@ func consumeMessages(ctx context.Context, engine *runtime.Engine, messages <-cha
 				continue
 			}
 			if err := processMessage(ctx, engine, msg); err != nil {
-				log.Error().Err(err).Msg("Failed to process message")
+				logging.Logger.Error().Err(err).Msg("Failed to process message")
 			}
 		case <-signals:
-			log.Info().Msg("Shutting down REX runtime engine")
+			logging.Logger.Info().Msg("Shutting down REX runtime engine")
 			return nil
 		case <-ctx.Done():
 			return nil
@@ -187,18 +193,37 @@ func consumeMessages(ctx context.Context, engine *runtime.Engine, messages <-cha
 	}
 }
 
-func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Message) error {
-	log.Info().Str("channel", msg.Channel).Str("payload", msg.Payload).Msg("Received message")
+func processMessage(ctx context.Context, engine factUpdateProcessor, msg *redis.Message) error {
+	ctx = runtime.WithTraceID(ctx, nextMessageTraceID())
+	traceID := runtime.TraceIDFromContext(ctx)
+
+	logging.Logger.Info().
+		Str("trace_id", traceID).
+		Str("event", "fact_event_received").
+		Str("channel", msg.Channel).
+		Msg("Received fact event")
 
 	// Try to parse the payload as JSON
 	var jsonData map[string]interface{}
 	if err := json.Unmarshal([]byte(msg.Payload), &jsonData); err == nil {
 		// Handle JSON payload
 		keys := sortedKeys(jsonData)
+		logging.Logger.Info().
+			Str("trace_id", traceID).
+			Str("event", "fact_event_decoded").
+			Str("format", "json").
+			Strs("fact_names", keys).
+			Msg("Decoded fact event")
 		for _, key := range keys {
 			value := jsonData[key]
 			// Process each key-value pair in the JSON object
 			if err := engine.ProcessFactUpdateContext(ctx, key, value); err != nil {
+				logging.Logger.Error().
+					Err(err).
+					Str("trace_id", traceID).
+					Str("event", "fact_update_failed").
+					Str("fact_name", key).
+					Msg("Failed to process fact update")
 				return err
 			}
 		}
@@ -223,7 +248,28 @@ func processMessage(ctx context.Context, engine *runtime.Engine, msg *redis.Mess
 		}
 	}
 
-	return engine.ProcessFactUpdateContext(ctx, key, typedValue)
+	logging.Logger.Info().
+		Str("trace_id", traceID).
+		Str("event", "fact_event_decoded").
+		Str("format", "legacy").
+		Strs("fact_names", []string{key}).
+		Msg("Decoded fact event")
+
+	if err := engine.ProcessFactUpdateContext(ctx, key, typedValue); err != nil {
+		logging.Logger.Error().
+			Err(err).
+			Str("trace_id", traceID).
+			Str("event", "fact_update_failed").
+			Str("fact_name", key).
+			Msg("Failed to process fact update")
+		return err
+	}
+
+	return nil
+}
+
+func nextMessageTraceID() string {
+	return fmt.Sprintf("event-%d", messageTraceSequence.Add(1))
 }
 
 func sortedKeys(values map[string]interface{}) []string {

@@ -41,6 +41,17 @@ type actionCountingStore struct {
 	publishCount int
 }
 
+type traceCapturingEngine struct {
+	factNames []string
+	traceIDs  []string
+}
+
+func (e *traceCapturingEngine) ProcessFactUpdateContext(ctx context.Context, factName string, _ interface{}) error {
+	e.factNames = append(e.factNames, factName)
+	e.traceIDs = append(e.traceIDs, runtime.TraceIDFromContext(ctx))
+	return nil
+}
+
 func (s *actionCountingStore) Close() error { return nil }
 
 func (s *actionCountingStore) SetFactContext(context.Context, string, interface{}) error { return nil }
@@ -280,6 +291,21 @@ func TestProcessMessageDecodesJSONValues(t *testing.T) {
 	assert.Equal(t, "a=b", engine.Facts["test:string"])
 	assert.Equal(t, true, engine.Facts["test:bool"])
 	assert.Equal(t, 3.5, engine.Facts["test:number"])
+}
+
+func TestProcessMessageAssignsOneTraceIDToAllFactsInEvent(t *testing.T) {
+	engine := &traceCapturingEngine{}
+
+	err := processMessage(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: `{"zeta":1,"alpha":2}`,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"alpha", "zeta"}, engine.factNames)
+	require.Len(t, engine.traceIDs, 2)
+	assert.NotEmpty(t, engine.traceIDs[0])
+	assert.Equal(t, engine.traceIDs[0], engine.traceIDs[1])
 }
 
 func TestProcessMessagePreservesLegacyFloatValues(t *testing.T) {
