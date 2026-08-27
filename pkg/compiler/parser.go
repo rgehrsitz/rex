@@ -22,13 +22,13 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	}
 	for i, rule := range ruleset.Rules {
 		if err := validateRule(&rule); err != nil {
-			return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid rule", err, map[string]interface{}{"rule_name": rule.Name})
+			return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid rule: %v", err), err, map[string]interface{}{"rule_name": rule.Name})
 		}
 
 		// Validate and compile custom scripts
 		for scriptName, script := range rule.Scripts {
 			if err := validateAndCompileScript(scriptName, script); err != nil {
-				return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid script", err, map[string]interface{}{"rule_name": rule.Name, "script_name": scriptName})
+				return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid script: %v", err), err, map[string]interface{}{"rule_name": rule.Name, "script_name": scriptName})
 			}
 		}
 
@@ -36,7 +36,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 
 		for j, action := range rule.Actions {
 			if err := validateAction(&action); err != nil {
-				return nil, logging.NewError(logging.ErrorTypeCompile, "Invalid action", err, map[string]interface{}{"rule_name": rule.Name, "action_type": action.Type})
+				return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid action: %v", err), err, map[string]interface{}{"rule_name": rule.Name, "action_type": action.Type})
 			}
 			rule.Actions[j] = action
 		}
@@ -52,11 +52,14 @@ func validateRule(rule *Rule) error {
 	if rule.Name == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Rule name is required", nil, nil)
 	}
+	if err := validateBytecodeString("Rule name", rule.Name); err != nil {
+		return err
+	}
 	if rule.Priority < 0 {
 		return logging.NewError(logging.ErrorTypeCompile, "Rule priority must be non-negative", nil, map[string]interface{}{"rule_name": rule.Name})
 	}
 	if err := validateAndOrderConditionGroup(&rule.Conditions); err != nil {
-		return logging.NewError(logging.ErrorTypeCompile, "Invalid condition group", err, map[string]interface{}{"rule_name": rule.Name})
+		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid condition group: %v", err), err, map[string]interface{}{"rule_name": rule.Name})
 	}
 	if len(rule.Actions) == 0 {
 		return logging.NewError(logging.ErrorTypeCompile, "At least one action is required", nil, map[string]interface{}{"rule_name": rule.Name})
@@ -143,6 +146,14 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 		} else if !isValueValid(cog.Operator, cog.Value) {
 			return logging.NewError(logging.ErrorTypeCompile, "Invalid condition value for operator", nil, map[string]interface{}{"value": cog.Value, "operator": cog.Operator})
 		}
+		if err := validateBytecodeString("Condition fact", cog.Fact); err != nil {
+			return err
+		}
+		if value, ok := cog.Value.(string); ok {
+			if err := validateBytecodeString("Condition string value", value); err != nil {
+				return err
+			}
+		}
 	}
 
 	for _, subgroup := range cog.All {
@@ -172,6 +183,17 @@ func validateAction(action *Action) error {
 	}
 	if action.Target == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing target field", nil, nil)
+	}
+	if err := validateBytecodeString("Action type", action.Type); err != nil {
+		return err
+	}
+	if err := validateBytecodeString("Action target", action.Target); err != nil {
+		return err
+	}
+	if value, ok := action.Value.(string); ok {
+		if err := validateBytecodeString("Action string value", value); err != nil {
+			return err
+		}
 	}
 	if !isActionValueValid(action.Type, action.Value) {
 		return logging.NewError(logging.ErrorTypeCompile, "Invalid action value for action type", nil, map[string]interface{}{"value": action.Value, "action_type": action.Type})
@@ -275,11 +297,32 @@ func validateScript(name string, script Script) error {
 	if name == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Script name is required", nil, nil)
 	}
+	if err := validateBytecodeString("Script name", name); err != nil {
+		return err
+	}
 	if len(script.Params) == 0 {
 		return logging.NewError(logging.ErrorTypeCompile, "Script must have at least one parameter", nil, map[string]interface{}{"script_name": name})
 	}
 	if script.Body == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Script body is required", nil, map[string]interface{}{"script_name": name})
 	}
+	if len(script.Params) > MaxBytecodeStringLength {
+		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Script parameter count exceeds bytecode limit of %d", MaxBytecodeStringLength), nil, map[string]interface{}{"script_name": name, "parameter_count": len(script.Params)})
+	}
+	for _, param := range script.Params {
+		if err := validateBytecodeString("Script parameter", param); err != nil {
+			return err
+		}
+	}
+	if err := validateBytecodeString("Script body", script.Body); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateBytecodeString(field, value string) error {
+	if len(value) <= MaxBytecodeStringLength {
+		return nil
+	}
+	return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("%s exceeds bytecode limit of %d bytes", field, MaxBytecodeStringLength), nil, map[string]interface{}{"field": field, "length": len(value)})
 }

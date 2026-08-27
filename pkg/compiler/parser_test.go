@@ -623,6 +623,30 @@ func TestValidateRule(t *testing.T) {
 			expectedErr: "COMPILE: Rule name is required",
 		},
 		{
+			name: "Maximum Bytecode Name Length",
+			rule: Rule{
+				Name:     strings.Repeat("a", MaxBytecodeStringLength),
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "",
+		},
+		{
+			name: "Rule Name Exceeds Bytecode Limit",
+			rule: Rule{
+				Name:     strings.Repeat("a", MaxBytecodeStringLength+1),
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "COMPILE: Rule name exceeds bytecode limit of 255 bytes",
+		},
+		{
 			name: "Negative Priority",
 			rule: Rule{
 				Name:     "NegativePriority",
@@ -642,7 +666,7 @@ func TestValidateRule(t *testing.T) {
 				Conditions: ConditionGroup{},
 				Actions:    []Action{{Type: "updateStore", Target: "alarm", Value: true}},
 			},
-			expectedErr: "COMPILE: Invalid condition group",
+			expectedErr: "COMPILE: Invalid condition group: COMPILE: Empty condition group",
 		},
 		{
 			name: "No Actions",
@@ -666,6 +690,112 @@ func TestValidateRule(t *testing.T) {
 			} else {
 				assert.EqualError(t, err, tt.expectedErr)
 			}
+		})
+	}
+}
+
+func TestParseRejectsRuleNameExceedingBytecodeLimit(t *testing.T) {
+	jsonData := []byte(fmt.Sprintf(`{
+		"rules": [{
+			"name": %q,
+			"conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
+			"actions": [{"type": "updateStore", "target": "alarm", "value": true}]
+		}]
+	}`, strings.Repeat("a", MaxBytecodeStringLength+1)))
+
+	_, err := Parse(jsonData)
+	assert.ErrorContains(t, err, "Invalid rule")
+	assert.ErrorContains(t, err, "Rule name exceeds bytecode limit of 255 bytes")
+}
+
+func TestParseRejectsOversizedBytecodeFields(t *testing.T) {
+	overlong := strings.Repeat("a", MaxBytecodeStringLength+1)
+	validRuleset := func() Ruleset {
+		return Ruleset{Rules: []Rule{{
+			Name: "valid_rule",
+			Conditions: ConditionGroup{All: []*ConditionOrGroup{{
+				Fact:     "temperature",
+				Operator: "EQ",
+				Value:    "hot",
+			}}},
+			Actions: []Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+		}}}
+	}
+
+	tests := []struct {
+		name        string
+		mutate      func(*Ruleset)
+		expectedErr string
+	}{
+		{
+			name: "condition fact",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Conditions.All[0].Fact = overlong
+			},
+			expectedErr: "Condition fact exceeds bytecode limit",
+		},
+		{
+			name: "condition string value",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Conditions.All[0].Value = overlong
+			},
+			expectedErr: "Condition string value exceeds bytecode limit",
+		},
+		{
+			name: "action target",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Actions[0].Target = overlong
+			},
+			expectedErr: "Action target exceeds bytecode limit",
+		},
+		{
+			name: "action string value",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Actions[0].Value = overlong
+			},
+			expectedErr: "Action string value exceeds bytecode limit",
+		},
+		{
+			name: "script name",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{overlong: {Params: []string{"value"}, Body: "return value;"}}
+			},
+			expectedErr: "Script name exceeds bytecode limit",
+		},
+		{
+			name: "script parameter",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: []string{overlong}, Body: "return value;"}}
+			},
+			expectedErr: "Script parameter exceeds bytecode limit",
+		},
+		{
+			name: "script body",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: []string{"value"}, Body: overlong}}
+			},
+			expectedErr: "Script body exceeds bytecode limit",
+		},
+		{
+			name: "script parameter count",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: make([]string, MaxBytecodeStringLength+1), Body: "return value;"}}
+			},
+			expectedErr: "Script parameter count exceeds bytecode limit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ruleset := validRuleset()
+			tt.mutate(&ruleset)
+			jsonData, err := json.Marshal(ruleset)
+			if !assert.NoError(t, err) {
+				return
+			}
+
+			_, err = Parse(jsonData)
+			assert.ErrorContains(t, err, tt.expectedErr)
 		})
 	}
 }

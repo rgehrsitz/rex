@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -585,4 +586,20 @@ func TestGenerateBytecodeEncodesZeroParamsForUndefinedActionScript(t *testing.T)
 	want = append(want, 0)
 
 	assert.True(t, bytes.Contains(bytecode.Instructions, want))
+}
+
+func TestGenerateBytecodeEncodesMaximumLengthRuleName(t *testing.T) {
+	ruleset := &Ruleset{Rules: []Rule{{
+		Name: strings.Repeat("r", MaxBytecodeStringLength),
+		Conditions: ConditionGroup{All: []*ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}
+
+	bytecode := GenerateBytecode(ruleset)
+	assert.Equal(t, byte(RULE_START), bytecode.Instructions[0])
+	assert.Equal(t, byte(MaxBytecodeStringLength), bytecode.Instructions[1])
 }
