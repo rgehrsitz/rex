@@ -21,6 +21,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 
+	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/logging"
 	"rgehrsitz/rex/pkg/observability"
 	"rgehrsitz/rex/pkg/runtime"
@@ -29,18 +30,20 @@ import (
 
 // Config represents the application configuration
 type Config struct {
-	BytecodeFile         string
-	LogLevel             string
-	LogDestination       string
-	LogTimeFormat        string
-	RedisAddress         string
-	RedisPassword        string
-	RedisDB              int
-	RedisChannels        []string
-	PriorityThreshold    int
-	ScriptsEnabled       bool
-	ObservabilityEnabled bool
-	ObservabilityAddress string
+	BytecodeFile            string
+	LogLevel                string
+	LogDestination          string
+	LogTimeFormat           string
+	RedisAddress            string
+	RedisPassword           string
+	RedisDB                 int
+	RedisChannels           []string
+	PriorityThreshold       int
+	ScriptsEnabled          bool
+	MaxActionsPerEvaluation int
+	MaxEventHops            int
+	ObservabilityEnabled    bool
+	ObservabilityAddress    string
 }
 
 // RexDependencies represents the external dependencies of the application
@@ -109,6 +112,8 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
 	viper.SetDefault("engine.priority_threshold", 1)
 	viper.SetDefault("engine.scripts_enabled", false)
+	viper.SetDefault("engine.max_actions_per_evaluation", runtime.DefaultMaxActionsPerEvaluation)
+	viper.SetDefault("engine.max_event_hops", 16)
 	viper.SetDefault("observability.enabled", false)
 	viper.SetDefault("observability.address", "127.0.0.1:8080")
 
@@ -129,18 +134,20 @@ func parseConfig(args []string) (*Config, error) {
 	}
 
 	return &Config{
-		BytecodeFile:         viper.GetString("bytecode_file"),
-		LogLevel:             viper.GetString("logging.level"),
-		LogDestination:       viper.GetString("logging.output"),
-		LogTimeFormat:        viper.GetString("logging.time_format"),
-		RedisAddress:         viper.GetString("redis.address"),
-		RedisPassword:        viper.GetString("redis.password"),
-		RedisDB:              viper.GetInt("redis.database"),
-		RedisChannels:        viper.GetStringSlice("redis.channels"),
-		PriorityThreshold:    viper.GetInt("engine.priority_threshold"),
-		ScriptsEnabled:       viper.GetBool("engine.scripts_enabled"),
-		ObservabilityEnabled: viper.GetBool("observability.enabled"),
-		ObservabilityAddress: viper.GetString("observability.address"),
+		BytecodeFile:            viper.GetString("bytecode_file"),
+		LogLevel:                viper.GetString("logging.level"),
+		LogDestination:          viper.GetString("logging.output"),
+		LogTimeFormat:           viper.GetString("logging.time_format"),
+		RedisAddress:            viper.GetString("redis.address"),
+		RedisPassword:           viper.GetString("redis.password"),
+		RedisDB:                 viper.GetInt("redis.database"),
+		RedisChannels:           viper.GetStringSlice("redis.channels"),
+		PriorityThreshold:       viper.GetInt("engine.priority_threshold"),
+		ScriptsEnabled:          viper.GetBool("engine.scripts_enabled"),
+		MaxActionsPerEvaluation: viper.GetInt("engine.max_actions_per_evaluation"),
+		MaxEventHops:            viper.GetInt("engine.max_event_hops"),
+		ObservabilityEnabled:    viper.GetBool("observability.enabled"),
+		ObservabilityAddress:    viper.GetString("observability.address"),
 	}, nil
 }
 
@@ -153,6 +160,15 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
 	engine.SetScriptsEnabled(config.ScriptsEnabled)
+	if config.MaxActionsPerEvaluation <= 0 {
+		_ = store.Close()
+		return nil, fmt.Errorf("engine.max_actions_per_evaluation must be greater than zero")
+	}
+	if config.MaxEventHops < 0 {
+		_ = store.Close()
+		return nil, fmt.Errorf("engine.max_event_hops must be zero or greater")
+	}
+	engine.SetMaxActionsPerEvaluation(config.MaxActionsPerEvaluation)
 
 	return &RexDependencies{
 		Store:  store,
@@ -198,7 +214,7 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 	defer signal.Stop(sigChan)
 
 	logging.Logger.Info().Msg("REX runtime engine started")
-	return consumeMessagesWithMetrics(ctx, deps.Engine, pubsub.Channel(), sigChan, metrics)
+	return consumeMessagesWithOptions(ctx, deps.Engine, pubsub.Channel(), sigChan, metrics, config.MaxEventHops)
 }
 
 func startObservabilityServer(config *Config, metrics *observability.Metrics) (*http.Server, error) {
@@ -235,10 +251,14 @@ func shutdownObservabilityServer(server *http.Server) {
 }
 
 func consumeMessages(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal) error {
-	return consumeMessagesWithMetrics(ctx, engine, messages, signals, nil)
+	return consumeMessagesWithOptions(ctx, engine, messages, signals, nil, 16)
 }
 
 func consumeMessagesWithMetrics(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal, metrics *observability.Metrics) error {
+	return consumeMessagesWithOptions(ctx, engine, messages, signals, metrics, 16)
+}
+
+func consumeMessagesWithOptions(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal, metrics *observability.Metrics, maxEventHops int) error {
 	for {
 		select {
 		case msg, ok := <-messages:
@@ -249,7 +269,7 @@ func consumeMessagesWithMetrics(ctx context.Context, engine *runtime.Engine, mes
 				continue
 			}
 			started := time.Now()
-			err := processMessage(ctx, engine, msg)
+			err := processMessageWithMaxEventHops(ctx, engine, msg, maxEventHops)
 			if metrics != nil {
 				metrics.RecordEvent(time.Since(started), err)
 			}
@@ -266,41 +286,70 @@ func consumeMessagesWithMetrics(ctx context.Context, engine *runtime.Engine, mes
 }
 
 func processMessage(ctx context.Context, engine factUpdateProcessor, msg *redis.Message) error {
+	return processMessageWithMaxEventHops(ctx, engine, msg, 16)
+}
+
+func processMessageWithMaxEventHops(ctx context.Context, engine factUpdateProcessor, msg *redis.Message, maxEventHops int) error {
+	facts, metadata, enveloped, err := eventcontext.DecodeFactEvent([]byte(msg.Payload))
+	if err != nil {
+		if json.Valid([]byte(msg.Payload)) {
+			return fmt.Errorf("invalid JSON fact event: %w", err)
+		}
+		return processLegacyMessage(ctx, engine, msg)
+	}
+	if !enveloped {
+		metadata = eventcontext.Metadata{TraceID: nextMessageTraceID()}
+	}
+	if metadata.Hop > maxEventHops {
+		return fmt.Errorf("event %q exceeded maximum hop count of %d", metadata.TraceID, maxEventHops)
+	}
+
+	ctx = eventcontext.WithMetadata(ctx, metadata)
+	traceID := metadata.TraceID
+	keys := sortedKeys(facts)
+	format := "json"
+	if enveloped {
+		format = "rex_envelope"
+	}
+
+	logging.Logger.Info().
+		Str("trace_id", traceID).
+		Int("event_hop", metadata.Hop).
+		Str("event", "fact_event_received").
+		Str("channel", msg.Channel).
+		Msg("Received fact event")
+	logging.Logger.Info().
+		Str("trace_id", traceID).
+		Int("event_hop", metadata.Hop).
+		Str("event", "fact_event_decoded").
+		Str("format", format).
+		Strs("fact_names", keys).
+		Msg("Decoded fact event")
+
+	for _, key := range keys {
+		if err := engine.ProcessFactUpdateContext(ctx, key, facts[key]); err != nil {
+			logging.Logger.Error().
+				Err(err).
+				Str("trace_id", traceID).
+				Str("event", "fact_update_failed").
+				Str("fact_name", key).
+				Msg("Failed to process fact update")
+			return err
+		}
+	}
+	return nil
+}
+
+func processLegacyMessage(ctx context.Context, engine factUpdateProcessor, msg *redis.Message) error {
 	ctx = runtime.WithTraceID(ctx, nextMessageTraceID())
 	traceID := runtime.TraceIDFromContext(ctx)
 
 	logging.Logger.Info().
 		Str("trace_id", traceID).
+		Int("event_hop", runtime.EventHopFromContext(ctx)).
 		Str("event", "fact_event_received").
 		Str("channel", msg.Channel).
 		Msg("Received fact event")
-
-	// Try to parse the payload as JSON
-	var jsonData map[string]interface{}
-	if err := json.Unmarshal([]byte(msg.Payload), &jsonData); err == nil {
-		// Handle JSON payload
-		keys := sortedKeys(jsonData)
-		logging.Logger.Info().
-			Str("trace_id", traceID).
-			Str("event", "fact_event_decoded").
-			Str("format", "json").
-			Strs("fact_names", keys).
-			Msg("Decoded fact event")
-		for _, key := range keys {
-			value := jsonData[key]
-			// Process each key-value pair in the JSON object
-			if err := engine.ProcessFactUpdateContext(ctx, key, value); err != nil {
-				logging.Logger.Error().
-					Err(err).
-					Str("trace_id", traceID).
-					Str("event", "fact_update_failed").
-					Str("fact_name", key).
-					Msg("Failed to process fact update")
-				return err
-			}
-		}
-		return nil
-	}
 
 	// Accept legacy key=value messages during the JSON-event migration.
 	parts := strings.SplitN(msg.Payload, "=", 2)

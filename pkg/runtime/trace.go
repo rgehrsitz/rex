@@ -5,21 +5,26 @@ import (
 
 	"github.com/rs/zerolog"
 
+	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/logging"
 )
-
-type traceIDContextKey struct{}
 
 // WithTraceID returns a context that associates work with one event trace.
 // Callers should use one ID for every fact update decoded from the same event.
 func WithTraceID(ctx context.Context, traceID string) context.Context {
-	return context.WithValue(ctx, traceIDContextKey{}, traceID)
+	return eventcontext.WithMetadata(ctx, eventcontext.Metadata{TraceID: traceID})
 }
 
 // TraceIDFromContext returns the trace ID associated with ctx, if any.
 func TraceIDFromContext(ctx context.Context) string {
-	traceID, _ := ctx.Value(traceIDContextKey{}).(string)
-	return traceID
+	metadata, _ := eventcontext.MetadataFromContext(ctx)
+	return metadata.TraceID
+}
+
+// EventHopFromContext returns the derived-event hop count associated with ctx.
+func EventHopFromContext(ctx context.Context) int {
+	metadata, _ := eventcontext.MetadataFromContext(ctx)
+	return metadata.Hop
 }
 
 func traceLogger(ctx context.Context) zerolog.Logger {

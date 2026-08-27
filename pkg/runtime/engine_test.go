@@ -512,6 +512,35 @@ func TestScriptActionExecutesOnce(t *testing.T) {
 	assert.Equal(t, "hot", engine.Facts["status"])
 }
 
+func TestProcessFactUpdateContextEnforcesActionLimit(t *testing.T) {
+	factStore := &contextCaptureStore{}
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{
+			{Type: "updateStore", Target: "first_status", Value: "hot"},
+			{Type: "updateStore", Target: "second_status", Value: "hot"},
+		},
+	}}}
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+	assert.Equal(t, DefaultMaxActionsPerEvaluation, engine.maxActionsPerEvaluation)
+	engine.SetMaxActionsPerEvaluation(1)
+
+	err = engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
+	require.ErrorContains(t, err, "exceeded action limit of 1")
+	assert.Equal(t, 1, factStore.publishCount)
+	assert.Equal(t, "hot", engine.Facts["first_status"])
+	assert.NotContains(t, engine.Facts, "second_status")
+}
+
 func TestProcessFactUpdate(t *testing.T) {
 	s, redisStore := setupMiniredis(t)
 	defer s.Close()

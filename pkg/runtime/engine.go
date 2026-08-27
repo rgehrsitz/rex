@@ -17,17 +17,22 @@ import (
 	"rgehrsitz/rex/pkg/logging"
 )
 
+// DefaultMaxActionsPerEvaluation bounds a rule evaluation unless a caller
+// explicitly configures another limit.
+const DefaultMaxActionsPerEvaluation = 32
+
 type Engine struct {
-	bytecode            []byte
-	ruleExecutionIndex  []compiler.RuleExecutionIndex
-	factRuleIndex       map[string][]string
-	factDependencyIndex []compiler.FactDependencyIndex
-	Facts               map[string]interface{}
-	store               store.ContextStore
-	priorityThreshold   int
-	scriptsEnabled      bool
-	ScriptEngine        *scripting.SafeVM
-	executionObserver   ExecutionObserver
+	bytecode                []byte
+	ruleExecutionIndex      []compiler.RuleExecutionIndex
+	factRuleIndex           map[string][]string
+	factDependencyIndex     []compiler.FactDependencyIndex
+	Facts                   map[string]interface{}
+	store                   store.ContextStore
+	priorityThreshold       int
+	maxActionsPerEvaluation int
+	scriptsEnabled          bool
+	ScriptEngine            *scripting.SafeVM
+	executionObserver       ExecutionObserver
 }
 
 // SetScriptsEnabled controls whether this engine may evaluate embedded
@@ -38,6 +43,12 @@ func (e *Engine) SetScriptsEnabled(enabled bool) {
 	if enabled {
 		logging.Logger.Warn().Msg("Script execution enabled for trusted rulesets")
 	}
+}
+
+// SetMaxActionsPerEvaluation caps actions executed for one rule evaluation.
+// A non-positive limit disables the cap for compatibility with embedded uses.
+func (e *Engine) SetMaxActionsPerEvaluation(limit int) {
+	e.maxActionsPerEvaluation = limit
 }
 
 // New method to create an engine from a file
@@ -53,14 +64,15 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 
 	engine := &Engine{
-		bytecode:            bytecode,
-		ruleExecutionIndex:  make([]compiler.RuleExecutionIndex, 0),
-		factRuleIndex:       make(map[string][]string),
-		factDependencyIndex: make([]compiler.FactDependencyIndex, 0),
-		Facts:               make(map[string]interface{}),
-		store:               store,
-		priorityThreshold:   priorityThreshold,
-		ScriptEngine:        scripting.NewSafeVM(),
+		bytecode:                bytecode,
+		ruleExecutionIndex:      make([]compiler.RuleExecutionIndex, 0),
+		factRuleIndex:           make(map[string][]string),
+		factDependencyIndex:     make([]compiler.FactDependencyIndex, 0),
+		Facts:                   make(map[string]interface{}),
+		store:                   store,
+		priorityThreshold:       priorityThreshold,
+		maxActionsPerEvaluation: DefaultMaxActionsPerEvaluation,
+		ScriptEngine:            scripting.NewSafeVM(),
 	}
 
 	offset := 0
@@ -477,6 +489,9 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 
 		case compiler.ACTION_END:
 			logger.Debug().Msg("Encountered ACTION_END opcode")
+			if e.maxActionsPerEvaluation > 0 && actionsAttempted >= e.maxActionsPerEvaluation {
+				return fmt.Errorf("rule %q exceeded action limit of %d", ruleName, e.maxActionsPerEvaluation)
+			}
 			if actionsAttempted == 0 {
 				e.recordRuleFired(ruleName)
 			}

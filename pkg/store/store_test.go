@@ -11,6 +11,8 @@ import (
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"rgehrsitz/rex/pkg/eventcontext"
 )
 
 func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *RedisStore) {
@@ -207,6 +209,26 @@ func TestSetAndPublishFact(t *testing.T) {
 	storedValue, err := s.Get(key)
 	assert.NoError(t, err)
 	assert.Equal(t, `"`+value+`"`, storedValue) // miniredis stores strings with quotes
+}
+
+func TestSetAndPublishFactContextPreservesEventMetadata(t *testing.T) {
+	_, store := setupMiniredis(t)
+	defer store.Close()
+
+	pubsub, err := store.Subscribe(context.Background(), "test")
+	require.NoError(t, err)
+	defer pubsub.Close()
+
+	ctx := eventcontext.WithMetadata(context.Background(), eventcontext.Metadata{TraceID: "event-12", Hop: 4})
+	require.NoError(t, store.SetAndPublishFactContext(ctx, "test:key", "value"))
+
+	msg, err := pubsub.ReceiveMessage(context.Background())
+	require.NoError(t, err)
+	facts, metadata, enveloped, err := eventcontext.DecodeFactEvent([]byte(msg.Payload))
+	require.NoError(t, err)
+	assert.True(t, enveloped)
+	assert.Equal(t, eventcontext.Metadata{TraceID: "event-12", Hop: 5}, metadata)
+	assert.Equal(t, "value", facts["test:key"])
 }
 
 func TestSetAndPublishFactWithDifferentTypes(t *testing.T) {

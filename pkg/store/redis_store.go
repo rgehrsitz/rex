@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/logging"
 	"strings"
 
@@ -147,7 +148,7 @@ func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, v
 		logging.Logger.Error().Err(err).Str("key", key).Interface("value", value).Msg("Failed to marshal fact value")
 		return err
 	}
-	event, err := json.Marshal(map[string]interface{}{key: value})
+	event, err := eventcontext.EncodeFactUpdate(ctx, key, value)
 	if err != nil {
 		logging.Logger.Error().Err(err).Str("key", key).Interface("value", value).Msg("Failed to marshal fact event")
 		return err
