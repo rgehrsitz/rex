@@ -139,6 +139,12 @@ Example:
 
 During migration, `rexd` also accepts the legacy `key=value` form. Its value is decoded as JSON when possible, so `weather:status="storm watch"` is a string and `weather:alert=true` is a boolean. New producers should publish the JSON-object format.
 
+### Evaluation Traces
+
+`rexd` assigns each incoming event a `trace_id`. A JSON event with several facts keeps that ID for every fact update it contains. At the configured `info` level, the runtime emits structured records for `fact_event_received`, `fact_event_decoded`, `rule_evaluation_candidates`, `rule_condition_evaluated`, `action_completed` (or `action_skipped` / `action_failed`), and `rule_evaluation_completed`. Filter by `trace_id` to follow an event from Redis ingress through its rule and action outcomes.
+
+These trace records identify facts, rules, action types, and targets, but deliberately omit arbitrary fact and action values. Other diagnostic records—including the existing high-priority rule message—may contain values, so use those logs only while investigating a trusted deployment.
+
 ### 3. Redis Setup (redis_setup)
 
 Purpose:

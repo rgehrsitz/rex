@@ -3,19 +3,24 @@
 package runtime
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/logging"
 	"rgehrsitz/rex/pkg/store"
 )
 
@@ -64,7 +69,43 @@ type eventConsumerProbeStore struct {
 type contextCaptureStore struct {
 	setAndPublishContext context.Context
 	getContext           context.Context
+	setAndPublishErr     error
 	mGetErr              error
+}
+
+func captureStructuredLogs(t *testing.T) *bytes.Buffer {
+	t.Helper()
+
+	var output bytes.Buffer
+	originalLogger := logging.Logger
+	logging.Logger = zerolog.New(&output)
+	t.Cleanup(func() { logging.Logger = originalLogger })
+	return &output
+}
+
+func structuredLogEvents(t *testing.T, output *bytes.Buffer) []map[string]interface{} {
+	t.Helper()
+
+	var events []map[string]interface{}
+	for _, line := range strings.Split(strings.TrimSpace(output.String()), "\n") {
+		if line == "" {
+			continue
+		}
+
+		var event map[string]interface{}
+		require.NoError(t, json.Unmarshal([]byte(line), &event))
+		events = append(events, event)
+	}
+	return events
+}
+
+func findStructuredEvent(events []map[string]interface{}, name string) map[string]interface{} {
+	for _, event := range events {
+		if event["event"] == name {
+			return event
+		}
+	}
+	return nil
 }
 
 func (s *contextCaptureStore) Close() error { return nil }
@@ -73,7 +114,7 @@ func (s *contextCaptureStore) SetFactContext(context.Context, string, interface{
 
 func (s *contextCaptureStore) SetAndPublishFactContext(ctx context.Context, _ string, _ interface{}) error {
 	s.setAndPublishContext = ctx
-	return nil
+	return s.setAndPublishErr
 }
 
 func (s *contextCaptureStore) GetFactContext(ctx context.Context, _ string) (interface{}, error) {
@@ -286,6 +327,108 @@ func TestProcessFactUpdateContextReturnsStoreError(t *testing.T) {
 
 	err := engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
 	assert.ErrorIs(t, err, storeErr)
+}
+
+func TestProcessFactUpdateContextEmitsCorrelatedRuleAndActionTrace(t *testing.T) {
+	output := captureStructuredLogs(t)
+	factStore := &contextCaptureStore{}
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+
+	ctx := WithTraceID(context.Background(), "trace-temperature-1")
+	require.NoError(t, engine.ProcessFactUpdateContext(ctx, "temperature", 35.0))
+
+	events := structuredLogEvents(t, output)
+	candidates := findStructuredEvent(events, "rule_evaluation_candidates")
+	require.NotNil(t, candidates)
+	assert.Equal(t, "trace-temperature-1", candidates["trace_id"])
+	assert.Equal(t, "temperature", candidates["fact_name"])
+	assert.Equal(t, []interface{}{"temperature_rule"}, candidates["rule_names"])
+
+	condition := findStructuredEvent(events, "rule_condition_evaluated")
+	require.NotNil(t, condition)
+	assert.Equal(t, "trace-temperature-1", condition["trace_id"])
+	assert.Equal(t, "temperature_rule", condition["rule_name"])
+	assert.Equal(t, true, condition["matched"])
+
+	action := findStructuredEvent(events, "action_completed")
+	require.NotNil(t, action)
+	assert.Equal(t, "trace-temperature-1", action["trace_id"])
+	assert.Equal(t, "updateStore", action["action_type"])
+	assert.Equal(t, "status", action["action_target"])
+
+	result := findStructuredEvent(events, "rule_evaluation_completed")
+	require.NotNil(t, result)
+	assert.Equal(t, "trace-temperature-1", result["trace_id"])
+	assert.Equal(t, true, result["matched"])
+	assert.Equal(t, float64(1), result["actions_attempted"])
+}
+
+func TestProcessFactUpdateContextTraceRecordsNonMatchingRule(t *testing.T) {
+	output := captureStructuredLogs(t)
+	factStore := &contextCaptureStore{}
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+
+	require.NoError(t, engine.ProcessFactUpdateContext(WithTraceID(context.Background(), "trace-temperature-2"), "temperature", 20.0))
+
+	events := structuredLogEvents(t, output)
+	condition := findStructuredEvent(events, "rule_condition_evaluated")
+	require.NotNil(t, condition)
+	assert.Equal(t, "trace-temperature-2", condition["trace_id"])
+	assert.Equal(t, false, condition["matched"])
+	assert.Nil(t, findStructuredEvent(events, "action_completed"))
+
+	result := findStructuredEvent(events, "rule_evaluation_completed")
+	require.NotNil(t, result)
+	assert.Equal(t, false, result["matched"])
+	assert.Equal(t, float64(0), result["actions_attempted"])
+}
+
+func TestExecuteActionContextTraceRecordsFailure(t *testing.T) {
+	output := captureStructuredLogs(t)
+	storeErr := errors.New("redis unavailable")
+	engine := &Engine{
+		Facts: make(map[string]interface{}),
+		store: &contextCaptureStore{setAndPublishErr: storeErr},
+	}
+
+	err := engine.executeActionContext(WithTraceID(context.Background(), "trace-action-failure"), compiler.Action{
+		Type:   "updateStore",
+		Target: "status",
+		Value:  "hot",
+	})
+	require.ErrorIs(t, err, storeErr)
+
+	action := findStructuredEvent(structuredLogEvents(t, output), "action_failed")
+	require.NotNil(t, action)
+	assert.Equal(t, "trace-action-failure", action["trace_id"])
+	assert.Equal(t, "updateStore", action["action_type"])
+	assert.Equal(t, "status", action["action_target"])
 }
 
 func TestProcessFactUpdate(t *testing.T) {
