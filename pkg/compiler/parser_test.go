@@ -196,6 +196,7 @@ func TestParseInvalidJSON(t *testing.T) {
 	_, err := Parse(invalidJSON)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Failed to unmarshal JSON data")
+	assert.Contains(t, err.Error(), "line 1, column")
 }
 
 func TestParseInvalidRuleStructure(t *testing.T) {
