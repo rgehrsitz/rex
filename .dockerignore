@@ -1,0 +1,10 @@
+.git
+.github
+*.bytecode
+*.bin
+*.out
+coverage
+coverage.html
+rex
+rexc
+rexd
