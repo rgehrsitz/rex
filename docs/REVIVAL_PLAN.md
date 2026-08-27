@@ -49,7 +49,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Replace the placeholder checksum with an actual CRC-32 integrity check.
 - [x] Sort map-derived data before serialization so compiling the same ruleset produces identical bytecode.
 - [x] Add fuzz tests for ruleset parsing and bytecode decoding, plus corrupt/truncated-artifact regression tests.
-- [ ] Document bytecode compatibility and an artifact versioning policy.
+- [x] Document bytecode compatibility and an artifact versioning policy in [the bytecode compatibility guide](BYTECODE_COMPATIBILITY.md).
 
 **Completion criteria:** corrupt or incompatible bytecode returns a clear error, never a panic; identical input produces identical output.
 
