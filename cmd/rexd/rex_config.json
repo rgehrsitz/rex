@@ -22,6 +22,7 @@
     ]
   },
   "engine": {
-    "priority_threshold": 1
+    "priority_threshold": 1,
+    "scripts_enabled": false
   }
 }

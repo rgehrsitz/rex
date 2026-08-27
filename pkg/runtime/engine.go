@@ -25,7 +25,18 @@ type Engine struct {
 	Facts               map[string]interface{}
 	store               store.ContextStore
 	priorityThreshold   int
+	scriptsEnabled      bool
 	ScriptEngine        *scripting.SafeVM
+}
+
+// SetScriptsEnabled controls whether this engine may evaluate embedded
+// JavaScript. Scripts are disabled by default because the in-process Otto VM is
+// not an isolation boundary. Enable them only for rulesets from trusted authors.
+func (e *Engine) SetScriptsEnabled(enabled bool) {
+	e.scriptsEnabled = enabled
+	if enabled {
+		logging.Logger.Warn().Msg("Script execution enabled for trusted rulesets")
+	}
 }
 
 // New method to create an engine from a file
@@ -631,7 +642,17 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 		// Check if the factValue is a script call
 		if scriptInfo, ok := factValue.(map[string]interface{}); ok {
 			if scriptName, ok := scriptInfo["scriptName"].(string); ok {
-				params := scriptInfo["params"].(map[string]interface{})
+				if !e.scriptsEnabled {
+					logging.Logger.Warn().
+						Str("scriptName", scriptName).
+						Str("actionTarget", factName).
+						Msg("Skipping script action because script execution is disabled; enable engine.scripts_enabled only for trusted rulesets")
+					return nil
+				}
+				params, ok := scriptInfo["params"].(map[string]interface{})
+				if !ok {
+					return fmt.Errorf("invalid script action parameters for %q", scriptName)
+				}
 				logging.Logger.Debug().
 					Str("scriptName", scriptName).
 					Interface("params", params).

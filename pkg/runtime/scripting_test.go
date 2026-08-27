@@ -3,11 +3,13 @@
 package runtime
 
 import (
+	"context"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/compiler"
 )
@@ -70,6 +72,7 @@ func TestScriptingEndToEnd(t *testing.T) {
 
 	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
 	assert.NoError(t, err)
+	engine.SetScriptsEnabled(true)
 
 	// Set the script in the engine's script engine
 	err = engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
@@ -115,4 +118,55 @@ func TestScriptingEndToEnd(t *testing.T) {
 	// Log all keys in Redis store
 	keys := s.Keys()
 	t.Logf("All keys in Redis store: %v", keys)
+}
+
+func TestDisabledScriptActionDoesNotBlockOtherRules(t *testing.T) {
+	s, redisStore := setupMiniredis(t)
+	defer s.Close()
+
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{
+		{
+			Name: "script_rule",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+				Fact: "temperature", Operator: "GT", Value: 30.0,
+			}}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "script_status", Value: "{calculate_status}"}},
+			Scripts: map[string]compiler.Script{
+				"calculate_status": {Params: []string{"temperature"}, Body: "return 'hot';"},
+			},
+		},
+		{
+			Name: "regular_rule",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+				Fact: "temperature", Operator: "GT", Value: 30.0,
+			}}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "regular_status", Value: "processed"}},
+		},
+	}}
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, redisStore, 0)
+	require.NoError(t, err)
+	require.NoError(t, redisStore.SetFact("temperature", 35.0))
+
+	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+
+	regularStatus, err := redisStore.GetFact("regular_status")
+	require.NoError(t, err)
+	assert.Equal(t, "processed", regularStatus)
+	assert.NotContains(t, engine.Facts, "script_status")
+}
+
+func TestEnabledScriptActionRejectsMalformedParameters(t *testing.T) {
+	engine := &Engine{scriptsEnabled: true}
+	err := engine.executeActionContext(context.Background(), compiler.Action{
+		Type:   "updateStore",
+		Target: "status",
+		Value: map[string]interface{}{
+			"scriptName": "calculate_status",
+			"params":     "not-a-parameter-map",
+		},
+	})
+
+	assert.EqualError(t, err, `invalid script action parameters for "calculate_status"`)
 }

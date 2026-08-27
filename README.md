@@ -110,7 +110,8 @@ The configuration file is in JSON format and supports the following options:
     "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
-    "priority_threshold": 1
+    "priority_threshold": 1,
+    "scripts_enabled": false
   }
 }
 ```
@@ -294,7 +295,11 @@ An action object has the following properties:
 
 ### Scripting
 
-REX supports scripting using the Otto JavaScript engine. Scripts can be defined and executed as part of the rule actions. This allows for more complex logic and calculations.
+REX supports scripting using the Otto JavaScript engine, but `rexd` disables
+script execution by default. Enable `engine.scripts_enabled` only for rulesets
+from fully trusted authors. The current in-process runner is not a security
+boundary: its timeout cannot reliably stop an infinite script, and its VM is
+shared mutable state. Do not use it for untrusted rule content.
 
 ### Defining Scripts
 
