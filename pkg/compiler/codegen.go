@@ -277,13 +277,17 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 					actionBytecode = append(actionBytecode, byte(len(scriptName)))
 					actionBytecode = append(actionBytecode, []byte(scriptName)...)
 
-					// Add script parameters
+					// SCRIPT_CALL always includes a parameter count. Undefined scripts
+					// therefore encode zero parameters so the instruction stream stays
+					// aligned for the runtime to report the missing script at execution.
 					if script, ok := rule.Scripts[scriptName]; ok {
 						actionBytecode = append(actionBytecode, byte(len(script.Params)))
 						for _, param := range script.Params {
 							actionBytecode = append(actionBytecode, byte(len(param)))
 							actionBytecode = append(actionBytecode, []byte(param)...)
 						}
+					} else {
+						actionBytecode = append(actionBytecode, 0)
 					}
 				} else {
 					// This is a regular string value

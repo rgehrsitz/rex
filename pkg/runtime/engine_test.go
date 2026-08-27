@@ -137,6 +137,28 @@ func TestNewEngineFromFileDoesNotConsumeEvents(t *testing.T) {
 	}
 }
 
+func TestNewEngineFromFileAcceptsUndefinedActionScript(t *testing.T) {
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "undefined_action_script",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{
+			Type:   "updateStore",
+			Target: "status",
+			Value:  "{missing_script}",
+		}},
+	}}}
+	filename := t.TempDir() + "/undefined-script.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+
+	engine, err := NewEngineFromFile(filename, &contextCaptureStore{}, 0)
+	require.NoError(t, err)
+	require.NotNil(t, engine)
+}
+
 func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 	tests := []struct {
 		name   string
