@@ -570,19 +570,6 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 				"params":     params,
 			}
 
-			err := e.executeActionContext(ctx, action)
-			if err != nil {
-				logger.Error().
-					Err(err).
-					Str("event", "action_failed").
-					Str("action_type", action.Type).
-					Str("action_target", action.Target).
-					Str("scriptName", scriptName).
-					Interface("params", params).
-					Msg("Failed to run script")
-				return logging.NewError(logging.ErrorTypeRuntime, "Failed to run script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
-			}
-
 		default:
 			err := logging.NewError(logging.ErrorTypeRuntime, "Unknown opcode encountered", nil, map[string]interface{}{"opcode": opcode})
 			logger.Warn().Err(err).Msg("Unknown opcode")

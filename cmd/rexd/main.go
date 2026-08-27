@@ -170,6 +170,7 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 	if metrics == nil {
 		metrics = observability.NewMetrics()
 	}
+	deps.Engine.SetExecutionObserver(metrics)
 
 	server, err := startObservabilityServer(config, metrics)
 	if err != nil {

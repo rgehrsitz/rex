@@ -71,6 +71,7 @@ type contextCaptureStore struct {
 	getContext           context.Context
 	setAndPublishErr     error
 	mGetErr              error
+	publishCount         int
 }
 
 type recordingExecutionObserver struct {
@@ -137,6 +138,7 @@ func (s *contextCaptureStore) SetFactContext(context.Context, string, interface{
 
 func (s *contextCaptureStore) SetAndPublishFactContext(ctx context.Context, _ string, _ interface{}) error {
 	s.setAndPublishContext = ctx
+	s.publishCount++
 	return s.setAndPublishErr
 }
 
@@ -482,6 +484,32 @@ func TestExecutionObserverReceivesRuleAndActionOutcomes(t *testing.T) {
 	factStore.setAndPublishErr = errors.New("redis unavailable")
 	require.Error(t, engine.executeActionContext(context.Background(), compiler.Action{Type: "updateStore", Target: "status", Value: "hot"}))
 	assert.Equal(t, []string{"updateStore"}, observer.actionFailures)
+}
+
+func TestScriptActionExecutesOnce(t *testing.T) {
+	factStore := &contextCaptureStore{}
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "script_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "{calculate_status}"}},
+		Scripts: map[string]compiler.Script{
+			"calculate_status": {Params: []string{"temperature"}, Body: "return 'hot';"},
+		},
+	}}}
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+	engine.SetScriptsEnabled(true)
+
+	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+	assert.Equal(t, 1, factStore.publishCount)
+	assert.Equal(t, "hot", engine.Facts["status"])
 }
 
 func TestProcessFactUpdate(t *testing.T) {

@@ -267,6 +267,44 @@ func TestConsumeMessagesRecordsEventMetrics(t *testing.T) {
 	assert.Contains(t, response.Body.String(), "rex_event_failures_total 1")
 }
 
+func TestRunMainLoopWiresMetricsObserver(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	factStore := &actionCountingStore{}
+	engine := newTestRuntimeEngine(t, &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}, factStore)
+	redisStore := store.NewRedisStore(mr.Addr(), "", 0)
+	defer redisStore.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		mr.Publish("rex_updates", `{"temperature":35}`)
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+
+	metrics := observability.NewMetrics()
+	require.NoError(t, runMainLoopWithObservability(ctx, &RexDependencies{Store: redisStore, Engine: engine}, &Config{
+		RedisChannels: []string{"rex_updates"},
+	}, metrics))
+
+	response := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	assert.Contains(t, response.Body.String(), "rex_rules_fired_total 1")
+	assert.Contains(t, response.Body.String(), "rex_actions_succeeded_total 1")
+}
+
 func TestStartObservabilityServerServesHealthEndpoint(t *testing.T) {
 	metrics := observability.NewMetrics()
 	server, err := startObservabilityServer(&Config{
