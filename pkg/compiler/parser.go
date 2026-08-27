@@ -4,6 +4,7 @@ package compiler
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -15,7 +16,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	var ruleset Ruleset
 	err := json.Unmarshal(jsonData, &ruleset)
 	if err != nil {
-		return nil, logging.NewError(logging.ErrorTypeParse, "Failed to unmarshal JSON data", err, nil)
+		return nil, logging.NewError(logging.ErrorTypeParse, jsonErrorMessage(jsonData, err), err, nil)
 	}
 	if len(ruleset.Rules) == 0 {
 		return nil, logging.NewError(logging.ErrorTypeParse, "Missing rules field", nil, nil)
@@ -44,6 +45,44 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 
 	logging.Logger.Debug().Interface("ruleset", ruleset).Msg("Parsed JSON data")
 	return &ruleset, nil
+}
+
+func jsonErrorMessage(data []byte, err error) string {
+	offset := int64(0)
+	var syntaxErr *json.SyntaxError
+	if errors.As(err, &syntaxErr) {
+		offset = syntaxErr.Offset
+	}
+	var typeErr *json.UnmarshalTypeError
+	if errors.As(err, &typeErr) {
+		offset = typeErr.Offset
+	}
+	if offset == 0 {
+		return "Failed to unmarshal JSON data"
+	}
+
+	line, column := jsonLineColumn(data, offset)
+	return fmt.Sprintf("Failed to unmarshal JSON data at line %d, column %d", line, column)
+}
+
+func jsonLineColumn(data []byte, offset int64) (line, column int) {
+	if offset < 1 {
+		offset = 1
+	}
+	if offset > int64(len(data))+1 {
+		offset = int64(len(data)) + 1
+	}
+
+	line, column = 1, 1
+	for _, b := range data[:offset-1] {
+		if b == '\n' {
+			line++
+			column = 1
+			continue
+		}
+		column++
+	}
+	return line, column
 }
 
 // validateRule validates a rule and returns an error if any validation fails.

@@ -56,19 +56,22 @@ go build ./cmd/rexc
 How to Run:
 
 ```bash
-./rexc -rules <path_to_rules.json> [-loglevel <level>] [-logoutput <output>]
+./rexc -rules <path_to_rules.json> [-output <path>] [-loglevel <level>] [-logoutput <output>]
+./rexc validate -rules <path_to_rules.json>
 ```
 
 Command-line options:
 
 - `-rules`: (Required) Path to the input JSON file containing the rules.
+- `-output`: (Optional) Compiled-bytecode path. Default is `output.bytecode`; ignored by `validate`.
 - `-loglevel`: (Optional) Set log level. Valid values are panic, fatal, error, warn, info, debug, trace. Default is "info".
 - `-logoutput`: (Optional) Set log output. Valid values are console or file. Default is "console".
 
 Example:
 
 ```bash
-./rexc -rules examples/rules2.ruleset.json -loglevel debug -logoutput file
+./rexc validate -rules examples/rules2.ruleset.json
+./rexc -rules examples/rules2.ruleset.json -output rules.bytecode -loglevel debug -logoutput file
 ```
 
 ### 2. Runtime Engine (rexd)
