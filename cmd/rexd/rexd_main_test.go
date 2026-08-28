@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"math"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"syscall"
 	"testing"
@@ -19,6 +21,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/eventcontext"
+	"rgehrsitz/rex/pkg/observability"
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
 )
@@ -39,6 +43,19 @@ func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.ContextSt
 
 type actionCountingStore struct {
 	publishCount int
+}
+
+type traceCapturingEngine struct {
+	factNames []string
+	traceIDs  []string
+	hops      []int
+}
+
+func (e *traceCapturingEngine) ProcessFactUpdateContext(ctx context.Context, factName string, _ interface{}) error {
+	e.factNames = append(e.factNames, factName)
+	e.traceIDs = append(e.traceIDs, runtime.TraceIDFromContext(ctx))
+	e.hops = append(e.hops, runtime.EventHopFromContext(ctx))
+	return nil
 }
 
 func (s *actionCountingStore) Close() error { return nil }
@@ -89,6 +106,8 @@ func TestParseConfig(t *testing.T) {
 		"redis.database": 1,
 		"redis.channels": ["rex_updates"],
 		"engine.scripts_enabled": true,
+		"observability.enabled": true,
+		"observability.address": "127.0.0.1:9091",
 		"engine.update_interval": 10,
 		"dashboard.enabled": true,
 		"dashboard.port": 9090,
@@ -111,6 +130,10 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, 1, config.RedisDB)
 	assert.Equal(t, []string{"rex_updates"}, config.RedisChannels)
 	assert.True(t, config.ScriptsEnabled)
+	assert.Equal(t, 32, config.MaxActionsPerEvaluation)
+	assert.Equal(t, 16, config.MaxEventHops)
+	assert.True(t, config.ObservabilityEnabled)
+	assert.Equal(t, "127.0.0.1:9091", config.ObservabilityAddress)
 }
 
 func TestParseConfigDefaultsScriptsDisabled(t *testing.T) {
@@ -139,11 +162,13 @@ func TestSetupDependencies(t *testing.T) {
 	defer mr.Close()
 
 	config := &Config{
-		BytecodeFile:      "test.bytecode",
-		RedisAddress:      mr.Addr(),
-		RedisPassword:     "",
-		RedisDB:           0,
-		PriorityThreshold: 5, // Add PriorityThreshold to the config
+		BytecodeFile:            "test.bytecode",
+		RedisAddress:            mr.Addr(),
+		RedisPassword:           "",
+		RedisDB:                 0,
+		PriorityThreshold:       5, // Add PriorityThreshold to the config
+		MaxActionsPerEvaluation: 32,
+		MaxEventHops:            16,
 	}
 
 	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{})
@@ -233,6 +258,75 @@ func TestConsumeMessagesProcessesDuplicateDeliveries(t *testing.T) {
 	assert.Equal(t, 2, factStore.publishCount)
 }
 
+func TestConsumeMessagesRecordsEventMetrics(t *testing.T) {
+	messages := make(chan *redis.Message, 2)
+	messages <- &redis.Message{Channel: "rex_updates", Payload: `{"temperature":35}`}
+	messages <- &redis.Message{Channel: "rex_updates", Payload: "not a fact event"}
+	close(messages)
+
+	metrics := observability.NewMetrics()
+	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	require.NoError(t, consumeMessagesWithMetrics(context.Background(), engine, messages, nil, metrics))
+
+	response := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	assert.Contains(t, response.Body.String(), "rex_events_received_total 2")
+	assert.Contains(t, response.Body.String(), "rex_event_failures_total 1")
+}
+
+func TestRunMainLoopWiresMetricsObserver(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+
+	factStore := &actionCountingStore{}
+	engine := newTestRuntimeEngine(t, &compiler.Ruleset{Rules: []compiler.Rule{{
+		Name: "temperature_rule",
+		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}, factStore)
+	redisStore := store.NewRedisStore(mr.Addr(), "", 0)
+	defer redisStore.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		mr.Publish("rex_updates", `{"temperature":35}`)
+		time.Sleep(200 * time.Millisecond)
+		cancel()
+	}()
+
+	metrics := observability.NewMetrics()
+	require.NoError(t, runMainLoopWithObservability(ctx, &RexDependencies{Store: redisStore, Engine: engine}, &Config{
+		RedisChannels: []string{"rex_updates"},
+	}, metrics))
+
+	response := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	assert.Contains(t, response.Body.String(), "rex_rules_fired_total 1")
+	assert.Contains(t, response.Body.String(), "rex_actions_succeeded_total 1")
+}
+
+func TestStartObservabilityServerServesHealthEndpoint(t *testing.T) {
+	metrics := observability.NewMetrics()
+	server, err := startObservabilityServer(&Config{
+		ObservabilityEnabled: true,
+		ObservabilityAddress: "127.0.0.1:0",
+	}, metrics)
+	require.NoError(t, err)
+	t.Cleanup(func() { shutdownObservabilityServer(server) })
+
+	response, err := http.Get("http://" + server.Addr + "/healthz")
+	require.NoError(t, err)
+	defer response.Body.Close()
+	assert.Equal(t, http.StatusOK, response.StatusCode)
+}
+
 func TestProcessMessage(t *testing.T) {
 	// Reset the flag set before each test run
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -280,6 +374,67 @@ func TestProcessMessageDecodesJSONValues(t *testing.T) {
 	assert.Equal(t, "a=b", engine.Facts["test:string"])
 	assert.Equal(t, true, engine.Facts["test:bool"])
 	assert.Equal(t, 3.5, engine.Facts["test:number"])
+}
+
+func TestProcessMessageAssignsOneTraceIDToAllFactsInEvent(t *testing.T) {
+	engine := &traceCapturingEngine{}
+
+	err := processMessage(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: `{"zeta":1,"alpha":2}`,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"alpha", "zeta"}, engine.factNames)
+	require.Len(t, engine.traceIDs, 2)
+	assert.NotEmpty(t, engine.traceIDs[0])
+	assert.Equal(t, engine.traceIDs[0], engine.traceIDs[1])
+	assert.Equal(t, []int{0, 0}, engine.hops)
+}
+
+func TestProcessMessagePreservesDerivedEventMetadata(t *testing.T) {
+	engine := &traceCapturingEngine{}
+	payload, err := eventcontext.EncodeFactUpdate(
+		eventcontext.WithMetadata(context.Background(), eventcontext.Metadata{TraceID: "event-42", Hop: 2}),
+		"status",
+		"hot",
+	)
+	require.NoError(t, err)
+
+	err = processMessageWithMaxEventHops(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: string(payload),
+	}, 3)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"event-42"}, engine.traceIDs)
+	assert.Equal(t, []int{3}, engine.hops)
+}
+
+func TestProcessMessageRejectsEventsBeyondHopLimit(t *testing.T) {
+	engine := &traceCapturingEngine{}
+	payload, err := eventcontext.EncodeFactUpdate(
+		eventcontext.WithMetadata(context.Background(), eventcontext.Metadata{TraceID: "event-42", Hop: 2}),
+		"status",
+		"hot",
+	)
+	require.NoError(t, err)
+
+	err = processMessageWithMaxEventHops(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: string(payload),
+	}, 2)
+	require.ErrorContains(t, err, "exceeded maximum hop count")
+	assert.Empty(t, engine.factNames)
+}
+
+func TestProcessMessageRejectsMalformedEventEnvelope(t *testing.T) {
+	engine := &traceCapturingEngine{}
+	err := processMessage(context.Background(), engine, &redis.Message{
+		Channel: "rex_updates",
+		Payload: `{"_rex":{"hop":1},"facts":{"status":"hot"}}`,
+	})
+	require.ErrorContains(t, err, "missing trace_id")
+	assert.Empty(t, engine.factNames)
 }
 
 func TestProcessMessagePreservesLegacyFloatValues(t *testing.T) {
