@@ -1,0 +1,18 @@
+{
+  "bytecode_file": "/tmp/demo.bytecode",
+  "logging": {
+    "level": "info",
+    "output": "console",
+    "time_format": "unixnano"
+  },
+  "redis": {
+    "address": "redis:6379",
+    "password": "",
+    "database": 0,
+    "channels": ["rex_updates"]
+  },
+  "engine": {
+    "priority_threshold": 1,
+    "scripts_enabled": false
+  }
+}

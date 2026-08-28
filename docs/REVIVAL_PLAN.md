@@ -66,11 +66,11 @@ Do not present the current in-process execution as a security boundary.
 ## Later: developer and operator experience
 
 - [x] Add `rexc validate`, `--output`, and useful JSON source-location diagnostics.
-- [ ] Provide a one-command Redis demo, ideally via Docker Compose, with a smoke test and sample events.
+- [x] Provide a one-command Redis demo via Docker Compose, with a smoke test and sample event.
 - [x] Add structured traces explaining a rule evaluation and action outcome.
 - [x] Add health checks and metrics for event throughput, evaluation latency, rule fires, action failures, and queue lag (Redis Pub/Sub reports queue lag as unavailable rather than fabricating a value).
 - [x] Add cycle protection, action limits, and idempotency guidance for chained rules.
-- [ ] Publish versioned binaries, checksums, release notes, and a compatibility matrix.
+- [x] Publish versioned binaries, checksums, release notes, and a compatibility matrix.
 
 ## Possible product directions
 

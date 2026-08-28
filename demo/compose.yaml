@@ -1,0 +1,32 @@
+name: rex-demo
+
+services:
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  rexd:
+    build:
+      context: ..
+      dockerfile: demo/Dockerfile
+    command: ["/bin/sh", "-ec", "rexc -rules /demo/rules.json -output /tmp/demo.bytecode && exec rexd -config /demo/rexd.json"]
+    volumes:
+      - ./rules.json:/demo/rules.json:ro
+      - ./rexd.json:/demo/rexd.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  smoke:
+    image: redis:7-alpine
+    entrypoint: ["/bin/sh", "/demo/smoke.sh"]
+    volumes:
+      - ./:/demo:ro
+    depends_on:
+      rexd:
+        condition: service_started

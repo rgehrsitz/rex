@@ -239,6 +239,8 @@ Example:
 4. Run `rexd` with the compiled bytecode to start the rules engine.
 5. The engine will listen for updates from Redis, evaluate rules, and perform actions accordingly.
 
+For a self-contained compiler -> Redis -> runtime smoke test, see the [Docker Compose demo](demo/README.md).
+
 ## Releases
 
 Pushing an annotated `vX.Y.Z` tag from a reviewed `main` commit publishes
