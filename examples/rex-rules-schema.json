@@ -42,7 +42,7 @@
                   "properties": {
                     "type": {
                       "type": "string",
-                      "enum": ["updateStore", "sendMessage"]
+                      "enum": ["updateStore"]
                     },
                     "target": {
                       "type": "string",
@@ -50,9 +50,6 @@
                     },
                     "value": {
                       "type": ["string", "number", "boolean"]
-                    },
-                    "customProperty": {
-                      "type": "object"
                     }
                   },
                   "required": ["type", "target", "value"],

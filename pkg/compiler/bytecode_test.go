@@ -4,6 +4,7 @@ package compiler
 
 import (
 	"bytes"
+	"encoding/binary"
 	"os"
 	"testing"
 
@@ -27,6 +28,38 @@ func TestWriteString(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, tc.expected, buf.Bytes())
 	}
+}
+
+func TestWriteBytecodeToFileWritesChecksum(t *testing.T) {
+	filename := t.TempDir() + "/checksum.bytecode"
+	bytecodeFile := BytecodeFile{
+		Header: Header{Version: Version},
+		Instructions: []byte{
+			byte(RULE_START), 4, 'r', 'u', 'l', 'e',
+			byte(PRIORITY), 0, 0, 0, 0,
+			byte(RULE_END),
+		},
+	}
+
+	assert.NoError(t, WriteBytecodeToFile(filename, bytecodeFile))
+	data, err := os.ReadFile(filename)
+	assert.NoError(t, err)
+
+	checksum := binary.LittleEndian.Uint32(data[ChecksumOffset : ChecksumOffset+ChecksumSize])
+	assert.NotZero(t, checksum)
+	assert.Equal(t, checksum, CalculateBytecodeChecksum(data))
+
+	headerTampered := append([]byte(nil), data...)
+	headerTampered[0] ^= 0xff
+	assert.NotEqual(t, checksum, CalculateBytecodeChecksum(headerTampered))
+
+	payloadTampered := append([]byte(nil), data...)
+	payloadTampered[HeaderSize] ^= 0xff
+	assert.NotEqual(t, checksum, CalculateBytecodeChecksum(payloadTampered))
+}
+
+func TestCalculateBytecodeChecksumRejectsShortData(t *testing.T) {
+	assert.Zero(t, CalculateBytecodeChecksum([]byte{0, 1, 2}))
 }
 
 func TestWriteBytecodeToFileEmptyFile(t *testing.T) {

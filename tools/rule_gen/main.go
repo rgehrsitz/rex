@@ -147,16 +147,11 @@ func generateCondition(depth int) Condition {
 }
 
 func generateAction() Action {
-	actionType := "updateStore"
-	if rand.Float32() < 0.3 {
-		actionType = "sendMessage"
-	}
-
 	channel, fact := getRandomFact()
 	factType := getFactType(fact)
 
 	return Action{
-		Type:   actionType,
+		Type:   "updateStore",
 		Target: fmt.Sprintf("%s:%s", channel, fact),
 		Value:  generateValue(factType),
 	}

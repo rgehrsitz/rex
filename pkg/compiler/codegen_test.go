@@ -6,6 +6,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"math"
+	"os"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -92,7 +95,7 @@ func TestGenerateBytecodeComplexNestedConditions(t *testing.T) {
 	}
 
 	// Check header
-	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
 	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
 
 	// Find RULE_START
@@ -443,7 +446,7 @@ func TestGenerateBytecodeSimpleRule(t *testing.T) {
 	bytecodeFile := GenerateBytecode(ruleset)
 
 	assert.NotNil(t, bytecodeFile)
-	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
 	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
 	assert.NotEmpty(t, bytecodeFile.Instructions)
 	assert.Len(t, bytecodeFile.RuleExecIndex, 1)
@@ -492,7 +495,7 @@ func TestGenerateBytecodeComplexRule(t *testing.T) {
 	bytecodeFile := GenerateBytecode(ruleset)
 
 	assert.NotNil(t, bytecodeFile)
-	assert.Equal(t, uint32(1), bytecodeFile.Header.Version)
+	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
 	assert.Equal(t, uint32(1), bytecodeFile.Header.NumRules)
 	assert.NotEmpty(t, bytecodeFile.Instructions)
 	assert.Len(t, bytecodeFile.RuleExecIndex, 1)
@@ -563,4 +566,109 @@ func TestGenerateBytecodeWithScripts(t *testing.T) {
 	assert.True(t, scriptDefFound, "SCRIPT_DEF opcode not found in bytecode")
 
 	// You can add more specific checks here, such as verifying the script name, params, and body in the bytecode
+}
+
+func TestGenerateBytecodeEncodesZeroParamsForUndefinedActionScript(t *testing.T) {
+	ruleset := &Ruleset{Rules: []Rule{{
+		Name: "UndefinedActionScript",
+		Conditions: ConditionGroup{All: []*ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []Action{{
+			Type:   "updateStore",
+			Target: "status",
+			Value:  "{missing_script}",
+		}},
+	}}}
+
+	bytecode := GenerateBytecode(ruleset)
+	want := append([]byte{byte(SCRIPT_CALL), byte(len("missing_script"))}, []byte("missing_script")...)
+	want = append(want, 0)
+
+	assert.True(t, bytes.Contains(bytecode.Instructions, want))
+}
+
+func TestGenerateBytecodeEncodesMaximumLengthRuleName(t *testing.T) {
+	ruleset := &Ruleset{Rules: []Rule{{
+		Name: strings.Repeat("r", MaxBytecodeStringLength),
+		Conditions: ConditionGroup{All: []*ConditionOrGroup{{
+			Fact:     "temperature",
+			Operator: "GT",
+			Value:    30.0,
+		}}},
+		Actions: []Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+	}}}
+
+	bytecode := GenerateBytecode(ruleset)
+	assert.Equal(t, byte(RULE_START), bytecode.Instructions[0])
+	assert.Equal(t, byte(MaxBytecodeStringLength), bytecode.Instructions[1])
+}
+
+func deterministicRuleset() *Ruleset {
+	return &Ruleset{Rules: []Rule{{
+		Name: "deterministic_rule",
+		Conditions: ConditionGroup{All: []*ConditionOrGroup{
+			{Fact: "temperature", Operator: "GT", Value: 30.0},
+			{Fact: "humidity", Operator: "LT", Value: 50.0},
+		}},
+		Actions: []Action{{Type: "updateStore", Target: "status", Value: "comfortable"}},
+		Scripts: map[string]Script{
+			"zeta":  {Params: []string{"humidity"}, Body: "return humidity;"},
+			"alpha": {Params: []string{"temperature"}, Body: "return temperature;"},
+		},
+	}}}
+}
+
+func TestBytecodeSerializationIsDeterministic(t *testing.T) {
+	ruleset := deterministicRuleset()
+	filename := t.TempDir() + "/artifact.bytecode"
+
+	var expected []byte
+	for i := 0; i < 10; i++ {
+		bytecode := GenerateBytecode(ruleset)
+		assert.NoError(t, WriteBytecodeToFile(filename, bytecode))
+		data, err := os.ReadFile(filename)
+		if !assert.NoError(t, err) {
+			return
+		}
+
+		if i == 0 {
+			expected = data
+			alpha := bytes.Index(bytecode.Instructions, []byte{byte(SCRIPT_DEF), 5, 'a', 'l', 'p', 'h', 'a'})
+			zeta := bytes.Index(bytecode.Instructions, []byte{byte(SCRIPT_DEF), 4, 'z', 'e', 't', 'a'})
+			assert.GreaterOrEqual(t, alpha, 0)
+			assert.Greater(t, zeta, alpha)
+			continue
+		}
+
+		assert.Equal(t, expected, data)
+	}
+}
+
+func TestGenerateBytecodeIsConcurrentSafe(t *testing.T) {
+	const compilations = 16
+	ruleset := deterministicRuleset()
+	results := make(chan []byte, compilations)
+	var wg sync.WaitGroup
+
+	for i := 0; i < compilations; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			results <- GenerateBytecode(ruleset).Instructions
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	var expected []byte
+	for instructions := range results {
+		if expected == nil {
+			expected = instructions
+			continue
+		}
+		assert.Equal(t, expected, instructions)
+	}
 }

@@ -159,7 +159,7 @@ func TestParser(t *testing.T) {
                 },
                 "actions": [
                     {
-                        "type": "sendMessage",
+                        "type": "updateStore",
                         "target": "alert_service",
                         "value": "High temperature and low humidity or high pressure detected"
                     }
@@ -186,7 +186,7 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "GT", ruleset.Rules[0].Conditions.All[1].Any[1].Operator)
 	assert.Equal(t, 1000.0, ruleset.Rules[0].Conditions.All[1].Any[1].Value)
 	assert.Len(t, ruleset.Rules[0].Actions, 1)
-	assert.Equal(t, "sendMessage", ruleset.Rules[0].Actions[0].Type)
+	assert.Equal(t, "updateStore", ruleset.Rules[0].Actions[0].Type)
 	assert.Equal(t, "alert_service", ruleset.Rules[0].Actions[0].Target)
 	assert.Equal(t, "High temperature and low humidity or high pressure detected", ruleset.Rules[0].Actions[0].Value)
 }
@@ -196,6 +196,106 @@ func TestParseInvalidJSON(t *testing.T) {
 	_, err := Parse(invalidJSON)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Failed to unmarshal JSON data")
+	assert.Contains(t, err.Error(), "line 1, column")
+}
+
+func TestParseRejectsRulesCompilerCannotFaithfullyExecute(t *testing.T) {
+	tests := []struct {
+		name      string
+		jsonData  string
+		wantError string
+	}{
+		{
+			name: "hybrid leaf and nested group",
+			jsonData: `{"rules":[{
+				"name":"hybrid",
+				"conditions":{"all":[{
+					"fact":"temperature","operator":"GT","value":30,
+					"any":[{"fact":"humidity","operator":"LT","value":50}]
+				}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: "condition cannot contain both leaf fields and a nested group",
+		},
+		{
+			name: "condition group containing both all and any",
+			jsonData: `{"rules":[{
+				"name":"dual_group",
+				"conditions":{
+					"all":[{"fact":"temperature","operator":"GT","value":30}],
+					"any":[{"fact":"humidity","operator":"LT","value":50}]
+				},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: "condition group must contain exactly one of all or any",
+		},
+		{
+			name: "nested group containing both all and any",
+			jsonData: `{"rules":[{
+				"name":"nested_dual_group",
+				"conditions":{"all":[{
+					"all":[{"fact":"temperature","operator":"GT","value":30}],
+					"any":[{"fact":"humidity","operator":"LT","value":50}]
+				}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: "condition group must contain exactly one of all or any",
+		},
+		{
+			name: "unsupported action",
+			jsonData: `{"rules":[{
+				"name":"message",
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},
+				"actions":[{"type":"sendMessage","target":"alerts","value":"hot"}]
+			}]}`,
+			wantError: `Invalid action at rules[0].actions[0]: COMPILE: unsupported action type "sendMessage"`,
+		},
+		{
+			name: "duplicate rule names",
+			jsonData: `{"rules":[
+				{"name":"same","conditions":{"all":[{"fact":"a","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"first","value":true}]},
+				{"name":"same","conditions":{"all":[{"fact":"b","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"second","value":true}]}
+			]}`,
+			wantError: `duplicate rule name "same"`,
+		},
+		{
+			name: "unknown rule field",
+			jsonData: `{"rules":[{
+				"name":"typo","priorty":5,
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: `json: unknown field "priorty"`,
+		},
+		{
+			name: "unknown condition field",
+			jsonData: `{"rules":[{
+				"name":"typo",
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30,"unitz":"C"}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: `json: unknown field "unitz"`,
+		},
+		{
+			name: "unknown action field",
+			jsonData: `{"rules":[{
+				"name":"typo",
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot","retryz":3}]
+			}]}`,
+			wantError: `json: unknown field "retryz"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ruleset, err := Parse([]byte(tt.jsonData))
+			assert.Nil(t, ruleset)
+			if assert.Error(t, err) {
+				assert.Contains(t, err.Error(), tt.wantError)
+			}
+		})
+	}
 }
 
 func TestParseInvalidRuleStructure(t *testing.T) {
@@ -210,7 +310,7 @@ func TestParseInvalidRuleStructure(t *testing.T) {
     }`)
 	_, err := Parse(invalidRule)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Invalid rule")
+	assert.Contains(t, err.Error(), `json: unknown field "invalid"`)
 }
 
 func TestParseNestedConditions(t *testing.T) {
@@ -623,6 +723,30 @@ func TestValidateRule(t *testing.T) {
 			expectedErr: "COMPILE: Rule name is required",
 		},
 		{
+			name: "Maximum Bytecode Name Length",
+			rule: Rule{
+				Name:     strings.Repeat("a", MaxBytecodeStringLength),
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "",
+		},
+		{
+			name: "Rule Name Exceeds Bytecode Limit",
+			rule: Rule{
+				Name:     strings.Repeat("a", MaxBytecodeStringLength+1),
+				Priority: 1,
+				Conditions: ConditionGroup{
+					All: []*ConditionOrGroup{{Fact: "temperature", Operator: "GT", Value: 30}},
+				},
+				Actions: []Action{{Type: "updateStore", Target: "alarm", Value: true}},
+			},
+			expectedErr: "COMPILE: Rule name exceeds bytecode limit of 255 bytes",
+		},
+		{
 			name: "Negative Priority",
 			rule: Rule{
 				Name:     "NegativePriority",
@@ -642,7 +766,7 @@ func TestValidateRule(t *testing.T) {
 				Conditions: ConditionGroup{},
 				Actions:    []Action{{Type: "updateStore", Target: "alarm", Value: true}},
 			},
-			expectedErr: "COMPILE: Invalid condition group",
+			expectedErr: "COMPILE: Invalid condition group: COMPILE: Empty condition group",
 		},
 		{
 			name: "No Actions",
@@ -666,6 +790,112 @@ func TestValidateRule(t *testing.T) {
 			} else {
 				assert.EqualError(t, err, tt.expectedErr)
 			}
+		})
+	}
+}
+
+func TestParseRejectsRuleNameExceedingBytecodeLimit(t *testing.T) {
+	jsonData := []byte(fmt.Sprintf(`{
+		"rules": [{
+			"name": %q,
+			"conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
+			"actions": [{"type": "updateStore", "target": "alarm", "value": true}]
+		}]
+	}`, strings.Repeat("a", MaxBytecodeStringLength+1)))
+
+	_, err := Parse(jsonData)
+	assert.ErrorContains(t, err, "Invalid rule")
+	assert.ErrorContains(t, err, "Rule name exceeds bytecode limit of 255 bytes")
+}
+
+func TestParseRejectsOversizedBytecodeFields(t *testing.T) {
+	overlong := strings.Repeat("a", MaxBytecodeStringLength+1)
+	validRuleset := func() Ruleset {
+		return Ruleset{Rules: []Rule{{
+			Name: "valid_rule",
+			Conditions: ConditionGroup{All: []*ConditionOrGroup{{
+				Fact:     "temperature",
+				Operator: "EQ",
+				Value:    "hot",
+			}}},
+			Actions: []Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+		}}}
+	}
+
+	tests := []struct {
+		name        string
+		mutate      func(*Ruleset)
+		expectedErr string
+	}{
+		{
+			name: "condition fact",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Conditions.All[0].Fact = overlong
+			},
+			expectedErr: "Condition fact exceeds bytecode limit",
+		},
+		{
+			name: "condition string value",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Conditions.All[0].Value = overlong
+			},
+			expectedErr: "Condition string value exceeds bytecode limit",
+		},
+		{
+			name: "action target",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Actions[0].Target = overlong
+			},
+			expectedErr: "Action target exceeds bytecode limit",
+		},
+		{
+			name: "action string value",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Actions[0].Value = overlong
+			},
+			expectedErr: "Action string value exceeds bytecode limit",
+		},
+		{
+			name: "script name",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{overlong: {Params: []string{"value"}, Body: "return value;"}}
+			},
+			expectedErr: "Script name exceeds bytecode limit",
+		},
+		{
+			name: "script parameter",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: []string{overlong}, Body: "return value;"}}
+			},
+			expectedErr: "Script parameter exceeds bytecode limit",
+		},
+		{
+			name: "script body",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: []string{"value"}, Body: overlong}}
+			},
+			expectedErr: "Script body exceeds bytecode limit",
+		},
+		{
+			name: "script parameter count",
+			mutate: func(ruleset *Ruleset) {
+				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: make([]string, MaxBytecodeStringLength+1), Body: "return value;"}}
+			},
+			expectedErr: "Script parameter count exceeds bytecode limit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ruleset := validRuleset()
+			tt.mutate(&ruleset)
+			jsonData, err := json.Marshal(ruleset)
+			if !assert.NoError(t, err) {
+				return
+			}
+
+			_, err = Parse(jsonData)
+			assert.ErrorContains(t, err, tt.expectedErr)
 		})
 	}
 }
@@ -767,6 +997,11 @@ func TestValidateAction(t *testing.T) {
 			expectedErrMsg: "Empty or missing target field",
 		},
 		{
+			name:           "Unsupported Type",
+			action:         &Action{Type: "sendMessage", Target: "alerts", Value: "hot"},
+			expectedErrMsg: "unsupported action type",
+		},
+		{
 			name:           "Invalid Value Type",
 			action:         &Action{Type: "updateStore", Target: "alarm", Value: make(chan int)},
 			expectedErrMsg: "Invalid action value",
@@ -843,7 +1078,7 @@ func TestIsActionValueValid(t *testing.T) {
 		{"Valid Boolean", "updateStore", true, true},
 		{"Invalid Type", "updateStore", make(chan int), false},
 		{"Invalid Action Type", "invalidType", "test", false},
-		{"Valid sendMessage", "sendMessage", "test message", true},
+		{"Unsupported sendMessage", "sendMessage", "test message", false},
 	}
 
 	for _, tt := range tests {

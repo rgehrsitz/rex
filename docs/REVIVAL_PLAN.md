@@ -33,22 +33,27 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 
 ## Next: make the runtime reliable
 
-- [ ] Make `rexd` the only owner of the Redis subscription. Remove the engine's hidden, hard-coded subscription loop.
-- [ ] Pass `context.Context` through store and runtime operations, and add explicit close/shutdown methods for clients and subscriptions.
-- [ ] Keep Redis transport types out of the engine-facing store interface.
-- [ ] Define one canonical event format and decode JSON values consistently, including strings and booleans.
-- [ ] Make comparison failures return a structured error or `false`; never panic from an unchecked type assertion.
-- [ ] Add cancellation, signal-handling, duplicate-delivery, malformed-event, and shutdown integration tests.
+- [x] Make `rexd` the only owner of the Redis subscription. Remove the engine's hidden, hard-coded subscription loop.
+- [x] Make `rexd` subscriptions honor its root context and close Redis clients and engines on shutdown.
+- [x] Pass caller contexts through runtime fact/action operations and Redis fact-store calls.
+- [x] Keep Redis transport types out of the engine-facing store interface.
+- [x] Define a canonical JSON fact-event format and decode JSON values consistently, including strings and booleans.
+- [x] Make comparison failures return `false`; never panic from an unchecked type assertion.
+- [x] Keep missing-dependency filtering from mutating the persistent fact-to-rule index (REX-001).
+- [x] Add cancellation, signal-handling, duplicate-delivery, malformed-event, and shutdown integration tests.
 
 **Completion criteria:** every running resource has an owner and shutdown path; an event is consumed once by the configured path; malformed data cannot crash `rexd`.
 
 ## Then: make compiled artifacts trustworthy
 
-- [ ] Create a bytecode decoder that validates header version, offsets, lengths, instruction boundaries, and declared counts before execution.
-- [ ] Replace the placeholder checksum with an actual integrity check, or explicitly remove it from the format.
-- [ ] Sort map-derived data before serialization so compiling the same ruleset produces identical bytecode.
-- [ ] Add fuzz tests for ruleset parsing and bytecode decoding, plus corrupt/truncated-artifact regression tests.
-- [ ] Document bytecode compatibility and an artifact versioning policy.
+- [x] Create a bytecode decoder that validates header version, offsets, lengths, instruction boundaries, and declared counts before execution.
+- [x] Replace the placeholder checksum with an actual CRC-32 integrity check.
+- [x] Sort map-derived data before serialization so compiling the same ruleset produces identical bytecode.
+- [x] Add fuzz tests for ruleset parsing and bytecode decoding, plus corrupt/truncated-artifact regression tests.
+- [x] Document bytecode compatibility and an artifact versioning policy in [the bytecode compatibility guide](BYTECODE_COMPATIBILITY.md).
+- [x] Reject hybrid leaf/group conditions and groups containing both `all` and `any` (REX-002/003).
+- [x] Reject action types that the runtime cannot execute (REX-004).
+- [x] Reject duplicate rule names during compilation (REX-005).
 
 **Completion criteria:** corrupt or incompatible bytecode returns a clear error, never a panic; identical input produces identical output.
 
@@ -56,7 +61,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 
 The present Otto timeout only returns from the caller; it does not stop an infinite JavaScript execution. The VM is also shared mutable state. Before expanding scripts, choose one path:
 
-1. **Trusted scripts only (recommended for the next release):** disable scripts by default, label them clearly as trusted-only, and preserve the feature for controlled deployments.
+1. **Trusted scripts only (selected for the next release):** scripts are disabled by default and may be enabled with `engine.scripts_enabled` only for controlled deployments with fully trusted rulesets.
 2. **Isolated execution:** run scripts in a separate constrained process with a hard timeout and memory/CPU limits. This is necessary for untrusted rule authors.
 3. **Remove scripts:** retain a smaller, safer declarative rules engine.
 
@@ -64,12 +69,12 @@ Do not present the current in-process execution as a security boundary.
 
 ## Later: developer and operator experience
 
-- [ ] Add `rexc validate`, `--output`, and useful source-location diagnostics.
-- [ ] Provide a one-command Redis demo, ideally via Docker Compose, with a smoke test and sample events.
-- [ ] Add structured traces explaining a rule evaluation and action outcome.
-- [ ] Add health checks and metrics for event throughput, evaluation latency, rule fires, action failures, and queue lag.
-- [ ] Add cycle protection, action limits, and idempotency guidance for chained rules.
-- [ ] Publish versioned binaries, checksums, release notes, and a compatibility matrix.
+- [x] Add `rexc validate`, `--output`, and useful JSON source-location diagnostics.
+- [x] Provide a one-command Redis demo via Docker Compose, with a smoke test and sample event.
+- [x] Add structured traces explaining a rule evaluation and action outcome.
+- [x] Add health checks and metrics for event throughput, evaluation latency, rule fires, action failures, and queue lag (Redis Pub/Sub reports queue lag as unavailable rather than fabricating a value).
+- [x] Add cycle protection, action limits, and idempotency guidance for chained rules.
+- [x] Publish versioned binaries, checksums, release notes, and a compatibility matrix.
 
 ## Possible product directions
 

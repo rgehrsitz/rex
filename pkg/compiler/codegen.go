@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -41,7 +42,6 @@ func ReplaceLabels(instructions []Instruction, offsets map[string]int, labelPosi
 				binary.LittleEndian.PutUint32(offsetBytes, uint32(offset))
 				copy(instr.Operands[len(instr.Operands)-4:], offsetBytes)
 				logging.Logger.Debug().Msgf("Replaced label %s with offset %d in instruction %d", label, offset, i)
-				releaseLabel(label) // Release the label after replacement
 			}
 		}
 		finalInstructions = append(finalInstructions, instr)
@@ -80,16 +80,7 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 
 		ruleBytecode := []byte{byte(RULE_START)}
 		nameLength := len(rule.Name)
-		if nameLength > 255 {
-			logging.Logger.Warn().
-				Str("ruleName", rule.Name).
-				Int("nameLength", nameLength).
-				Msg("Rule name exceeds 255 characters")
-			// Handle long names (e.g., use two bytes for length)
-			ruleBytecode = append(ruleBytecode, byte(nameLength>>8), byte(nameLength&0xff))
-		} else {
-			ruleBytecode = append(ruleBytecode, byte(nameLength))
-		}
+		ruleBytecode = append(ruleBytecode, byte(nameLength))
 		ruleBytecode = append(ruleBytecode, []byte(rule.Name)...)
 
 		// Append the rule priority
@@ -98,8 +89,15 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 		binary.LittleEndian.PutUint32(priorityBytes, uint32(rule.Priority))
 		ruleBytecode = append(ruleBytecode, priorityBytes...)
 
-		// Add script definitions to bytecode
-		for scriptName, script := range rule.Scripts {
+		// Add script definitions in name order so a map-backed scripts field
+		// produces reproducible bytecode.
+		scriptNames := make([]string, 0, len(rule.Scripts))
+		for scriptName := range rule.Scripts {
+			scriptNames = append(scriptNames, scriptName)
+		}
+		sort.Strings(scriptNames)
+		for _, scriptName := range scriptNames {
+			script := rule.Scripts[scriptName]
 			ruleBytecode = append(ruleBytecode, byte(SCRIPT_DEF))
 			ruleBytecode = append(ruleBytecode, byte(len(scriptName)))
 			ruleBytecode = append(ruleBytecode, []byte(scriptName)...)
@@ -277,13 +275,17 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 					actionBytecode = append(actionBytecode, byte(len(scriptName)))
 					actionBytecode = append(actionBytecode, []byte(scriptName)...)
 
-					// Add script parameters
+					// SCRIPT_CALL always includes a parameter count. Undefined scripts
+					// therefore encode zero parameters so the instruction stream stays
+					// aligned for the runtime to report the missing script at execution.
 					if script, ok := rule.Scripts[scriptName]; ok {
 						actionBytecode = append(actionBytecode, byte(len(script.Params)))
 						for _, param := range script.Params {
 							actionBytecode = append(actionBytecode, byte(len(param)))
 							actionBytecode = append(actionBytecode, []byte(param)...)
 						}
+					} else {
+						actionBytecode = append(actionBytecode, 0)
 					}
 				} else {
 					// This is a regular string value
@@ -342,7 +344,6 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 	return BytecodeFile{
 		Header: Header{
 			Version:       Version,
-			Checksum:      Checksum,
 			ConstPoolSize: ConstPoolSize,
 			NumRules:      uint32(len(ruleset.Rules)),
 		},
@@ -440,6 +441,7 @@ func GenerateIndices(bytecode []byte) ([]RuleExecutionIndex, map[string][]string
 					for fact := range uniqueFacts {
 						factList = append(factList, fact)
 					}
+					sort.Strings(factList)
 
 					factDepIndex = append(factDepIndex, FactDependencyIndex{
 						RuleNameLength: uint32(ruleNameLength),
@@ -593,6 +595,7 @@ func collectFactsFromBytecode(bytecode []byte) []string {
 	for fact := range facts {
 		factList = append(factList, fact)
 	}
+	sort.Strings(factList)
 	logging.Logger.Debug().Int("factCount", len(factList)).Msg("Completed collectFactsFromBytecode")
 	return factList
 }

@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"hash/crc32"
 	"os"
+	"sort"
 	"strings"
 
 	"rgehrsitz/rex/pkg/logging"
@@ -14,11 +16,31 @@ import (
 
 // Header information.
 const (
-	Version       = 1
-	Checksum      = 0
-	ConstPoolSize = 0
-	HeaderSize    = 28
+	// Version 2 adds CRC-32 integrity verification for the complete artifact.
+	Version        = 2
+	ConstPoolSize  = 0
+	HeaderSize     = 28
+	ChecksumOffset = 4
+	ChecksumSize   = 4
+
+	// MaxBytecodeStringLength is the largest string representable by the
+	// instruction format's one-byte string-length prefix.
+	MaxBytecodeStringLength = 255
 )
+
+var zeroChecksum [ChecksumSize]byte
+
+// CalculateBytecodeChecksum returns the IEEE CRC-32 of a bytecode artifact
+// with its checksum field treated as zero. It returns zero when the artifact
+// is shorter than a complete bytecode header.
+func CalculateBytecodeChecksum(data []byte) uint32 {
+	if len(data) < HeaderSize {
+		return 0
+	}
+	checksum := crc32.Update(0, crc32.IEEETable, data[:ChecksumOffset])
+	checksum = crc32.Update(checksum, crc32.IEEETable, zeroChecksum[:])
+	return crc32.Update(checksum, crc32.IEEETable, data[ChecksumOffset+ChecksumSize:])
+}
 
 // BytecodeFile represents a bytecode file that contains the compiled instructions
 // for executing a set of rules. It includes the file header, the instructions,
@@ -186,8 +208,9 @@ func formatOperands(operands []byte) string {
 }
 
 // WriteBytecodeToFile writes the given bytecode file to the specified filename.
-// It serializes the bytecode file into a buffer and then writes the buffer to the file.
-// The function returns an error if any write operation fails.
+// It serializes the bytecode file into a buffer, calculates its checksum, and
+// then writes the completed artifact. The function returns an error if any write
+// operation fails.
 func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 	buf := new(bytes.Buffer)
 
@@ -195,7 +218,7 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.Version); err != nil {
 		return err
 	}
-	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.Checksum); err != nil {
+	if err := binary.Write(buf, binary.LittleEndian, uint32(0)); err != nil {
 		return err
 	}
 	if err := binary.Write(buf, binary.LittleEndian, bytecodeFile.Header.ConstPoolSize); err != nil {
@@ -232,7 +255,13 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 
 	// Calculate and write the Fact Rule Lookup Index
 	bytecodeFile.Header.FactRuleIndexOffset = uint32(buf.Len())
-	for factName, rules := range bytecodeFile.FactRuleLookupIndex {
+	factNames := make([]string, 0, len(bytecodeFile.FactRuleLookupIndex))
+	for factName := range bytecodeFile.FactRuleLookupIndex {
+		factNames = append(factNames, factName)
+	}
+	sort.Strings(factNames)
+	for _, factName := range factNames {
+		rules := bytecodeFile.FactRuleLookupIndex[factName]
 		if err := writeString(buf, factName); err != nil {
 			return err
 		}
@@ -269,7 +298,7 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.Version); err != nil {
 		return err
 	}
-	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.Checksum); err != nil {
+	if err := binary.Write(headerBytes, binary.LittleEndian, uint32(0)); err != nil {
 		return err
 	}
 	if err := binary.Write(headerBytes, binary.LittleEndian, bytecodeFile.Header.ConstPoolSize); err != nil {
@@ -290,6 +319,7 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 
 	// Update the header in the buffer
 	copy(buf.Bytes()[:HeaderSize], headerBytes.Bytes())
+	binary.LittleEndian.PutUint32(buf.Bytes()[ChecksumOffset:ChecksumOffset+ChecksumSize], CalculateBytecodeChecksum(buf.Bytes()))
 
 	// Write buffer to file
 	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {

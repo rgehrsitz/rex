@@ -5,7 +5,18 @@
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
 REX currently uses Redis as its fact store and event transport: it receives fact updates, evaluates applicable rules, and publishes resulting updates.
 
-For the project's current maintenance priorities and roadmap, see the [revival plan](docs/REVIVAL_PLAN.md).
+The planning documents have distinct roles:
+
+- The [revival plan](docs/REVIVAL_PLAN.md) tracks committed milestones.
+- The [engine semantics audit](docs/ENGINE_AUDIT.md) is the source of truth for
+  verified findings and their remediation status.
+- The [evolution reference](docs/EVOLUTION_REFERENCE.md) preserves longer-term
+  design context, open decisions, and ideas worth revisiting.
+
+For the compiled-artifact format, compatibility contract, and upgrade guidance,
+see the [bytecode compatibility guide](docs/BYTECODE_COMPATIBILITY.md).
+For platform, toolchain, and runtime expectations, see the
+[compatibility matrix](docs/COMPATIBILITY.md).
 
 ## Features
 
@@ -54,19 +65,22 @@ go build ./cmd/rexc
 How to Run:
 
 ```bash
-./rexc -rules <path_to_rules.json> [-loglevel <level>] [-logoutput <output>]
+./rexc -rules <path_to_rules.json> [-output <path>] [-loglevel <level>] [-logoutput <output>]
+./rexc validate -rules <path_to_rules.json>
 ```
 
 Command-line options:
 
 - `-rules`: (Required) Path to the input JSON file containing the rules.
+- `-output`: (Optional) Compiled-bytecode path. Default is `output.bytecode`; ignored by `validate`.
 - `-loglevel`: (Optional) Set log level. Valid values are panic, fatal, error, warn, info, debug, trace. Default is "info".
 - `-logoutput`: (Optional) Set log output. Valid values are console or file. Default is "console".
 
 Example:
 
 ```bash
-./rexc -rules examples/rules2.ruleset.json -loglevel debug -logoutput file
+./rexc validate -rules examples/rules2.ruleset.json
+./rexc -rules examples/rules2.ruleset.json -output rules.bytecode -loglevel debug -logoutput file
 ```
 
 ### 2. Runtime Engine (rexd)
@@ -108,7 +122,14 @@ The configuration file is in JSON format and supports the following options:
     "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
-    "priority_threshold": 1
+    "priority_threshold": 1,
+    "scripts_enabled": false,
+    "max_actions_per_evaluation": 32,
+    "max_event_hops": 16
+  },
+  "observability": {
+    "enabled": false,
+    "address": "127.0.0.1:8080"
   }
 }
 ```
@@ -118,6 +139,42 @@ Example:
 ```bash
 ./rexd -config cmd/rexd/rex_config.json
 ```
+
+### Fact Event Format
+
+`rexd` consumes and the Redis store publishes JSON objects that map fact keys to their JSON values. For example, publishing the following event updates a numeric fact, a boolean fact, and a string fact without type conversion:
+
+```json
+{
+  "weather:temperature": 30.5,
+  "weather:alert": true,
+  "weather:status": "storm watch"
+}
+```
+
+During migration, `rexd` also accepts the legacy `key=value` form. Its value is decoded as JSON when possible, so `weather:status="storm watch"` is a string and `weather:alert=true` is a boolean. New producers should publish the JSON-object format.
+
+### Evaluation Traces
+
+`rexd` assigns each incoming event a `trace_id`. A JSON event with several facts keeps that ID for every fact update it contains. At the configured `info` level, the runtime emits structured records for `fact_event_received`, `fact_event_decoded`, `rule_evaluation_candidates`, `rule_condition_evaluated`, `action_completed` (or `action_skipped` / `action_failed`), and `rule_evaluation_completed`. Filter by `trace_id` to follow an event from Redis ingress through its rule and action outcomes.
+
+These trace records identify facts, rules, action types, and targets, but deliberately omit arbitrary fact and action values. Other diagnostic records—including the existing high-priority rule message—may contain values, so use those logs only while investigating a trusted deployment.
+
+### Health and Metrics
+
+Set `observability.enabled` to `true` to expose local HTTP endpoints at `observability.address` (default: `127.0.0.1:8080`):
+
+- `/healthz` confirms that the daemon process is serving HTTP.
+- `/readyz` returns `200` only after the Redis subscription is active; otherwise it returns `503`.
+- `/metrics` emits Prometheus text-format counters for received and failed events, event-processing duration, rule fires, and action outcomes.
+
+The endpoint is disabled by default so an upgrade does not unexpectedly open a port. Redis Pub/Sub has no retained queue or producer timestamp, so `rex_event_queue_lag_seconds` is emitted as `NaN` rather than a misleading value. Use the processing-duration metrics for this transport; queue lag requires a queued transport such as Redis Streams.
+
+### Cycle Safety
+
+`rexd` limits each rule evaluation to `engine.max_actions_per_evaluation` actions (default: `32`) and limits a chain of Rex-derived Redis events to `engine.max_event_hops` hops (default: `16`). Derived updates carry an internal `_rex` envelope containing the existing trace ID and incremented hop; independent producers can continue sending the canonical JSON fact-object format unchanged. An event over its hop limit is rejected before rule evaluation.
+
+These controls bound accidental feedback loops, but they do not make actions exactly-once. Rules and external action consumers should remain idempotent: use stable business keys, tolerate duplicate updates, and avoid non-idempotent side effects (such as creating a new record) without a deduplication key.
 
 ### 3. Redis Setup (redis_setup)
 
@@ -188,6 +245,15 @@ Example:
 3. Set up your Redis instance and initialize it with `redis_setup` if needed.
 4. Run `rexd` with the compiled bytecode to start the rules engine.
 5. The engine will listen for updates from Redis, evaluate rules, and perform actions accordingly.
+
+For a self-contained compiler -> Redis -> runtime smoke test, see the [Docker Compose demo](demo/README.md).
+
+## Releases
+
+Pushing an annotated `vX.Y.Z` tag from a reviewed `main` commit publishes
+versioned archives for Linux, macOS, and Windows, together with a SHA-256
+manifest and GitHub-generated release notes. See the [release guide](docs/RELEASING.md)
+for the tag and verification procedure.
 
 ## Development
 
@@ -270,15 +336,19 @@ A condition object has the following properties:
 
 An action object has the following properties:
 
-- type: a string indicating the action type ("updateStore" or "sendMessage") (sendMessage is not yet implemented).
-- fact: a string identifying the fact to update or send. Based on the way Redis works, the recommendation is 'channel
+- type: the supported action type, `updateStore`. Unsupported action types are
+  rejected during compilation.
+- target: a string identifying the fact to update. Based on the way Redis works, the recommendation is 'channel
   ' for the naming of facts.
-- value: the value to update or send.
-- customProperty: an optional object containing custom properties for the action.
+- value: the value to update.
 
 ### Scripting
 
-REX supports scripting using the Otto JavaScript engine. Scripts can be defined and executed as part of the rule actions. This allows for more complex logic and calculations.
+REX supports scripting using the Otto JavaScript engine, but `rexd` disables
+script execution by default. Enable `engine.scripts_enabled` only for rulesets
+from fully trusted authors. The current in-process runner is not a security
+boundary: its timeout cannot reliably stop an infinite script, and its VM is
+shared mutable state. Do not use it for untrusted rule content.
 
 ### Defining Scripts
 
@@ -402,7 +472,7 @@ Scripts are defined in the Scripts section of a rule and can be referenced in ac
       },
       "actions": [
         {
-          "type": "sendMessage",
+          "type": "updateStore",
           "target": "alert-service",
           "value": "Alert - Pressure or flow rate exceeded limits!"
         }

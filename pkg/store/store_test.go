@@ -4,11 +4,15 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"rgehrsitz/rex/pkg/eventcontext"
 )
 
 func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *RedisStore) {
@@ -126,23 +130,51 @@ func TestRedisStoreMGetFacts(t *testing.T) {
 func TestSubscribe(t *testing.T) {
 	s, store := setupMiniredis(t)
 	defer s.Close()
+	defer store.Close()
 
-	pubsub := store.Subscribe("test_channel")
+	pubsub, err := store.Subscribe(context.Background(), "test_channel")
+	assert.NoError(t, err)
 	assert.NotNil(t, pubsub)
 
 	// Clean up
 	pubsub.Close()
 }
 
-func TestReceiveFacts(t *testing.T) {
+func TestSubscribeHonorsContext(t *testing.T) {
+	s, store := setupMiniredis(t)
+	defer s.Close()
+	defer store.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	pubsub, err := store.Subscribe(ctx, "test_channel")
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.Nil(t, pubsub)
+}
+
+func TestCloseReleasesClient(t *testing.T) {
 	s, store := setupMiniredis(t)
 	defer s.Close()
 
-	ch := store.ReceiveFacts()
-	assert.NotNil(t, ch)
+	assert.NoError(t, store.Close())
+	assert.Error(t, store.SetFact("test_fact", "value"))
+}
 
-	// Clean up
-	store.client.Close()
+func TestFactOperationsHonorContext(t *testing.T) {
+	s, store := setupMiniredis(t)
+	defer s.Close()
+	defer store.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	assert.ErrorIs(t, store.SetFactContext(ctx, "test_fact", "value"), context.Canceled)
+	_, err := store.GetFactContext(ctx, "test_fact")
+	assert.ErrorIs(t, err, context.Canceled)
+	_, err = store.MGetFactsContext(ctx, "test_fact")
+	assert.ErrorIs(t, err, context.Canceled)
+	assert.ErrorIs(t, store.SetAndPublishFactContext(ctx, "test:fact", "value"), context.Canceled)
 }
 
 func TestSetAndPublishFact(t *testing.T) {
@@ -153,10 +185,11 @@ func TestSetAndPublishFact(t *testing.T) {
 	value := "test_value"
 
 	// Subscribe to the channel before publishing
-	pubsub := store.Subscribe("test")
+	pubsub, err := store.Subscribe(context.Background(), "test")
+	require.NoError(t, err)
 	defer pubsub.Close()
 
-	err := store.SetAndPublishFact(key, value)
+	err = store.SetAndPublishFact(key, value)
 	assert.NoError(t, err)
 
 	// Verify the fact was set
@@ -168,13 +201,34 @@ func TestSetAndPublishFact(t *testing.T) {
 	msg, err := pubsub.ReceiveMessage(context.Background())
 	assert.NoError(t, err)
 	assert.Equal(t, "test", msg.Channel)
-	expectedPayload := fmt.Sprintf("%s=\"%s\"", key, value) // Account for JSON encoding of string
-	assert.Equal(t, expectedPayload, msg.Payload)
+	var event map[string]interface{}
+	require.NoError(t, json.Unmarshal([]byte(msg.Payload), &event))
+	assert.Equal(t, value, event[key])
 
 	// Verify the value in miniredis
 	storedValue, err := s.Get(key)
 	assert.NoError(t, err)
 	assert.Equal(t, `"`+value+`"`, storedValue) // miniredis stores strings with quotes
+}
+
+func TestSetAndPublishFactContextPreservesEventMetadata(t *testing.T) {
+	_, store := setupMiniredis(t)
+	defer store.Close()
+
+	pubsub, err := store.Subscribe(context.Background(), "test")
+	require.NoError(t, err)
+	defer pubsub.Close()
+
+	ctx := eventcontext.WithMetadata(context.Background(), eventcontext.Metadata{TraceID: "event-12", Hop: 4})
+	require.NoError(t, store.SetAndPublishFactContext(ctx, "test:key", "value"))
+
+	msg, err := pubsub.ReceiveMessage(context.Background())
+	require.NoError(t, err)
+	facts, metadata, enveloped, err := eventcontext.DecodeFactEvent([]byte(msg.Payload))
+	require.NoError(t, err)
+	assert.True(t, enveloped)
+	assert.Equal(t, eventcontext.Metadata{TraceID: "event-12", Hop: 5}, metadata)
+	assert.Equal(t, "value", facts["test:key"])
 }
 
 func TestSetAndPublishFactWithDifferentTypes(t *testing.T) {
@@ -194,10 +248,11 @@ func TestSetAndPublishFactWithDifferentTypes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Subscribe to the channel before publishing
-			pubsub := store.Subscribe("test")
+			pubsub, err := store.Subscribe(context.Background(), "test")
+			require.NoError(t, err)
 			defer pubsub.Close()
 
-			err := store.SetAndPublishFact(tc.key, tc.value)
+			err = store.SetAndPublishFact(tc.key, tc.value)
 			assert.NoError(t, err)
 
 			// Verify the fact was set
@@ -210,14 +265,9 @@ func TestSetAndPublishFactWithDifferentTypes(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Equal(t, "test", msg.Channel)
 
-			var expectedPayload string
-			switch v := tc.value.(type) {
-			case string:
-				expectedPayload = fmt.Sprintf("%s=\"%s\"", tc.key, v)
-			default:
-				expectedPayload = fmt.Sprintf("%s=%v", tc.key, v)
-			}
-			assert.Equal(t, expectedPayload, msg.Payload)
+			var event map[string]interface{}
+			require.NoError(t, json.Unmarshal([]byte(msg.Payload), &event))
+			assert.Equal(t, tc.value, event[tc.key])
 
 			// Verify the value in miniredis
 			storedValue, err := s.Get(tc.key)
