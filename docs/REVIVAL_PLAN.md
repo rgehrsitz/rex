@@ -39,6 +39,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Keep Redis transport types out of the engine-facing store interface.
 - [x] Define a canonical JSON fact-event format and decode JSON values consistently, including strings and booleans.
 - [x] Make comparison failures return `false`; never panic from an unchecked type assertion.
+- [x] Keep missing-dependency filtering from mutating the persistent fact-to-rule index (REX-001).
 - [x] Add cancellation, signal-handling, duplicate-delivery, malformed-event, and shutdown integration tests.
 
 **Completion criteria:** every running resource has an owner and shutdown path; an event is consumed once by the configured path; malformed data cannot crash `rexd`.
@@ -50,6 +51,9 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Sort map-derived data before serialization so compiling the same ruleset produces identical bytecode.
 - [x] Add fuzz tests for ruleset parsing and bytecode decoding, plus corrupt/truncated-artifact regression tests.
 - [x] Document bytecode compatibility and an artifact versioning policy in [the bytecode compatibility guide](BYTECODE_COMPATIBILITY.md).
+- [x] Reject hybrid leaf/group conditions and groups containing both `all` and `any` (REX-002/003).
+- [x] Reject action types that the runtime cannot execute (REX-004).
+- [x] Reject duplicate rule names during compilation (REX-005).
 
 **Completion criteria:** corrupt or incompatible bytecode returns a clear error, never a panic; identical input produces identical output.
 
@@ -66,11 +70,11 @@ Do not present the current in-process execution as a security boundary.
 ## Later: developer and operator experience
 
 - [x] Add `rexc validate`, `--output`, and useful JSON source-location diagnostics.
-- [ ] Provide a one-command Redis demo, ideally via Docker Compose, with a smoke test and sample events.
+- [x] Provide a one-command Redis demo via Docker Compose, with a smoke test and sample event.
 - [x] Add structured traces explaining a rule evaluation and action outcome.
 - [x] Add health checks and metrics for event throughput, evaluation latency, rule fires, action failures, and queue lag (Redis Pub/Sub reports queue lag as unavailable rather than fabricating a value).
 - [x] Add cycle protection, action limits, and idempotency guidance for chained rules.
-- [ ] Publish versioned binaries, checksums, release notes, and a compatibility matrix.
+- [x] Publish versioned binaries, checksums, release notes, and a compatibility matrix.
 
 ## Possible product directions
 

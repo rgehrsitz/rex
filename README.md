@@ -5,7 +5,14 @@
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
 REX currently uses Redis as its fact store and event transport: it receives fact updates, evaluates applicable rules, and publishes resulting updates.
 
-For the project's current maintenance priorities and roadmap, see the [revival plan](docs/REVIVAL_PLAN.md).
+The planning documents have distinct roles:
+
+- The [revival plan](docs/REVIVAL_PLAN.md) tracks committed milestones.
+- The [engine semantics audit](docs/ENGINE_AUDIT.md) is the source of truth for
+  verified findings and their remediation status.
+- The [evolution reference](docs/EVOLUTION_REFERENCE.md) preserves longer-term
+  design context, open decisions, and ideas worth revisiting.
+
 For the compiled-artifact format, compatibility contract, and upgrade guidance,
 see the [bytecode compatibility guide](docs/BYTECODE_COMPATIBILITY.md).
 For platform, toolchain, and runtime expectations, see the
@@ -239,6 +246,8 @@ Example:
 4. Run `rexd` with the compiled bytecode to start the rules engine.
 5. The engine will listen for updates from Redis, evaluate rules, and perform actions accordingly.
 
+For a self-contained compiler -> Redis -> runtime smoke test, see the [Docker Compose demo](demo/README.md).
+
 ## Releases
 
 Pushing an annotated `vX.Y.Z` tag from a reviewed `main` commit publishes
@@ -327,11 +336,11 @@ A condition object has the following properties:
 
 An action object has the following properties:
 
-- type: a string indicating the action type ("updateStore" or "sendMessage") (sendMessage is not yet implemented).
-- fact: a string identifying the fact to update or send. Based on the way Redis works, the recommendation is 'channel
+- type: the supported action type, `updateStore`. Unsupported action types are
+  rejected during compilation.
+- target: a string identifying the fact to update. Based on the way Redis works, the recommendation is 'channel
   ' for the naming of facts.
-- value: the value to update or send.
-- customProperty: an optional object containing custom properties for the action.
+- value: the value to update.
 
 ### Scripting
 
@@ -463,7 +472,7 @@ Scripts are defined in the Scripts section of a rule and can be referenced in ac
       },
       "actions": [
         {
-          "type": "sendMessage",
+          "type": "updateStore",
           "target": "alert-service",
           "value": "Alert - Pressure or flow rate exceeded limits!"
         }
