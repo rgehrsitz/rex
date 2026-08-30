@@ -8,7 +8,7 @@ open decisions, and deliberately deferred possibilities behind future work.
 Last reviewed: 2026-08-29.
 
 For a verified, prioritized list of engine findings discovered immediately
-after this review, see [ENGINE_AUDIT_2026-08-30.md](ENGINE_AUDIT_2026-08-30.md).
+after this review, see [ENGINE_AUDIT.md](ENGINE_AUDIT.md).
 
 ## Current position
 

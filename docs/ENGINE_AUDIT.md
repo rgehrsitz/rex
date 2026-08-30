@@ -1,4 +1,6 @@
-# Engine semantics audit — 2026-08-30
+# Engine semantics audit
+
+Last verified: 2026-08-30.
 
 This is the master, evidence-backed backlog for Rex. It consolidates the
 revival reviews, the PulsarSuite comparison, and a line-by-line verification of
@@ -64,10 +66,12 @@ update runs `r2`, `r3`, `r3`; `r1` never runs. The long-lived index has become
 `[r2, r3, r3]`.
 
 **Resolution (2026-08-30):** `ProcessFactUpdateContext` now copies the indexed
-candidate slice before applying transient missing-dependency filtering. The
-regression test runs both rounds, asserts that the index remains unchanged,
+candidate slice only when transient missing-dependency filtering is required.
+The regression test runs both rounds, asserts that the index remains unchanged,
 and verifies that each eligible rule fires exactly once after the dependency
-appears. The complete normal and race-enabled test suites pass.
+appears. The complete normal and race-enabled test suites pass. Replacing the
+nested removal loop with a non-mutating filter belongs with the separately
+tracked dependency-lookup optimization rather than this isolated fix.
 
 Relevant code: [engine.go](../pkg/runtime/engine.go) (`ProcessFactUpdateContext`).
 
@@ -208,6 +212,9 @@ may reduce round trips, but it must not be presented as a delivery guarantee.
 - `Engine.Facts` grows for process lifetime. Document fixed-cardinality facts
   as the current assumption, or design bounded/cacheable state before dynamic
   fact names are supported.
+- `Engine.Facts` is mutable and unguarded. The current daemon evaluates events
+  serially, but concurrent evaluation must not be introduced until ownership,
+  snapshot, and synchronization semantics are explicit.
 - Derived updates route to `strings.Split(key, ":")[0]`; the parser does not
   enforce the documented `group:key` form and configuration may omit that
   channel. Add validation/linting and an explicit routing contract.

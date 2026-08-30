@@ -5,11 +5,14 @@
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
 REX currently uses Redis as its fact store and event transport: it receives fact updates, evaluates applicable rules, and publishes resulting updates.
 
-For the project's current maintenance priorities and roadmap, see the [revival plan](docs/REVIVAL_PLAN.md).
-For longer-term design context, open decisions, and ideas worth revisiting,
-see the [evolution reference](docs/EVOLUTION_REFERENCE.md).
-For verified engine findings and the prioritized remediation backlog, see the
-[engine semantics audit](docs/ENGINE_AUDIT_2026-08-30.md).
+The planning documents have distinct roles:
+
+- The [revival plan](docs/REVIVAL_PLAN.md) tracks committed milestones.
+- The [engine semantics audit](docs/ENGINE_AUDIT.md) is the source of truth for
+  verified findings and their remediation status.
+- The [evolution reference](docs/EVOLUTION_REFERENCE.md) preserves longer-term
+  design context, open decisions, and ideas worth revisiting.
+
 For the compiled-artifact format, compatibility contract, and upgrade guidance,
 see the [bytecode compatibility guide](docs/BYTECODE_COMPATIBILITY.md).
 For platform, toolchain, and runtime expectations, see the

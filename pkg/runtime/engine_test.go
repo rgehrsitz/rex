@@ -72,6 +72,7 @@ type contextCaptureStore struct {
 	setAndPublishErr     error
 	mGetErr              error
 	mGetValues           map[string]interface{}
+	mGetKeys             []string
 	publishCount         int
 }
 
@@ -148,8 +149,17 @@ func (s *contextCaptureStore) GetFactContext(ctx context.Context, _ string) (int
 	return nil, nil
 }
 
-func (s *contextCaptureStore) MGetFactsContext(context.Context, ...string) (map[string]interface{}, error) {
-	return s.mGetValues, s.mGetErr
+func (s *contextCaptureStore) MGetFactsContext(_ context.Context, keys ...string) (map[string]interface{}, error) {
+	s.mGetKeys = append([]string(nil), keys...)
+	if s.mGetValues == nil {
+		return nil, s.mGetErr
+	}
+
+	values := make(map[string]interface{}, len(keys))
+	for _, key := range keys {
+		values[key] = s.mGetValues[key]
+	}
+	return values, s.mGetErr
 }
 
 func (s *eventConsumerProbeStore) Close() error { return nil }
@@ -393,6 +403,7 @@ func TestProcessFactUpdateContextDoesNotMutateCandidateIndexWhenDependencyIsMiss
 	require.Equal(t, wantCandidates, engine.factRuleIndex["temperature"])
 
 	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+	assert.Equal(t, []string{"humidity"}, factStore.mGetKeys)
 	assert.Equal(t, wantCandidates, engine.factRuleIndex["temperature"])
 	assert.Equal(t, []string{"temperature_alert", "temperature_status"}, observer.rulesFired)
 
