@@ -69,9 +69,9 @@ The compiler must reject shapes whose meaning it cannot faithfully execute.
 - Require every condition group to contain exactly one of `all` or `any`.
 - Forbid a node from being both a leaf condition and a nested group.
 - Reject duplicate rule names.
-- Align validation with runtime support. In particular, either implement an
-  action such as `sendMessage` or reject it during compilation; do not emit a
-  bytecode artifact that can only fail at runtime.
+- Validation now accepts only the runtime-supported `updateStore` action;
+  `sendMessage` is rejected during compilation rather than emitted into an
+  artifact that can only fail at runtime.
 - Validate referenced scripts and their syntax/identifiers before deployment.
 
 Add table-driven compile-and-run semantic tests for nested boolean groups,

@@ -30,10 +30,10 @@ The relevant baseline checks previously passed: `go test ./...`,
 | ID | Finding | Status | Priority |
 | --- | --- | --- | --- |
 | REX-001 | Missing dependencies mutate the fact-to-rule index | Fixed and verified 2026-08-30 | P0 |
-| REX-002 | Hybrid leaf/group conditions are accepted and partially discarded | Confirmed by execution | P0 |
-| REX-003 | A group containing both `all` and `any` silently ignores `any` | Confirmed by execution | P0 |
-| REX-004 | `sendMessage` compiles but fails at runtime and aborts the event | Confirmed by execution | P0 |
-| REX-005 | Duplicate rule names compile but bytecode load rejects them | Confirmed by execution | P0 |
+| REX-002 | Hybrid leaf/group conditions are accepted and partially discarded | Fixed and verified 2026-08-30 | P0 |
+| REX-003 | A group containing both `all` and `any` silently ignores `any` | Fixed and verified 2026-08-30 | P0 |
+| REX-004 | `sendMessage` compiles but fails at runtime and aborts the event | Fixed and verified 2026-08-30 | P0 |
+| REX-005 | Duplicate rule names compile but bytecode load rejects them | Fixed and verified 2026-08-30 | P0 |
 | REX-006 | Script timeout does not stop JavaScript execution | Confirmed by code inspection | P1, if scripts enabled |
 | REX-007 | Priority has no execution-order effect; documentation disagrees | Confirmed by execution and inspection | P1 |
 | REX-008 | Bytecode jump targets are not semantically validated | Confirmed by execution | P1 |
@@ -47,10 +47,10 @@ The relevant baseline checks previously passed: `go test ./...`,
 
 REX-002 and REX-003 are **not valid according to the checked-in JSON Schema**:
 it requires exactly one of `all` or `any`, and each child must be exactly a
-leaf or exactly a nested group. They are nevertheless accepted by the actual
-`compiler.Parse` path used by `rexc`. Therefore these are validation defects,
-not supported-but-ambiguous language features. The correct small fix is to
-reject them; do not invent meanings for invalid input.
+leaf or exactly a nested group. Before remediation, the actual `compiler.Parse`
+path used by `rexc` nevertheless accepted them. They are validation defects,
+not supported-but-ambiguous language features, and are now rejected rather
+than assigned new meanings.
 
 ## P0 — correctness before new features
 
@@ -84,9 +84,10 @@ Relevant code: [engine.go](../pkg/runtime/engine.go) (`ProcessFactUpdateContext`
 **Reproduction:** a leaf `a > 10` also containing nested `any: [b < 3]`
 fires for `a=20, b=99`, even though the nested group is false.
 
-**Required work:** enforce a discriminated condition shape: either a leaf with
-only `fact`, `operator`, and `value`, or a group with exactly one of `all` and
-`any`. Reject unknown/mixed fields. Add parser and compiler/runtime tests.
+**Resolution (2026-08-30):** parser validation now rejects a condition that
+combines leaf fields with a nested group, and strict JSON decoding rejects
+unknown fields throughout the ruleset. Regression tests verify both classes
+of invalid input fail before bytecode generation.
 
 Relevant code: [parser.go](../pkg/compiler/parser.go),
 [traverse.go](../pkg/compiler/traverse.go).
@@ -99,9 +100,9 @@ Any`, so only `all` is emitted.
 **Reproduction:** `{all: [a > 10], any: [b < 3]}` fires for `a=20, b=99`.
 The `any` condition is false but has no effect.
 
-**Required work:** reject the shape with the same discriminator validation as
-REX-002. This matches the published JSON Schema and avoids a backward-
-incompatible new conjunction meaning.
+**Resolution (2026-08-30):** top-level and nested condition groups containing
+both `all` and `any` are rejected. This preserves the JSON Schema's exclusive
+group meaning rather than inventing conjunction semantics.
 
 ### REX-004: `sendMessage` is an accepted but unimplemented action
 
@@ -112,10 +113,10 @@ dispatch supports only `updateStore`.
 encountered`; the outer processing loop returns immediately, so a later valid
 rule for the same fact update does not run.
 
-**Required work:** for the next release, reject `sendMessage` at compilation.
-Do not add a messaging adapter merely to make the validator honest. Separately
-make and document a deliberate action-failure policy: fail-fast for the event,
-or record-and-continue per rule/action. Add a test covering the chosen policy.
+**Resolution (2026-08-30):** `updateStore` is now the only accepted action;
+`sendMessage` and other unsupported types fail during parsing. The README,
+JSON Schema, and checked-in ruleset examples now describe the same contract.
+The runtime action-failure policy remains a separate design decision.
 
 ### REX-005: duplicate names fail at deployment rather than compilation
 
@@ -125,9 +126,9 @@ correctly rejects duplicate rule-execution-index entries.
 **Reproduction:** `rexc` produces a bytecode file for two rules named `same`;
 `rexd` refuses to load it.
 
-**Required work:** reject duplicate names during parsing with a source-located
-diagnostic. Add a compiler/runtime consistency test so known invalid artifacts
-cannot be generated by the compiler.
+**Resolution (2026-08-30):** parsing now tracks rule names across the ruleset
+and rejects a duplicate with both JSON-style rule indexes in the diagnostic.
+The regression test verifies duplicate inputs never produce a parsed ruleset.
 
 ## P1 — settle the runtime contract
 
@@ -256,8 +257,8 @@ Do not start these before P0 and the P1 contract choices are complete:
 
 1. ~~REX-001 as a small isolated bug-fix PR with a failing regression test.~~
    Completed and verified 2026-08-30.
-2. REX-002 through REX-005 as the next compiler-truthfulness milestone; keep
-   the language restrictive and reject unsupported shapes/features.
+2. ~~REX-002 through REX-005 as the compiler-truthfulness milestone.~~
+   Completed and verified 2026-08-30.
 3. REX-008 and REX-007 as bytecode/language-contract PRs, each with updated
    documentation.
 4. Decide script and delivery semantics; complete REX-006, REX-010, and
