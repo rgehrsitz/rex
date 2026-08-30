@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"strings"
@@ -377,18 +378,50 @@ func TestOptimizeInstructions(t *testing.T) {
 	// Add more specific assertions to check if unnecessary jumps and labels are removed
 }
 
-func TestReplaceLabelOffsetsRejectsUnresolvedLabelAtBytecodeBoundary(t *testing.T) {
-	bytecode := []byte{byte(JUMP_IF_FALSE), 'L', '0', '0', '1'}
+func TestResolveLabelOffsetsRejectsInvalidReferences(t *testing.T) {
+	tests := []struct {
+		name     string
+		bytecode []byte
+		jump     jumpReference
+		labels   map[string]int
+		wantErr  string
+	}{
+		{
+			name:     "unresolved label at bytecode boundary",
+			bytecode: []byte{byte(JUMP_IF_FALSE), 'L', '0', '0', '1'},
+			jump:     jumpReference{opcode: JUMP_IF_FALSE, offset: 0, label: "L001"},
+			labels:   map[string]int{},
+			wantErr:  `unresolved label "L001"`,
+		},
+		{
+			name:     "truncated jump operand",
+			bytecode: []byte{byte(JUMP_IF_TRUE), 'L', '0', '0'},
+			jump:     jumpReference{opcode: JUMP_IF_TRUE, offset: 0, label: "L001"},
+			labels:   map[string]int{"L001": 5},
+			wantErr:  "truncated JUMP_IF_TRUE operand",
+		},
+		{
+			name:     "backward label",
+			bytecode: []byte{byte(LABEL), 'L', '0', '0', '1', byte(JUMP_IF_FALSE), 'L', '0', '0', '1'},
+			jump:     jumpReference{opcode: JUMP_IF_FALSE, offset: 5, label: "L001"},
+			labels:   map[string]int{"L001": 0},
+			wantErr:  `label "L001" for JUMP_IF_FALSE at byte offset 5 is not forward`,
+		},
+	}
 
-	resolved, err := ReplaceLabelOffsets(bytecode)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resolved, err := resolveLabelOffsets(tt.bytecode, []jumpReference{tt.jump}, tt.labels)
 
-	assert.Nil(t, resolved)
-	assert.ErrorContains(t, err, `unresolved label "L001"`)
+			assert.Nil(t, resolved)
+			assert.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
 
 func TestGenerateBytecodePropagatesLabelResolutionFailure(t *testing.T) {
 	resolutionErr := errors.New("label resolution failed")
-	bytecode, err := generateBytecode(deterministicRuleset(), func([]byte) ([]byte, error) {
+	bytecode, err := generateBytecode(deterministicRuleset(), func([]byte, []jumpReference, map[string]int) ([]byte, error) {
 		return nil, resolutionErr
 	})
 
@@ -617,6 +650,40 @@ func TestGenerateBytecodeEncodesZeroParamsForUndefinedActionScript(t *testing.T)
 	want = append(want, 0)
 
 	assert.True(t, bytes.Contains(bytecode.Instructions, want))
+}
+
+func TestGenerateBytecodePreservesLabelLikeActionStrings(t *testing.T) {
+	tests := []string{
+		"L999" + strings.Repeat("x", 20),
+		"L999" + strings.Repeat("x", 21),
+		"L001" + strings.Repeat("x", 21),
+	}
+
+	for _, value := range tests {
+		t.Run(fmt.Sprintf("length_%d_%s", len(value), value[:4]), func(t *testing.T) {
+			ruleset := &Ruleset{Rules: []Rule{{
+				Name: "label_like_action_value",
+				Conditions: ConditionGroup{All: []*ConditionOrGroup{{
+					Fact:     "temperature",
+					Operator: "GT",
+					Value:    30.0,
+				}}},
+				Actions: []Action{{Type: "updateStore", Target: "status", Value: value}},
+			}}}
+
+			bytecode := mustGenerateBytecode(t, ruleset)
+			want := append([]byte{byte(ACTION_VALUE_STRING), byte(len(value))}, []byte(value)...)
+
+			assert.True(t, bytes.Contains(bytecode.Instructions, want), "action string bytes changed during label resolution")
+		})
+	}
+}
+
+func TestGenerateBytecodeAllowsRuleWithoutConditionsOrActions(t *testing.T) {
+	bytecode := mustGenerateBytecode(t, &Ruleset{Rules: []Rule{{Name: "empty_rule"}}})
+
+	assert.Equal(t, uint32(1), bytecode.Header.NumRules)
+	assert.Contains(t, bytecode.Instructions, byte(RULE_END))
 }
 
 func TestGenerateBytecodeEncodesMaximumLengthRuleName(t *testing.T) {

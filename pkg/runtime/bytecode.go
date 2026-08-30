@@ -134,7 +134,7 @@ func validateInstructions(data []byte) (map[int]string, error) {
 		case compiler.LABEL:
 			offset, err = consumeFixed(data, offset, 4)
 			if err == nil {
-				// ReplaceLabelOffsets writes labelStart - jumpStart. The executor
+				// The compiler writes labelStart - jumpStart. The executor
 				// adds that value after consuming the five-byte jump, so it resumes
 				// five bytes after labelStart: immediately after this LABEL.
 				labelTargets[offset] = currentRuleStart

@@ -182,14 +182,16 @@ wrote bytecode successfully even though `rexd` will reject the artifact. Its
 bounds guard also uses `i+5 < len(bytecode)`, skipping a four-byte operand that
 ends exactly at the end of the slice.
 
-**Resolution (2026-08-30):** label resolution and bytecode generation now
-return errors, and `rexc` propagates a generation failure without creating an
-output artifact. The resolver examines a complete four-byte label operand even
-when it ends exactly at the bytecode boundary and returns an unresolved-label
-error instead of leaving ASCII label bytes behind. Regression tests cover the
-exact-boundary case, propagation through generation with rule context, and the
-`rexc` no-output failure path. Valid serialized bytes and bytecode version 2
-are unchanged; Go callers must now handle the compiler API's error result.
+**Resolution (2026-08-30):** bytecode generation records jump and label offsets
+while emitting instructions, then resolves only those recorded references. It
+no longer scans arbitrary operand bytes that can resemble jump opcodes or
+labels. The private resolver rejects missing, truncated, and backward label
+references; `GenerateBytecode` returns those errors with rule context; and
+`rexc` does not create an output artifact after a generation failure.
+Regression tests cover those failures, error propagation, and exact preservation
+of valid 24- and 25-byte action strings beginning with label-like text. Valid
+serialized bytes and bytecode version 2 are unchanged; Go callers must now
+handle the compiler API's error result.
 
 ### REX-010: startup failure must be returned, not fatal-exited
 
