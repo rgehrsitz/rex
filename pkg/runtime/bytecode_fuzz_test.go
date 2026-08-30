@@ -22,7 +22,7 @@ func fuzzSeedBytecode(f *testing.F) []byte {
 		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
 	}}}
 	filename := f.TempDir() + "/valid.bytecode"
-	if err := compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)); err != nil {
+	if err := compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(f, ruleset)); err != nil {
 		f.Fatal(err)
 	}
 	data, err := os.ReadFile(filename)

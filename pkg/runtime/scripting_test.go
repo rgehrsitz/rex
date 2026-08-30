@@ -53,7 +53,7 @@ func TestScriptingEndToEnd(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 
 	// Verify that the fact index includes script parameters
 	assert.Contains(t, bytecodeFile.FactRuleLookupIndex, "temperature")
@@ -144,7 +144,7 @@ func TestDisabledScriptActionDoesNotBlockOtherRules(t *testing.T) {
 		},
 	}}
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 	engine, err := NewEngineFromFile(filename, redisStore, 0)
 	require.NoError(t, err)
 	require.NoError(t, redisStore.SetFact("temperature", 35.0))

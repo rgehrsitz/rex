@@ -12,6 +12,7 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *store.RedisStore) {
@@ -30,7 +31,8 @@ func setupEngine(t *testing.T, jsonData []byte, redisStore *store.RedisStore) *r
 	assert.NoError(t, err)
 
 	// Generate bytecode
-	BytecodeFile := compiler.GenerateBytecode(ruleset)
+	BytecodeFile, err := compiler.GenerateBytecode(ruleset)
+	require.NoError(t, err)
 
 	filename := "e2e_test_bytecode.bin"
 	err = compiler.WriteBytecodeToFile(filename, BytecodeFile)

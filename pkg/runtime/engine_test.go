@@ -34,8 +34,15 @@ func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *store.RedisStore) {
 	return s, redisStore
 }
 
+func mustGenerateBytecode(t testing.TB, ruleset *compiler.Ruleset) compiler.BytecodeFile {
+	t.Helper()
+	bytecode, err := compiler.GenerateBytecode(ruleset)
+	require.NoError(t, err)
+	return bytecode
+}
+
 func createTestBytecodeFile(t *testing.T, ruleset *compiler.Ruleset) string {
-	bytecode := compiler.GenerateBytecode(ruleset)
+	bytecode := mustGenerateBytecode(t, ruleset)
 	filename := "test_bytecode.bin"
 	err := compiler.WriteBytecodeToFile(filename, bytecode)
 	assert.NoError(t, err)
@@ -55,7 +62,7 @@ func validBytecode(t *testing.T) []byte {
 		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
 	}}}
 	filename := t.TempDir() + "/valid.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 
 	data, err := os.ReadFile(filename)
 	require.NoError(t, err)
@@ -86,7 +93,7 @@ func validTwoRuleBytecode(t *testing.T) []byte {
 		},
 	}}
 	filename := t.TempDir() + "/valid-two-rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 
 	data, err := os.ReadFile(filename)
 	require.NoError(t, err)
@@ -285,7 +292,7 @@ func TestNewEngineFromFileAcceptsUndefinedActionScript(t *testing.T) {
 		}},
 	}}}
 	filename := t.TempDir() + "/undefined-script.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 
 	engine, err := NewEngineFromFile(filename, &contextCaptureStore{}, 0)
 	require.NoError(t, err)
@@ -492,7 +499,7 @@ func TestProcessFactUpdateContextDoesNotMutateCandidateIndexWhenDependencyIsMiss
 	}}
 
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 	engine, err := NewEngineFromFile(filename, factStore, 0)
 	require.NoError(t, err)
 	observer := &recordingExecutionObserver{}
@@ -527,7 +534,7 @@ func TestProcessFactUpdateContextEmitsCorrelatedRuleAndActionTrace(t *testing.T)
 	}}}
 
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 	engine, err := NewEngineFromFile(filename, factStore, 0)
 	require.NoError(t, err)
 
@@ -574,7 +581,7 @@ func TestProcessFactUpdateContextTraceRecordsNonMatchingRule(t *testing.T) {
 	}}}
 
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 	engine, err := NewEngineFromFile(filename, factStore, 0)
 	require.NoError(t, err)
 
@@ -628,7 +635,7 @@ func TestExecutionObserverReceivesRuleAndActionOutcomes(t *testing.T) {
 	}}}
 
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 	engine, err := NewEngineFromFile(filename, factStore, 0)
 	require.NoError(t, err)
 	observer := &recordingExecutionObserver{}
@@ -661,7 +668,7 @@ func TestScriptActionExecutesOnce(t *testing.T) {
 	}}}
 
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 	engine, err := NewEngineFromFile(filename, factStore, 0)
 	require.NoError(t, err)
 	engine.SetScriptsEnabled(true)
@@ -687,7 +694,7 @@ func TestProcessFactUpdateContextEnforcesActionLimit(t *testing.T) {
 	}}}
 
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
 	engine, err := NewEngineFromFile(filename, factStore, 0)
 	require.NoError(t, err)
 	assert.Equal(t, DefaultMaxActionsPerEvaluation, engine.maxActionsPerEvaluation)
@@ -882,7 +889,7 @@ func TestProcessFactUpdateSkipsActionForMalformedComparison(t *testing.T) {
 	s, redisStore := setupMiniredis(t)
 	defer s.Close()
 
-	engine := createTestEngine(redisStore, `{
+	engine := createTestEngine(t, redisStore, `{
         "rules": [{
             "name": "temperature_rule",
             "conditions": {
@@ -910,7 +917,7 @@ func TestProcessFactUpdateSimpleRule(t *testing.T) {
 	s, redisStore := setupMiniredis(t)
 	defer s.Close()
 
-	engine := createTestEngine(redisStore, `{
+	engine := createTestEngine(t, redisStore, `{
         "rules": [{
             "name": "simple_rule",
             "conditions": {
@@ -939,7 +946,7 @@ func TestProcessFactUpdateComplexRule(t *testing.T) {
 	s, redisStore := setupMiniredis(t)
 	defer s.Close()
 
-	engine := createTestEngine(redisStore, `{
+	engine := createTestEngine(t, redisStore, `{
         "rules": [{
             "name": "complex_rule",
             "conditions": {
@@ -1017,15 +1024,18 @@ func TestProcessFactUpdateComplexRule(t *testing.T) {
 }
 
 // Helper function to create a test engine
-func createTestEngine(redisStore *store.RedisStore, jsonRuleset string) *Engine {
-	ruleset, _ := compiler.Parse([]byte(jsonRuleset))
-	bytecodeFile := compiler.GenerateBytecode(ruleset)
+func createTestEngine(t *testing.T, redisStore *store.RedisStore, jsonRuleset string) *Engine {
+	t.Helper()
+	ruleset, err := compiler.Parse([]byte(jsonRuleset))
+	require.NoError(t, err)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 
 	filename := "test_bytecode.bin"
-	compiler.WriteBytecodeToFile(filename, bytecodeFile)
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, bytecodeFile))
 	defer os.Remove(filename)
 
-	engine, _ := NewEngineFromFile(filename, redisStore, 0)
+	engine, err := NewEngineFromFile(filename, redisStore, 0)
+	require.NoError(t, err)
 
 	// Synchronize engine's fact store with Redis store
 	facts, _ := redisStore.MGetFacts("temperature", "humidity", "pressure", "status")
@@ -1074,7 +1084,7 @@ func TestNestedScriptCalls(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 	tempFile := "temp_nested_bytecode.bin"
 	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
 	assert.NoError(t, err)
@@ -1149,7 +1159,7 @@ func TestScriptErrorHandling(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 	tempFile := "temp_error_bytecode.bin"
 	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
 	assert.NoError(t, err)
@@ -1211,7 +1221,7 @@ func TestEdgeCases(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 	tempFile := "temp_edge_case_bytecode.bin"
 	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
 	assert.NoError(t, err)

@@ -42,7 +42,7 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-011 | TLS and environment-based Redis credentials are unsupported | Confirmed by inspection | P1 for managed Redis |
 | REX-012 | Local facts are unbounded and channel routing is convention-only | Confirmed by inspection | P2 / design decision |
 | REX-013 | CodeQL and Dependabot housekeeping are incomplete | Partially resolved 2026-08-30 | P2 |
-| REX-014 | Unresolved compiler labels can produce unloadable bytecode | Confirmed by review | P1 |
+| REX-014 | Unresolved compiler labels can produce unloadable bytecode | Fixed and verified 2026-08-30 | P1 |
 
 ### Important dialect clarification
 
@@ -182,11 +182,16 @@ wrote bytecode successfully even though `rexd` will reject the artifact. Its
 bounds guard also uses `i+5 < len(bytecode)`, skipping a four-byte operand that
 ends exactly at the end of the slice.
 
-**Required work:** make label resolution return an error that propagates
-through bytecode generation and `rexc`; change the operand bounds check to
-accept an exactly complete operand; and add tests proving unresolved and
-truncated labels cannot produce a reportedly successful artifact. Keep this
-compiler error-propagation change separate from runtime jump validation.
+**Resolution (2026-08-30):** bytecode generation records jump and label offsets
+while emitting instructions, then resolves only those recorded references. It
+no longer scans arbitrary operand bytes that can resemble jump opcodes or
+labels. The private resolver rejects missing, truncated, and backward label
+references; `GenerateBytecode` returns those errors with rule context; and
+`rexc` does not create an output artifact after a generation failure.
+Regression tests cover those failures, error propagation, and exact preservation
+of valid 24- and 25-byte action strings beginning with label-like text. Valid
+serialized bytes and bytecode version 2 are unchanged; Go callers must now
+handle the compiler API's error result.
 
 ### REX-010: startup failure must be returned, not fatal-exited
 
@@ -281,8 +286,8 @@ Do not start these before P0 and the P1 contract choices are complete:
 2. ~~REX-002 through REX-005 as the compiler-truthfulness milestone.~~
    Completed and verified 2026-08-30.
 3. ~~REX-008 as an isolated bytecode-validation PR.~~ Completed and verified
-   2026-08-30. REX-014 is the next compiler-truthfulness PR, followed by the
-   REX-007 language-contract decision.
+   2026-08-30. ~~REX-014 as a compiler-truthfulness follow-up.~~ Completed and
+   verified 2026-08-30. REX-007 is the next language-contract decision.
 4. Decide script and delivery semantics; complete REX-006, REX-010, and
    REX-011 according to that decision.
 5. Address REX-009, REX-012, and REX-013, then add the semantics safety net.

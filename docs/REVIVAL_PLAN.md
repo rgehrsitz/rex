@@ -55,7 +55,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Reject hybrid leaf/group conditions and groups containing both `all` and `any` (REX-002/003).
 - [x] Reject action types that the runtime cannot execute (REX-004).
 - [x] Reject duplicate rule names during compilation (REX-005).
-- [ ] Propagate unresolved-label failures through bytecode generation and `rexc` (REX-014).
+- [x] Propagate unresolved-label failures through bytecode generation and `rexc` (REX-014).
 
 **Completion criteria:** corrupt or incompatible bytecode returns a clear error, never a panic; identical input produces identical output.
 

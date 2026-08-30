@@ -19,6 +19,14 @@ type Instruction struct {
 	Operands []byte
 }
 
+type jumpReference struct {
+	opcode Opcode
+	offset int
+	label  string
+}
+
+type labelResolver func([]byte, []jumpReference, map[string]int) ([]byte, error)
+
 // Size returns the size of the instruction in bytes, including its operands.
 func (instr *Instruction) Size() int {
 	return 1 + len(instr.Operands) // 1 byte for the opcode + length of operands
@@ -67,7 +75,13 @@ func RemoveLabels(instructions []Instruction) []Instruction {
 	return finalInstructions
 }
 
-func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
+// GenerateBytecode compiles a parsed ruleset and fails if its control-flow
+// labels cannot be resolved to concrete byte offsets.
+func GenerateBytecode(ruleset *Ruleset) (BytecodeFile, error) {
+	return generateBytecode(ruleset, resolveLabelOffsets)
+}
+
+func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFile, error) {
 	var bytecode []byte
 
 	for _, rule := range ruleset.Rules {
@@ -120,6 +134,15 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 		instructions = OptimizeInstructions(instructions)
 		instructions = CombineJIFJIT(instructions)
 		instructions = RemoveUnusedLabels(instructions)
+
+		jumpReferences := make([]jumpReference, 0)
+		labelOffsets := make(map[string]int)
+		lastLabel := ""
+		for _, instr := range instructions {
+			if instr.Opcode == LABEL {
+				lastLabel = string(instr.Operands)
+			}
+		}
 
 		// Append the optimized instructions to the rule's bytecode
 		for _, instr := range instructions {
@@ -229,9 +252,14 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 
 					ruleBytecode = append(ruleBytecode, byte(comparisonOpcode))
 
+					jumpOffset := len(ruleBytecode)
 					ruleBytecode = append(ruleBytecode, byte(instr.Opcode))
-
 					ruleBytecode = append(ruleBytecode, []byte(label)...)
+					jumpReferences = append(jumpReferences, jumpReference{
+						opcode: instr.Opcode,
+						offset: jumpOffset,
+						label:  label,
+					})
 
 					logging.Logger.Debug().Msgf("Appended separated instructions for condition: factOpcode=%v, valueOpcode=%v, comparisonOpcode=%v", factOpcode, valueOpcode, comparisonOpcode)
 					continue
@@ -239,6 +267,13 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 			}
 
 			// Append the instruction as usual
+			if instr.Opcode == LABEL {
+				label := string(instr.Operands)
+				if _, exists := labelOffsets[label]; exists {
+					return BytecodeFile{}, fmt.Errorf("generate rule %q: duplicate label %q", rule.Name, label)
+				}
+				labelOffsets[label] = len(ruleBytecode)
+			}
 			ruleBytecode = append(ruleBytecode, byte(instr.Opcode))
 			ruleBytecode = append(ruleBytecode, instr.Operands...)
 			logging.Logger.Debug().Msgf("Appended instruction: Opcode=%v, Operands=%v", instr.Opcode, instr.Operands)
@@ -308,32 +343,45 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 			actionBytecode = append(actionBytecode, byte(ACTION_END))
 		}
 
-		var lastInstructionStart int
-		// Find the start of the last instruction
-		for i := len(ruleBytecode) - 1; i >= 0; i-- {
-			if ruleBytecode[i] == byte(LABEL) && i+1 < len(ruleBytecode) && ruleBytecode[i+1] == 'L' {
-				lastInstructionStart = i
-				break
+		lastInstructionStart := len(ruleBytecode)
+		if lastLabel != "" {
+			var ok bool
+			lastInstructionStart, ok = labelOffsets[lastLabel]
+			if !ok {
+				return BytecodeFile{}, fmt.Errorf("generate rule %q: terminal label %q not found", rule.Name, lastLabel)
 			}
 		}
 
 		logging.Logger.Debug().Msgf("Last instruction start: %v", lastInstructionStart)
 
-		lastInstruction := make([]byte, len(ruleBytecode)-lastInstructionStart)
-		copy(lastInstruction, ruleBytecode[lastInstructionStart:])
-
+		lastInstruction := ruleBytecode[lastInstructionStart:]
 		logging.Logger.Debug().Msgf("Last instruction: %v", lastInstruction)
-		tempBytecode := ruleBytecode[:len(ruleBytecode)-len(lastInstruction)]
+		tempBytecode := make([]byte, 0, len(ruleBytecode)+len(actionBytecode))
+		tempBytecode = append(tempBytecode, ruleBytecode[:lastInstructionStart]...)
 		logging.Logger.Debug().Msgf("Temp bytecode: %v", tempBytecode)
 		tempBytecode = append(tempBytecode, actionBytecode...)
 		logging.Logger.Debug().Msgf("Temp bytecode after appending actions: %v", tempBytecode)
 		tempBytecode = append(tempBytecode, lastInstruction...)
 		logging.Logger.Debug().Msgf("Temp bytecode after appending last instruction: %v", tempBytecode)
 		ruleBytecode = tempBytecode
+		for label, offset := range labelOffsets {
+			if offset >= lastInstructionStart {
+				labelOffsets[label] = offset + len(actionBytecode)
+			}
+		}
+		for i := range jumpReferences {
+			if jumpReferences[i].offset >= lastInstructionStart {
+				jumpReferences[i].offset += len(actionBytecode)
+			}
+		}
 
 		ruleBytecode = append(ruleBytecode, byte(RULE_END))
 
-		ruleBytecode = ReplaceLabelOffsets(ruleBytecode)
+		var err error
+		ruleBytecode, err = resolveLabels(ruleBytecode, jumpReferences, labelOffsets)
+		if err != nil {
+			return BytecodeFile{}, fmt.Errorf("resolve labels for rule %q: %w", rule.Name, err)
+		}
 		bytecode = append(bytecode, ruleBytecode...)
 	}
 
@@ -351,7 +399,7 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 		RuleExecIndex:       ruleExecIndex,
 		FactRuleLookupIndex: factRuleIndex,
 		FactDependencyIndex: factDepIndex,
-	}
+	}, nil
 }
 
 // floatToBytes converts a float64 value to a byte slice.
@@ -622,57 +670,35 @@ func isValidFactLoadingSequence(opcode Opcode) bool {
 	}
 }
 
-// ReplaceLabelOffsets replaces the label offsets in the given bytecode slice.
-// It searches for jump instructions (JUMP_IF_FALSE and JUMP_IF_TRUE) and checks if the next 4 bytes form a label 'Lxyz'.
-// If a valid label is found, it scans forward to find the label definition and calculates the relative offset from the current instruction to the label.
-// The label is then replaced with the offset bytes in the bytecode slice.
-// If a label is not found for a jump instruction, a warning message is logged.
-// The modified bytecode slice is returned.
-func ReplaceLabelOffsets(bytecode []byte) []byte {
+// resolveLabelOffsets replaces compiler-recorded jump operands without scanning
+// arbitrary instruction data for bytes that resemble opcodes or labels.
+func resolveLabelOffsets(bytecode []byte, jumps []jumpReference, labels map[string]int) ([]byte, error) {
 	logging.Logger.Debug().Msg("Replacing label offsets")
 
-	for i := 0; i < len(bytecode); {
-		opcode := Opcode(bytecode[i])
-		if (opcode == JUMP_IF_FALSE || opcode == JUMP_IF_TRUE) && i+5 < len(bytecode) {
-			// Check if the next 4 bytes form a label 'Lxyz'
-			labelStart := i + 1
-			label := string(bytecode[labelStart : labelStart+4])
-			if label[0] == 'L' && isDigit(label[1]) && isDigit(label[2]) && isDigit(label[3]) {
-				labelOffset := -1
-				// Scan forward to find the label definition
-				for j := 0; j < len(bytecode); j++ {
-					if bytecode[j] == byte(LABEL) && string(bytecode[j+1:j+5]) == label {
-						labelOffset = j
-						break
-					}
-				}
-
-				if labelOffset != -1 {
-					// Calculate the relative offset from the current instruction to the label
-					relativeOffset := labelOffset - i
-					offsetBytes := make([]byte, 4)
-					binary.LittleEndian.PutUint32(offsetBytes, uint32(relativeOffset))
-					// Replace the label with the offset bytes
-					copy(bytecode[labelStart:], offsetBytes)
-					logging.Logger.Debug().Str("label", label).Int("position", i).Int("offset", relativeOffset).Msg("Replaced label with offset")
-				} else {
-					logging.Logger.Warn().Str("label", label).Msg("Label not found for jump instruction")
-				}
-				i += 5 // Move past the JUMP instruction and the 4-byte label
-			} else {
-				i += 1 // Move to the next byte
-			}
-		} else {
-			i += 1 // Move to the next byte
+	for _, jump := range jumps {
+		if jump.offset < 0 || jump.offset+5 > len(bytecode) {
+			return nil, fmt.Errorf("truncated %s operand at byte offset %d", jump.opcode, jump.offset)
 		}
+		if opcode := Opcode(bytecode[jump.offset]); opcode != jump.opcode {
+			return nil, fmt.Errorf("expected %s at byte offset %d, found %s", jump.opcode, jump.offset, opcode)
+		}
+		if label := string(bytecode[jump.offset+1 : jump.offset+5]); label != jump.label {
+			return nil, fmt.Errorf("expected label %q for %s at byte offset %d, found %q", jump.label, jump.opcode, jump.offset, label)
+		}
+
+		labelOffset, ok := labels[jump.label]
+		if !ok {
+			return nil, fmt.Errorf("unresolved label %q for %s at byte offset %d", jump.label, jump.opcode, jump.offset)
+		}
+		if labelOffset <= jump.offset {
+			return nil, fmt.Errorf("label %q for %s at byte offset %d is not forward", jump.label, jump.opcode, jump.offset)
+		}
+
+		relativeOffset := labelOffset - jump.offset
+		binary.LittleEndian.PutUint32(bytecode[jump.offset+1:jump.offset+5], uint32(relativeOffset))
+		logging.Logger.Debug().Str("label", jump.label).Int("position", jump.offset).Int("offset", relativeOffset).Msg("Replaced label with offset")
 	}
 
 	logging.Logger.Debug().Msg("Label offsets replacement completed")
-	return bytecode
-}
-
-// isDigit checks if the given byte is a digit.
-// It returns true if the byte is a digit (0-9), otherwise false.
-func isDigit(b byte) bool {
-	return b >= '0' && b <= '9'
+	return bytecode, nil
 }

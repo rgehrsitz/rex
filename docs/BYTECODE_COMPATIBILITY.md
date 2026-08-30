@@ -86,6 +86,11 @@ bytes nor alter their meaning. If there is uncertainty, create a new format
 version and retain an explicit reader for the old version only when supporting
 existing deployed artifacts is a release requirement.
 
+`compiler.GenerateBytecode` returns an error that callers must check. Label
+resolution is an internal compiler step, so unresolved control-flow labels
+cannot be reported as successfully compiled artifacts. This source API does not
+change the version-2 layout or the bytes produced for a valid ruleset.
+
 ## Changing the format
 
 For every new format version:

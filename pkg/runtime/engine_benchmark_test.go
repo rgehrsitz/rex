@@ -66,7 +66,7 @@ func createMockEngine(b *testing.B, redisStore *store.RedisStore) *Engine {
 	}
 
 	// Generate bytecode
-	bytecodeFile := compiler.GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(b, ruleset)
 
 	engine := &Engine{
 		bytecode:            bytecodeFile.Instructions,
