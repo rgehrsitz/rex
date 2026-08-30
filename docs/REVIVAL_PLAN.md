@@ -39,6 +39,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Keep Redis transport types out of the engine-facing store interface.
 - [x] Define a canonical JSON fact-event format and decode JSON values consistently, including strings and booleans.
 - [x] Make comparison failures return `false`; never panic from an unchecked type assertion.
+- [x] Keep missing-dependency filtering from mutating the persistent fact-to-rule index (REX-001).
 - [x] Add cancellation, signal-handling, duplicate-delivery, malformed-event, and shutdown integration tests.
 
 **Completion criteria:** every running resource has an owner and shutdown path; an event is consumed once by the configured path; malformed data cannot crash `rexd`.
@@ -50,6 +51,9 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Sort map-derived data before serialization so compiling the same ruleset produces identical bytecode.
 - [x] Add fuzz tests for ruleset parsing and bytecode decoding, plus corrupt/truncated-artifact regression tests.
 - [x] Document bytecode compatibility and an artifact versioning policy in [the bytecode compatibility guide](BYTECODE_COMPATIBILITY.md).
+- [ ] Reject hybrid leaf/group conditions and groups containing both `all` and `any` (REX-002/003).
+- [ ] Reject action types that the runtime cannot execute (REX-004).
+- [ ] Reject duplicate rule names during compilation (REX-005).
 
 **Completion criteria:** corrupt or incompatible bytecode returns a clear error, never a panic; identical input produces identical output.
 
