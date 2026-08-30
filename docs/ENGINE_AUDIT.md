@@ -41,7 +41,7 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-010 | Redis startup exits through the logger instead of returning an error | Confirmed by inspection | P1 |
 | REX-011 | TLS and environment-based Redis credentials are unsupported | Confirmed by inspection | P1 for managed Redis |
 | REX-012 | Local facts are unbounded and channel routing is convention-only | Confirmed by inspection | P2 / design decision |
-| REX-013 | CodeQL and Dependabot housekeeping are incomplete | Confirmed | P2 |
+| REX-013 | CodeQL and Dependabot housekeeping are incomplete | Partially resolved 2026-08-30 | P2 |
 
 ### Important dialect clarification
 
@@ -222,9 +222,10 @@ may reduce round trips, but it must not be presented as a delivery guarantee.
 
 ### REX-013: small repository maintenance
 
-- Update CodeQL from `actions/checkout@v4` to the currently used v7.
-- Resolve Dependabot PRs #8 and #9 intentionally; do not leave them as stale
-  duplicate work.
+- CodeQL now uses `actions/checkout@v7` and `github/codeql-action@v4`; the
+  workflow is active again after GitHub previously disabled it for repository
+  inactivity.
+- Dependabot PRs #8 and #9 were refreshed, verified, and intentionally merged.
 - Rebuild or pin the local `govulncheck` tool with Go 1.26 so local scans match
   CI.
 
