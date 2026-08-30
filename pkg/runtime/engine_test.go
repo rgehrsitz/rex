@@ -62,6 +62,62 @@ func validBytecode(t *testing.T) []byte {
 	return data
 }
 
+func validTwoRuleBytecode(t *testing.T) []byte {
+	t.Helper()
+
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{
+		{
+			Name: "temperature_rule",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+				Fact:     "temperature",
+				Operator: "GT",
+				Value:    30.0,
+			}}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
+		},
+		{
+			Name: "humidity_rule",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+				Fact:     "humidity",
+				Operator: "GT",
+				Value:    80.0,
+			}}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "humid"}},
+		},
+	}}
+	filename := t.TempDir() + "/valid-two-rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+
+	data, err := os.ReadFile(filename)
+	require.NoError(t, err)
+	return data
+}
+
+func firstConditionalJumpOffset(data []byte) int {
+	instructionsEnd := int(binary.LittleEndian.Uint32(data[16:20]))
+	instructions := data[compiler.HeaderSize:instructionsEnd]
+	jumpOffset := bytes.Index(instructions, []byte{byte(compiler.GT_FLOAT), byte(compiler.JUMP_IF_FALSE)})
+	if jumpOffset == -1 {
+		panic("validBytecode fixture must contain a conditional jump")
+	}
+	return compiler.HeaderSize + jumpOffset + 1
+}
+
+func secondRuleLabelResumeOffset(data []byte) int {
+	instructionsEnd := int(binary.LittleEndian.Uint32(data[16:20]))
+	instructions := data[compiler.HeaderSize:instructionsEnd]
+	secondRulePrefix := append([]byte{byte(compiler.RULE_START), byte(len("humidity_rule"))}, []byte("humidity_rule")...)
+	secondRule := bytes.Index(instructions, secondRulePrefix)
+	if secondRule == -1 {
+		panic("fixture must contain the second rule")
+	}
+	label := bytes.Index(instructions[secondRule:], []byte{byte(compiler.LABEL), 'L'})
+	if label == -1 {
+		panic("fixture's second rule must contain a label")
+	}
+	return compiler.HeaderSize + secondRule + label + 5
+}
+
 type eventConsumerProbeStore struct {
 	receiveCalls chan struct{}
 }
@@ -237,6 +293,7 @@ func TestNewEngineFromFileAcceptsUndefinedActionScript(t *testing.T) {
 }
 
 func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
+	twoRuleData := validTwoRuleBytecode(t)
 	tests := []struct {
 		name                string
 		mutate              func([]byte) []byte
@@ -283,6 +340,48 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				return data
 			},
 			recalculateChecksum: true,
+		},
+		{
+			name: "zero offset conditional jump",
+			mutate: func(data []byte) []byte {
+				jumpOffset := firstConditionalJumpOffset(data)
+				binary.LittleEndian.PutUint32(data[jumpOffset+1:jumpOffset+5], 0)
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "without a preceding label",
+		},
+		{
+			name: "conditional jump between instructions",
+			mutate: func(data []byte) []byte {
+				jumpOffset := firstConditionalJumpOffset(data)
+				binary.LittleEndian.PutUint32(data[jumpOffset+1:jumpOffset+5], 2)
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "targets non-instruction-section offset",
+		},
+		{
+			name: "conditional jump beyond instruction section",
+			mutate: func(data []byte) []byte {
+				jumpOffset := firstConditionalJumpOffset(data)
+				binary.LittleEndian.PutUint32(data[jumpOffset+1:jumpOffset+5], ^uint32(0))
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "targets out-of-range instruction-section offset",
+		},
+		{
+			name: "conditional jump into a following rule",
+			mutate: func(_ []byte) []byte {
+				data := append([]byte(nil), twoRuleData...)
+				jumpOffset := firstConditionalJumpOffset(data)
+				targetOffset := secondRuleLabelResumeOffset(data)
+				binary.LittleEndian.PutUint32(data[jumpOffset+1:jumpOffset+5], uint32(targetOffset-(jumpOffset+5)))
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "crosses rule boundary",
 		},
 		{
 			name: "declared rule count mismatch",

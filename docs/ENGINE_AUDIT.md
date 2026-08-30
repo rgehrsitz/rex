@@ -36,12 +36,13 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-005 | Duplicate rule names compile but bytecode load rejects them | Fixed and verified 2026-08-30 | P0 |
 | REX-006 | Script timeout does not stop JavaScript execution | Confirmed by code inspection | P1, if scripts enabled |
 | REX-007 | Priority has no execution-order effect; documentation disagrees | Confirmed by execution and inspection | P1 |
-| REX-008 | Bytecode jump targets are not semantically validated | Confirmed by execution | P1 |
+| REX-008 | Bytecode jump targets are not semantically validated | Fixed and verified 2026-08-30 | P1 |
 | REX-009 | Actions perform an unnecessary post-write Redis `GET` | Confirmed by execution and inspection | P2 performance |
 | REX-010 | Redis startup exits through the logger instead of returning an error | Confirmed by inspection | P1 |
 | REX-011 | TLS and environment-based Redis credentials are unsupported | Confirmed by inspection | P1 for managed Redis |
 | REX-012 | Local facts are unbounded and channel routing is convention-only | Confirmed by inspection | P2 / design decision |
 | REX-013 | CodeQL and Dependabot housekeeping are incomplete | Partially resolved 2026-08-30 | P2 |
+| REX-014 | Unresolved compiler labels can produce unloadable bytecode | Confirmed by review | P1 |
 
 ### Important dialect clarification
 
@@ -163,10 +164,29 @@ on instruction boundaries. A probe changed a valid artifact's `JUMP_IF_FALSE`
 offset to zero, recomputed its CRC-32, and the runtime loaded it and executed
 an action despite the false condition.
 
-**Required work:** while validating bytecode, record every instruction boundary
-and verify every jump target is in range and targets a valid instruction
-boundary. Treat CRC-32 only as accidental-corruption detection, as already
-documented; it is not authenticity protection.
+**Resolution (2026-08-30):** bytecode validation now records every instruction
+boundary and the resume point following each `LABEL`. Every conditional jump
+must remain inside the instruction section, land exactly on an instruction
+boundary, and target one of those compiler-generated label resume points. The
+loader rejects the audited zero-offset mutation, a jump into an instruction's
+operands, an out-of-range jump, and a jump into a different rule even when the
+artifact checksum is recomputed. Diagnostics explicitly identify offsets as
+relative to the instruction section. CRC-32 remains accidental-corruption
+detection, not authenticity protection.
+
+### REX-014: unresolved labels fail only when the runtime loads the artifact
+
+`ReplaceLabelOffsets` logs a warning when it cannot find a jump's label, then
+leaves the four ASCII label bytes in place. `rexc` can therefore report that it
+wrote bytecode successfully even though `rexd` will reject the artifact. Its
+bounds guard also uses `i+5 < len(bytecode)`, skipping a four-byte operand that
+ends exactly at the end of the slice.
+
+**Required work:** make label resolution return an error that propagates
+through bytecode generation and `rexc`; change the operand bounds check to
+accept an exactly complete operand; and add tests proving unresolved and
+truncated labels cannot produce a reportedly successful artifact. Keep this
+compiler error-propagation change separate from runtime jump validation.
 
 ### REX-010: startup failure must be returned, not fatal-exited
 
@@ -260,8 +280,9 @@ Do not start these before P0 and the P1 contract choices are complete:
    Completed and verified 2026-08-30.
 2. ~~REX-002 through REX-005 as the compiler-truthfulness milestone.~~
    Completed and verified 2026-08-30.
-3. REX-008 and REX-007 as bytecode/language-contract PRs, each with updated
-   documentation.
+3. ~~REX-008 as an isolated bytecode-validation PR.~~ Completed and verified
+   2026-08-30. REX-014 is the next compiler-truthfulness PR, followed by the
+   REX-007 language-contract decision.
 4. Decide script and delivery semantics; complete REX-006, REX-010, and
    REX-011 according to that decision.
 5. Address REX-009, REX-012, and REX-013, then add the semantics safety net.

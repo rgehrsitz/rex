@@ -84,26 +84,61 @@ func readBytecodeHeader(data []byte) (bytecodeHeader, error) {
 
 func validateInstructions(data []byte) (map[int]string, error) {
 	ruleStarts := make(map[int]string)
+	instructionBoundaries := make(map[int]struct{})
+	labelTargets := make(map[int]int)
+	type jumpReference struct {
+		opcode    compiler.Opcode
+		start     int
+		ruleStart int
+		target    uint64
+	}
+	var jumps []jumpReference
+	currentRuleStart := -1
+
 	for offset := 0; offset < len(data); {
 		start := offset
+		instructionBoundaries[start] = struct{}{}
 		opcode := compiler.Opcode(data[offset])
 		offset++
 
 		var err error
 		switch opcode {
 		case compiler.RULE_START:
+			currentRuleStart = start
 			var name string
 			name, offset, err = readByteString(data, offset)
 			if err == nil {
 				if _, exists := ruleStarts[start]; exists {
-					err = fmt.Errorf("duplicate rule start at instruction offset %d", start)
+					err = fmt.Errorf("duplicate rule start at instruction-section offset %d", start)
 				} else {
 					ruleStarts[start] = name
 				}
 			}
 
-		case compiler.PRIORITY, compiler.JUMP_IF_TRUE, compiler.JUMP_IF_FALSE, compiler.LABEL:
+		case compiler.PRIORITY:
 			offset, err = consumeFixed(data, offset, 4)
+
+		case compiler.JUMP_IF_TRUE, compiler.JUMP_IF_FALSE:
+			operandStart := offset
+			offset, err = consumeFixed(data, offset, 4)
+			if err == nil {
+				relativeOffset := binary.LittleEndian.Uint32(data[operandStart:offset])
+				jumps = append(jumps, jumpReference{
+					opcode:    opcode,
+					start:     start,
+					ruleStart: currentRuleStart,
+					target:    uint64(offset) + uint64(relativeOffset),
+				})
+			}
+
+		case compiler.LABEL:
+			offset, err = consumeFixed(data, offset, 4)
+			if err == nil {
+				// ReplaceLabelOffsets writes labelStart - jumpStart. The executor
+				// adds that value after consuming the five-byte jump, so it resumes
+				// five bytes after labelStart: immediately after this LABEL.
+				labelTargets[offset] = currentRuleStart
+			}
 
 		case compiler.LOAD_CONST_FLOAT, compiler.ACTION_VALUE_FLOAT:
 			offset, err = consumeFixed(data, offset, 8)
@@ -124,14 +159,34 @@ func validateInstructions(data []byte) (map[int]string, error) {
 		case compiler.EQ_FLOAT, compiler.NEQ_FLOAT, compiler.LT_FLOAT, compiler.LTE_FLOAT,
 			compiler.GT_FLOAT, compiler.GTE_FLOAT, compiler.EQ_STRING, compiler.NEQ_STRING,
 			compiler.CONTAINS_STRING, compiler.NOT_CONTAINS_STRING, compiler.EQ_BOOL,
-			compiler.NEQ_BOOL, compiler.ACTION_START, compiler.ACTION_END, compiler.RULE_END:
+			compiler.NEQ_BOOL, compiler.ACTION_START, compiler.ACTION_END:
 			// These instructions do not have operands.
 
+		case compiler.RULE_END:
+			currentRuleStart = -1
+
 		default:
-			return nil, fmt.Errorf("unsupported opcode %d at instruction offset %d", opcode, start)
+			return nil, fmt.Errorf("unsupported opcode %d at instruction-section offset %d", opcode, start)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("invalid opcode %d at instruction offset %d: %w", opcode, start, err)
+			return nil, fmt.Errorf("invalid opcode %d at instruction-section offset %d: %w", opcode, start, err)
+		}
+	}
+
+	for _, jump := range jumps {
+		if jump.target >= uint64(len(data)) {
+			return nil, fmt.Errorf("%s at instruction-section offset %d targets out-of-range instruction-section offset %d", jump.opcode, jump.start, jump.target)
+		}
+		target := int(jump.target)
+		if _, ok := instructionBoundaries[target]; !ok {
+			return nil, fmt.Errorf("%s at instruction-section offset %d targets non-instruction-section offset %d", jump.opcode, jump.start, target)
+		}
+		targetRuleStart, ok := labelTargets[target]
+		if !ok {
+			return nil, fmt.Errorf("%s at instruction-section offset %d targets instruction-section offset %d without a preceding label", jump.opcode, jump.start, target)
+		}
+		if jump.ruleStart < 0 || targetRuleStart != jump.ruleStart {
+			return nil, fmt.Errorf("%s at instruction-section offset %d crosses rule boundary to instruction-section offset %d", jump.opcode, jump.start, target)
 		}
 	}
 
@@ -194,7 +249,7 @@ func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]st
 
 		actualName, ok := ruleStarts[instructionOffset]
 		if !ok || actualName != name {
-			return nil, fmt.Errorf("rule execution index for %q points to invalid instruction offset %d", name, instructionOffset)
+			return nil, fmt.Errorf("rule execution index for %q points to invalid instruction-section offset %d", name, instructionOffset)
 		}
 		if _, exists := ruleNames[name]; exists {
 			return nil, fmt.Errorf("duplicate rule execution index entry for %q", name)
