@@ -42,6 +42,7 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-011 | TLS and environment-based Redis credentials are unsupported | Confirmed by inspection | P1 for managed Redis |
 | REX-012 | Local facts are unbounded and channel routing is convention-only | Confirmed by inspection | P2 / design decision |
 | REX-013 | CodeQL and Dependabot housekeeping are incomplete | Partially resolved 2026-08-30 | P2 |
+| REX-014 | Unresolved compiler labels can produce unloadable bytecode | Confirmed by review | P1 |
 
 ### Important dialect clarification
 
@@ -168,9 +169,24 @@ boundary and the resume point following each `LABEL`. Every conditional jump
 must remain inside the instruction section, land exactly on an instruction
 boundary, and target one of those compiler-generated label resume points. The
 loader rejects the audited zero-offset mutation, a jump into an instruction's
-operands, and an out-of-range jump even when the artifact checksum is
-recomputed. CRC-32 remains accidental-corruption detection, not authenticity
-protection.
+operands, an out-of-range jump, and a jump into a different rule even when the
+artifact checksum is recomputed. Diagnostics explicitly identify offsets as
+relative to the instruction section. CRC-32 remains accidental-corruption
+detection, not authenticity protection.
+
+### REX-014: unresolved labels fail only when the runtime loads the artifact
+
+`ReplaceLabelOffsets` logs a warning when it cannot find a jump's label, then
+leaves the four ASCII label bytes in place. `rexc` can therefore report that it
+wrote bytecode successfully even though `rexd` will reject the artifact. Its
+bounds guard also uses `i+5 < len(bytecode)`, skipping a four-byte operand that
+ends exactly at the end of the slice.
+
+**Required work:** make label resolution return an error that propagates
+through bytecode generation and `rexc`; change the operand bounds check to
+accept an exactly complete operand; and add tests proving unresolved and
+truncated labels cannot produce a reportedly successful artifact. Keep this
+compiler error-propagation change separate from runtime jump validation.
 
 ### REX-010: startup failure must be returned, not fatal-exited
 
@@ -265,7 +281,8 @@ Do not start these before P0 and the P1 contract choices are complete:
 2. ~~REX-002 through REX-005 as the compiler-truthfulness milestone.~~
    Completed and verified 2026-08-30.
 3. ~~REX-008 as an isolated bytecode-validation PR.~~ Completed and verified
-   2026-08-30. REX-007 remains the next language-contract PR.
+   2026-08-30. REX-014 is the next compiler-truthfulness PR, followed by the
+   REX-007 language-contract decision.
 4. Decide script and delivery semantics; complete REX-006, REX-010, and
    REX-011 according to that decision.
 5. Address REX-009, REX-012, and REX-013, then add the semantics safety net.

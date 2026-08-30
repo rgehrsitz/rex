@@ -57,7 +57,10 @@ end of the jump instruction. A valid destination must be inside the
 instruction stream, start an instruction, and immediately follow a `LABEL`
 instruction. These constraints match the control flow emitted by `rexc` and
 prevent a corrupted jump from entering an operand or bypassing its intended
-branch boundary.
+branch boundary. The compiler encodes the distance from the start of the jump
+instruction to the start of the `LABEL`; because both instructions occupy five
+bytes, the runtime's end-of-jump-relative calculation resumes immediately
+after that label. A jump and its destination must also belong to the same rule.
 
 The v2 checksum detects accidental corruption; it is not a signature or an
 authenticity mechanism. Do not treat an artifact as trusted merely because its
