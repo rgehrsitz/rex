@@ -50,9 +50,6 @@
                     },
                     "value": {
                       "type": ["string", "number", "boolean"]
-                    },
-                    "customProperty": {
-                      "type": "object"
                     }
                   },
                   "required": ["type", "target", "value"],

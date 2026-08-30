@@ -248,7 +248,7 @@ func TestParseRejectsRulesCompilerCannotFaithfullyExecute(t *testing.T) {
 				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},
 				"actions":[{"type":"sendMessage","target":"alerts","value":"hot"}]
 			}]}`,
-			wantError: "unsupported action type",
+			wantError: `Invalid action at rules[0].actions[0]: COMPILE: unsupported action type "sendMessage"`,
 		},
 		{
 			name: "duplicate rule names",
@@ -257,6 +257,33 @@ func TestParseRejectsRulesCompilerCannotFaithfullyExecute(t *testing.T) {
 				{"name":"same","conditions":{"all":[{"fact":"b","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"second","value":true}]}
 			]}`,
 			wantError: `duplicate rule name "same"`,
+		},
+		{
+			name: "unknown rule field",
+			jsonData: `{"rules":[{
+				"name":"typo","priorty":5,
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: `json: unknown field "priorty"`,
+		},
+		{
+			name: "unknown condition field",
+			jsonData: `{"rules":[{
+				"name":"typo",
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30,"unitz":"C"}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: `json: unknown field "unitz"`,
+		},
+		{
+			name: "unknown action field",
+			jsonData: `{"rules":[{
+				"name":"typo",
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot","retryz":3}]
+			}]}`,
+			wantError: `json: unknown field "retryz"`,
 		},
 	}
 
@@ -283,7 +310,7 @@ func TestParseInvalidRuleStructure(t *testing.T) {
     }`)
 	_, err := Parse(invalidRule)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "Invalid rule")
+	assert.Contains(t, err.Error(), `json: unknown field "invalid"`)
 }
 
 func TestParseNestedConditions(t *testing.T) {

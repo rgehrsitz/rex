@@ -3,19 +3,32 @@
 package compiler
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strconv"
 
 	"rgehrsitz/rex/pkg/logging"
 )
 
+const exclusiveConditionGroupError = "condition group must contain exactly one of all or any"
+
 // Parse parses the provided JSON data and returns a pointer to a Ruleset and an error.
 func Parse(jsonData []byte) (*Ruleset, error) {
 	var ruleset Ruleset
-	err := json.Unmarshal(jsonData, &ruleset)
+	decoder := json.NewDecoder(bytes.NewReader(jsonData))
+	decoder.DisallowUnknownFields()
+	err := decoder.Decode(&ruleset)
 	if err != nil {
+		return nil, logging.NewError(logging.ErrorTypeParse, jsonErrorMessage(jsonData, err), err, nil)
+	}
+	var extra json.RawMessage
+	if err := decoder.Decode(&extra); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
 		return nil, logging.NewError(logging.ErrorTypeParse, jsonErrorMessage(jsonData, err), err, nil)
 	}
 	if len(ruleset.Rules) == 0 {
@@ -24,7 +37,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	ruleNames := make(map[string]int, len(ruleset.Rules))
 	for i, rule := range ruleset.Rules {
 		if err := validateRule(&rule); err != nil {
-			return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid rule: %v", err), err, map[string]interface{}{"rule_name": rule.Name})
+			return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid rule at rules[%d]: %v", i, err), err, map[string]interface{}{"rule_name": rule.Name, "rule_index": i})
 		}
 		if firstIndex, exists := ruleNames[rule.Name]; exists {
 			return nil, logging.NewError(
@@ -47,7 +60,7 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 
 		for j, action := range rule.Actions {
 			if err := validateAction(&action); err != nil {
-				return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid action: %v", err), err, map[string]interface{}{"rule_name": rule.Name, "action_type": action.Type})
+				return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid action at rules[%d].actions[%d]: %v", i, j, err), err, map[string]interface{}{"rule_name": rule.Name, "rule_index": i, "action_index": j, "action_type": action.Type})
 			}
 			rule.Actions[j] = action
 		}
@@ -68,7 +81,7 @@ func jsonErrorMessage(data []byte, err error) string {
 		offset = typeErr.Offset
 	}
 	if offset == 0 {
-		return "Failed to unmarshal JSON data"
+		return fmt.Sprintf("Failed to unmarshal JSON data: %v", err)
 	}
 
 	line, column := jsonLineColumn(data, offset)
@@ -129,7 +142,7 @@ func validateAndOrderConditionGroup(cg *ConditionGroup) error {
 		return logging.NewError(logging.ErrorTypeCompile, "Empty condition group", nil, nil)
 	}
 	if len(cg.All) > 0 && len(cg.Any) > 0 {
-		return logging.NewError(logging.ErrorTypeCompile, "condition group must contain exactly one of all or any", nil, nil)
+		return logging.NewError(logging.ErrorTypeCompile, exclusiveConditionGroupError, nil, nil)
 	}
 
 	var err error
@@ -187,7 +200,7 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 		return logging.NewError(logging.ErrorTypeCompile, "condition cannot contain both leaf fields and a nested group", nil, nil)
 	}
 	if hasAll && hasAny {
-		return logging.NewError(logging.ErrorTypeCompile, "condition group must contain exactly one of all or any", nil, nil)
+		return logging.NewError(logging.ErrorTypeCompile, exclusiveConditionGroupError, nil, nil)
 	}
 
 	if !hasGroup {
@@ -244,7 +257,7 @@ func validateAction(action *Action) error {
 		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing type field", nil, nil)
 	}
 	if action.Type != "updateStore" {
-		return logging.NewError(logging.ErrorTypeCompile, "unsupported action type", nil, map[string]interface{}{"action_type": action.Type})
+		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("unsupported action type %q; supported types: updateStore", action.Type), nil, map[string]interface{}{"action_type": action.Type})
 	}
 	if action.Target == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing target field", nil, nil)

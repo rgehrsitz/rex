@@ -17,3 +17,10 @@ turn an upstream dependency's broad compatibility claim into a Rex guarantee.
 The upstream `go-redis` project publishes its own supported Redis versions.
 When its compatibility policy changes, reassess the pinned dependency and
 update this matrix rather than silently extending Rex's support statement.
+
+Ruleset parsing is strict: unknown fields are rejected. The 2026-08-30
+compiler-truthfulness milestone deliberately narrowed source compatibility by
+rejecting hybrid or dual-mode condition groups, duplicate rule names, and
+actions other than `updateStore`. Bytecode format 2 did not change, but
+recompiling source that relied on those previously accepted-invalid shapes now
+returns a compile error instead of producing an unexecutable artifact.

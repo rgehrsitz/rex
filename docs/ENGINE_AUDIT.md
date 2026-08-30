@@ -85,8 +85,9 @@ Relevant code: [engine.go](../pkg/runtime/engine.go) (`ProcessFactUpdateContext`
 fires for `a=20, b=99`, even though the nested group is false.
 
 **Resolution (2026-08-30):** parser validation now rejects a condition that
-combines leaf fields with a nested group. A regression test verifies the
-audited hybrid input fails before bytecode generation.
+combines leaf fields with a nested group, and strict JSON decoding rejects
+unknown fields throughout the ruleset. Regression tests verify both classes
+of invalid input fail before bytecode generation.
 
 Relevant code: [parser.go](../pkg/compiler/parser.go),
 [traverse.go](../pkg/compiler/traverse.go).

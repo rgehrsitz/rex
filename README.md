@@ -338,10 +338,9 @@ An action object has the following properties:
 
 - type: the supported action type, `updateStore`. Unsupported action types are
   rejected during compilation.
-- fact: a string identifying the fact to update or send. Based on the way Redis works, the recommendation is 'channel
+- target: a string identifying the fact to update. Based on the way Redis works, the recommendation is 'channel
   ' for the naming of facts.
-- value: the value to update or send.
-- customProperty: an optional object containing custom properties for the action.
+- value: the value to update.
 
 ### Scripting
 

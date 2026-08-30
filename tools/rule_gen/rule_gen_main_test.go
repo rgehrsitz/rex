@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"rgehrsitz/rex/pkg/compiler"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -34,6 +36,12 @@ func TestGenerateRuleset(t *testing.T) {
 		assert.NotEmpty(t, rule.Conditions)
 		assert.NotEmpty(t, rule.Actions)
 	}
+
+	jsonData, err := json.Marshal(ruleset)
+	assert.NoError(t, err)
+	parsed, err := compiler.Parse(jsonData)
+	assert.NoError(t, err)
+	assert.Len(t, parsed.Rules, numRules)
 }
 
 func TestGenerateRule(t *testing.T) {
@@ -60,7 +68,7 @@ func TestGenerateCondition(t *testing.T) {
 func TestGenerateAction(t *testing.T) {
 	action := generateAction()
 
-	assert.Contains(t, []string{"updateStore", "sendMessage"}, action.Type)
+	assert.Equal(t, "updateStore", action.Type)
 	assert.NotEmpty(t, action.Target)
 	assert.NotNil(t, action.Value)
 }
