@@ -36,7 +36,7 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-005 | Duplicate rule names compile but bytecode load rejects them | Fixed and verified 2026-08-30 | P0 |
 | REX-006 | Script timeout does not stop JavaScript execution | Confirmed by code inspection | P1, if scripts enabled |
 | REX-007 | Priority has no execution-order effect; documentation disagrees | Confirmed by execution and inspection | P1 |
-| REX-008 | Bytecode jump targets are not semantically validated | Confirmed by execution | P1 |
+| REX-008 | Bytecode jump targets are not semantically validated | Fixed and verified 2026-08-30 | P1 |
 | REX-009 | Actions perform an unnecessary post-write Redis `GET` | Confirmed by execution and inspection | P2 performance |
 | REX-010 | Redis startup exits through the logger instead of returning an error | Confirmed by inspection | P1 |
 | REX-011 | TLS and environment-based Redis credentials are unsupported | Confirmed by inspection | P1 for managed Redis |
@@ -163,10 +163,14 @@ on instruction boundaries. A probe changed a valid artifact's `JUMP_IF_FALSE`
 offset to zero, recomputed its CRC-32, and the runtime loaded it and executed
 an action despite the false condition.
 
-**Required work:** while validating bytecode, record every instruction boundary
-and verify every jump target is in range and targets a valid instruction
-boundary. Treat CRC-32 only as accidental-corruption detection, as already
-documented; it is not authenticity protection.
+**Resolution (2026-08-30):** bytecode validation now records every instruction
+boundary and the resume point following each `LABEL`. Every conditional jump
+must remain inside the instruction section, land exactly on an instruction
+boundary, and target one of those compiler-generated label resume points. The
+loader rejects the audited zero-offset mutation, a jump into an instruction's
+operands, and an out-of-range jump even when the artifact checksum is
+recomputed. CRC-32 remains accidental-corruption detection, not authenticity
+protection.
 
 ### REX-010: startup failure must be returned, not fatal-exited
 
@@ -260,8 +264,8 @@ Do not start these before P0 and the P1 contract choices are complete:
    Completed and verified 2026-08-30.
 2. ~~REX-002 through REX-005 as the compiler-truthfulness milestone.~~
    Completed and verified 2026-08-30.
-3. REX-008 and REX-007 as bytecode/language-contract PRs, each with updated
-   documentation.
+3. ~~REX-008 as an isolated bytecode-validation PR.~~ Completed and verified
+   2026-08-30. REX-007 remains the next language-contract PR.
 4. Decide script and delivery semantics; complete REX-006, REX-010, and
    REX-011 according to that decision.
 5. Address REX-009, REX-012, and REX-013, then add the semantics safety net.

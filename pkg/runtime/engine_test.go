@@ -62,6 +62,16 @@ func validBytecode(t *testing.T) []byte {
 	return data
 }
 
+func firstConditionalJumpOffset(data []byte) int {
+	instructionsEnd := int(binary.LittleEndian.Uint32(data[16:20]))
+	instructions := data[compiler.HeaderSize:instructionsEnd]
+	jumpOffset := bytes.Index(instructions, []byte{byte(compiler.GT_FLOAT), byte(compiler.JUMP_IF_FALSE)})
+	if jumpOffset == -1 {
+		panic("validBytecode fixture must contain a conditional jump")
+	}
+	return compiler.HeaderSize + jumpOffset + 1
+}
+
 type eventConsumerProbeStore struct {
 	receiveCalls chan struct{}
 }
@@ -283,6 +293,36 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 				return data
 			},
 			recalculateChecksum: true,
+		},
+		{
+			name: "zero offset conditional jump",
+			mutate: func(data []byte) []byte {
+				jumpOffset := firstConditionalJumpOffset(data)
+				binary.LittleEndian.PutUint32(data[jumpOffset+1:jumpOffset+5], 0)
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "without a preceding label",
+		},
+		{
+			name: "conditional jump between instructions",
+			mutate: func(data []byte) []byte {
+				jumpOffset := firstConditionalJumpOffset(data)
+				binary.LittleEndian.PutUint32(data[jumpOffset+1:jumpOffset+5], 2)
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "targets non-instruction offset",
+		},
+		{
+			name: "conditional jump beyond instruction section",
+			mutate: func(data []byte) []byte {
+				jumpOffset := firstConditionalJumpOffset(data)
+				binary.LittleEndian.PutUint32(data[jumpOffset+1:jumpOffset+5], ^uint32(0))
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "targets out-of-range instruction offset",
 		},
 		{
 			name: "declared rule count mismatch",

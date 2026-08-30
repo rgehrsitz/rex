@@ -52,6 +52,13 @@ length, version, constant-pool size, checksum, section ordering, instruction
 boundaries, index records, and declared rule count before execution. A failed
 validation is an invalid-artifact error, never a best-effort load.
 
+Conditional jumps use an unsigned four-byte forward offset measured from the
+end of the jump instruction. A valid destination must be inside the
+instruction stream, start an instruction, and immediately follow a `LABEL`
+instruction. These constraints match the control flow emitted by `rexc` and
+prevent a corrupted jump from entering an operand or bypassing its intended
+branch boundary.
+
 The v2 checksum detects accidental corruption; it is not a signature or an
 authenticity mechanism. Do not treat an artifact as trusted merely because its
 CRC matches.

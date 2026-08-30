@@ -51,6 +51,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Sort map-derived data before serialization so compiling the same ruleset produces identical bytecode.
 - [x] Add fuzz tests for ruleset parsing and bytecode decoding, plus corrupt/truncated-artifact regression tests.
 - [x] Document bytecode compatibility and an artifact versioning policy in [the bytecode compatibility guide](BYTECODE_COMPATIBILITY.md).
+- [x] Validate conditional jump ranges, instruction alignment, and compiler-generated label destinations (REX-008).
 - [x] Reject hybrid leaf/group conditions and groups containing both `all` and `any` (REX-002/003).
 - [x] Reject action types that the runtime cannot execute (REX-004).
 - [x] Reject duplicate rule names during compilation (REX-005).
