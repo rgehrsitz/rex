@@ -71,6 +71,7 @@ type contextCaptureStore struct {
 	getContext           context.Context
 	setAndPublishErr     error
 	mGetErr              error
+	mGetValues           map[string]interface{}
 	publishCount         int
 }
 
@@ -148,7 +149,7 @@ func (s *contextCaptureStore) GetFactContext(ctx context.Context, _ string) (int
 }
 
 func (s *contextCaptureStore) MGetFactsContext(context.Context, ...string) (map[string]interface{}, error) {
-	return nil, s.mGetErr
+	return s.mGetValues, s.mGetErr
 }
 
 func (s *eventConsumerProbeStore) Close() error { return nil }
@@ -352,6 +353,54 @@ func TestProcessFactUpdateContextReturnsStoreError(t *testing.T) {
 
 	err := engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
 	assert.ErrorIs(t, err, storeErr)
+}
+
+func TestProcessFactUpdateContextDoesNotMutateCandidateIndexWhenDependencyIsMissing(t *testing.T) {
+	factStore := &contextCaptureStore{mGetValues: map[string]interface{}{"humidity": nil}}
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{
+		{
+			Name: "requires_humidity",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{
+				{Fact: "temperature", Operator: "GT", Value: 30.0},
+				{Fact: "humidity", Operator: "GT", Value: 50.0},
+			}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "humid_alert", Value: true}},
+		},
+		{
+			Name: "temperature_alert",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{
+				{Fact: "temperature", Operator: "GT", Value: 30.0},
+			}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "temperature_alert", Value: true}},
+		},
+		{
+			Name: "temperature_status",
+			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{
+				{Fact: "temperature", Operator: "GT", Value: 30.0},
+			}},
+			Actions: []compiler.Action{{Type: "updateStore", Target: "temperature_status", Value: "hot"}},
+		},
+	}}
+
+	filename := t.TempDir() + "/rules.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	engine, err := NewEngineFromFile(filename, factStore, 0)
+	require.NoError(t, err)
+	observer := &recordingExecutionObserver{}
+	engine.SetExecutionObserver(observer)
+
+	wantCandidates := []string{"requires_humidity", "temperature_alert", "temperature_status"}
+	require.Equal(t, wantCandidates, engine.factRuleIndex["temperature"])
+
+	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+	assert.Equal(t, wantCandidates, engine.factRuleIndex["temperature"])
+	assert.Equal(t, []string{"temperature_alert", "temperature_status"}, observer.rulesFired)
+
+	factStore.mGetValues["humidity"] = 75.0
+	observer.rulesFired = nil
+	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+	assert.Equal(t, wantCandidates, engine.factRuleIndex["temperature"])
+	assert.Equal(t, wantCandidates, observer.rulesFired)
 }
 
 func TestProcessFactUpdateContextEmitsCorrelatedRuleAndActionTrace(t *testing.T) {

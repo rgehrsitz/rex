@@ -206,7 +206,7 @@ func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, 
 	}
 
 	// Find all rules that reference the updated fact
-	ruleNames, ok := e.factRuleIndex[factName]
+	indexedRuleNames, ok := e.factRuleIndex[factName]
 	if !ok {
 		logger.Info().
 			Str("event", "rule_evaluation_candidates").
@@ -215,6 +215,9 @@ func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, 
 			Msg("Selected rule evaluation candidates")
 		return nil
 	}
+	// Filtering candidates for missing dependencies must not mutate the index's
+	// backing array; missing facts are transient, while the index is persistent.
+	ruleNames := append([]string(nil), indexedRuleNames...)
 
 	logger.Info().
 		Str("event", "rule_evaluation_candidates").
