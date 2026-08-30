@@ -5,6 +5,7 @@ package compiler
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"math"
 	"os"
 	"strings"
@@ -12,7 +13,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func mustGenerateBytecode(t testing.TB, ruleset *Ruleset) BytecodeFile {
+	t.Helper()
+	bytecode, err := GenerateBytecode(ruleset)
+	require.NoError(t, err)
+	return bytecode
+}
 
 func TestRemoveLabels(t *testing.T) {
 	instructions := []Instruction{
@@ -78,7 +87,7 @@ func TestGenerateBytecodeComplexNestedConditions(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 
 	// Helper function to read a string from bytecode
 	readString := func(offset int) (string, int) {
@@ -250,7 +259,7 @@ func TestGenerateBytecodeMultipleRules(t *testing.T) {
 		},
 	}
 
-	bytecode := GenerateBytecode(ruleset)
+	bytecode := mustGenerateBytecode(t, ruleset)
 	assert.NotEmpty(t, bytecode.Instructions)
 	assert.Equal(t, uint32(2), bytecode.Header.NumRules)
 
@@ -297,7 +306,7 @@ func TestGenerateBytecodeDataTypes(t *testing.T) {
 		},
 	}
 
-	bytecode := GenerateBytecode(ruleset)
+	bytecode := mustGenerateBytecode(t, ruleset)
 	assert.NotEmpty(t, bytecode.Instructions)
 
 	// Add specific assertions to check if the bytecode correctly handles different data types
@@ -343,7 +352,7 @@ func TestGenerateBytecodeOperators(t *testing.T) {
 		},
 	}
 
-	bytecode := GenerateBytecode(ruleset)
+	bytecode := mustGenerateBytecode(t, ruleset)
 	assert.NotEmpty(t, bytecode.Instructions)
 
 	// Add specific assertions to check if the bytecode correctly handles different operators
@@ -366,6 +375,26 @@ func TestOptimizeInstructions(t *testing.T) {
 	assert.Less(t, len(optimized), len(instructions), "Optimized instructions should be fewer")
 
 	// Add more specific assertions to check if unnecessary jumps and labels are removed
+}
+
+func TestReplaceLabelOffsetsRejectsUnresolvedLabelAtBytecodeBoundary(t *testing.T) {
+	bytecode := []byte{byte(JUMP_IF_FALSE), 'L', '0', '0', '1'}
+
+	resolved, err := ReplaceLabelOffsets(bytecode)
+
+	assert.Nil(t, resolved)
+	assert.ErrorContains(t, err, `unresolved label "L001"`)
+}
+
+func TestGenerateBytecodePropagatesLabelResolutionFailure(t *testing.T) {
+	resolutionErr := errors.New("label resolution failed")
+	bytecode, err := generateBytecode(deterministicRuleset(), func([]byte) ([]byte, error) {
+		return nil, resolutionErr
+	})
+
+	assert.Empty(t, bytecode)
+	assert.ErrorIs(t, err, resolutionErr)
+	assert.ErrorContains(t, err, `resolve labels for rule "deterministic_rule"`)
 }
 
 func TestGenerateIndices(t *testing.T) {
@@ -443,7 +472,7 @@ func TestGenerateBytecodeSimpleRule(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 
 	assert.NotNil(t, bytecodeFile)
 	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
@@ -492,7 +521,7 @@ func TestGenerateBytecodeComplexRule(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 
 	assert.NotNil(t, bytecodeFile)
 	assert.Equal(t, uint32(Version), bytecodeFile.Header.Version)
@@ -552,7 +581,7 @@ func TestGenerateBytecodeWithScripts(t *testing.T) {
 		},
 	}
 
-	bytecodeFile := GenerateBytecode(ruleset)
+	bytecodeFile := mustGenerateBytecode(t, ruleset)
 
 	// Check if SCRIPT_DEF opcode exists in the bytecode
 	scriptDefFound := false
@@ -583,7 +612,7 @@ func TestGenerateBytecodeEncodesZeroParamsForUndefinedActionScript(t *testing.T)
 		}},
 	}}}
 
-	bytecode := GenerateBytecode(ruleset)
+	bytecode := mustGenerateBytecode(t, ruleset)
 	want := append([]byte{byte(SCRIPT_CALL), byte(len("missing_script"))}, []byte("missing_script")...)
 	want = append(want, 0)
 
@@ -601,7 +630,7 @@ func TestGenerateBytecodeEncodesMaximumLengthRuleName(t *testing.T) {
 		Actions: []Action{{Type: "updateStore", Target: "status", Value: "hot"}},
 	}}}
 
-	bytecode := GenerateBytecode(ruleset)
+	bytecode := mustGenerateBytecode(t, ruleset)
 	assert.Equal(t, byte(RULE_START), bytecode.Instructions[0])
 	assert.Equal(t, byte(MaxBytecodeStringLength), bytecode.Instructions[1])
 }
@@ -627,7 +656,7 @@ func TestBytecodeSerializationIsDeterministic(t *testing.T) {
 
 	var expected []byte
 	for i := 0; i < 10; i++ {
-		bytecode := GenerateBytecode(ruleset)
+		bytecode := mustGenerateBytecode(t, ruleset)
 		assert.NoError(t, WriteBytecodeToFile(filename, bytecode))
 		data, err := os.ReadFile(filename)
 		if !assert.NoError(t, err) {
@@ -650,25 +679,31 @@ func TestBytecodeSerializationIsDeterministic(t *testing.T) {
 func TestGenerateBytecodeIsConcurrentSafe(t *testing.T) {
 	const compilations = 16
 	ruleset := deterministicRuleset()
-	results := make(chan []byte, compilations)
+	type generationResult struct {
+		instructions []byte
+		err          error
+	}
+	results := make(chan generationResult, compilations)
 	var wg sync.WaitGroup
 
 	for i := 0; i < compilations; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results <- GenerateBytecode(ruleset).Instructions
+			bytecode, err := GenerateBytecode(ruleset)
+			results <- generationResult{instructions: bytecode.Instructions, err: err}
 		}()
 	}
 	wg.Wait()
 	close(results)
 
 	var expected []byte
-	for instructions := range results {
+	for result := range results {
+		require.NoError(t, result.err)
 		if expected == nil {
-			expected = instructions
+			expected = result.instructions
 			continue
 		}
-		assert.Equal(t, expected, instructions)
+		assert.Equal(t, expected, result.instructions)
 	}
 }

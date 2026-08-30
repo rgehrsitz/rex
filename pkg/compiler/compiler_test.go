@@ -102,7 +102,7 @@ func TestGenerateBytecode(t *testing.T) {
 		},
 	}
 
-	bytecode := GenerateBytecode(ruleset)
+	bytecode := mustGenerateBytecode(t, ruleset)
 	assert.NotEmpty(t, bytecode)
 }
 

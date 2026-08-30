@@ -4,10 +4,13 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"rgehrsitz/rex/pkg/compiler"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -163,6 +166,24 @@ func TestRunValidateDoesNotWriteBytecode(t *testing.T) {
 	assert.NoError(t, err)
 	_, err = os.Stat(outputFile)
 	assert.True(t, os.IsNotExist(err))
+}
+
+func TestRunDoesNotWriteBytecodeWhenGenerationFails(t *testing.T) {
+	inputFile := writeRulesFile(t)
+	outputFile := t.TempDir() + "/should-not-exist.bytecode"
+	generationErr := errors.New("unresolved label")
+
+	err := runWithGenerator(
+		&Config{JSONFilePath: inputFile, OutputPath: outputFile, LogLevel: "info", LogOutput: "console"},
+		func(*compiler.Ruleset) (compiler.BytecodeFile, error) {
+			return compiler.BytecodeFile{}, generationErr
+		},
+	)
+
+	assert.ErrorIs(t, err, generationErr)
+	assert.ErrorContains(t, err, "failed to generate bytecode")
+	_, statErr := os.Stat(outputFile)
+	assert.True(t, os.IsNotExist(statErr))
 }
 
 func TestRunIncludesJSONSourceLocation(t *testing.T) {

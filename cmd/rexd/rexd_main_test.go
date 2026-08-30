@@ -79,7 +79,9 @@ func newTestRuntimeEngine(t *testing.T, ruleset *compiler.Ruleset, factStore sto
 	t.Helper()
 
 	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, compiler.GenerateBytecode(ruleset)))
+	bytecode, err := compiler.GenerateBytecode(ruleset)
+	require.NoError(t, err)
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, bytecode))
 
 	engine, err := runtime.NewEngineFromFile(filename, factStore, 0)
 	require.NoError(t, err)

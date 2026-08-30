@@ -67,7 +67,13 @@ func RemoveLabels(instructions []Instruction) []Instruction {
 	return finalInstructions
 }
 
-func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
+// GenerateBytecode compiles a parsed ruleset and fails if its control-flow
+// labels cannot be resolved to concrete byte offsets.
+func GenerateBytecode(ruleset *Ruleset) (BytecodeFile, error) {
+	return generateBytecode(ruleset, ReplaceLabelOffsets)
+}
+
+func generateBytecode(ruleset *Ruleset, resolveLabels func([]byte) ([]byte, error)) (BytecodeFile, error) {
 	var bytecode []byte
 
 	for _, rule := range ruleset.Rules {
@@ -333,7 +339,11 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 
 		ruleBytecode = append(ruleBytecode, byte(RULE_END))
 
-		ruleBytecode = ReplaceLabelOffsets(ruleBytecode)
+		var err error
+		ruleBytecode, err = resolveLabels(ruleBytecode)
+		if err != nil {
+			return BytecodeFile{}, fmt.Errorf("resolve labels for rule %q: %w", rule.Name, err)
+		}
 		bytecode = append(bytecode, ruleBytecode...)
 	}
 
@@ -351,7 +361,7 @@ func GenerateBytecode(ruleset *Ruleset) BytecodeFile {
 		RuleExecIndex:       ruleExecIndex,
 		FactRuleLookupIndex: factRuleIndex,
 		FactDependencyIndex: factDepIndex,
-	}
+	}, nil
 }
 
 // floatToBytes converts a float64 value to a byte slice.
@@ -626,21 +636,25 @@ func isValidFactLoadingSequence(opcode Opcode) bool {
 // It searches for jump instructions (JUMP_IF_FALSE and JUMP_IF_TRUE) and checks if the next 4 bytes form a label 'Lxyz'.
 // If a valid label is found, it scans forward to find the label definition and calculates the relative offset from the current instruction to the label.
 // The label is then replaced with the offset bytes in the bytecode slice.
-// If a label is not found for a jump instruction, a warning message is logged.
-// The modified bytecode slice is returned.
-func ReplaceLabelOffsets(bytecode []byte) []byte {
+// If a well-formed label operand cannot be resolved, it returns an error and no bytecode.
+func ReplaceLabelOffsets(bytecode []byte) ([]byte, error) {
 	logging.Logger.Debug().Msg("Replacing label offsets")
 
 	for i := 0; i < len(bytecode); {
 		opcode := Opcode(bytecode[i])
-		if (opcode == JUMP_IF_FALSE || opcode == JUMP_IF_TRUE) && i+5 < len(bytecode) {
+		if opcode == JUMP_IF_FALSE || opcode == JUMP_IF_TRUE {
+			if i+5 > len(bytecode) {
+				i++
+				continue
+			}
+
 			// Check if the next 4 bytes form a label 'Lxyz'
 			labelStart := i + 1
 			label := string(bytecode[labelStart : labelStart+4])
 			if label[0] == 'L' && isDigit(label[1]) && isDigit(label[2]) && isDigit(label[3]) {
 				labelOffset := -1
 				// Scan forward to find the label definition
-				for j := 0; j < len(bytecode); j++ {
+				for j := 0; j+5 <= len(bytecode); j++ {
 					if bytecode[j] == byte(LABEL) && string(bytecode[j+1:j+5]) == label {
 						labelOffset = j
 						break
@@ -656,11 +670,13 @@ func ReplaceLabelOffsets(bytecode []byte) []byte {
 					copy(bytecode[labelStart:], offsetBytes)
 					logging.Logger.Debug().Str("label", label).Int("position", i).Int("offset", relativeOffset).Msg("Replaced label with offset")
 				} else {
-					logging.Logger.Warn().Str("label", label).Msg("Label not found for jump instruction")
+					return nil, fmt.Errorf("unresolved label %q for %s at byte offset %d", label, opcode, i)
 				}
-				i += 5 // Move past the JUMP instruction and the 4-byte label
+				i += 5 // Move past the JUMP instruction and its four-byte label.
 			} else {
-				i += 1 // Move to the next byte
+				// A jump opcode value can also occur inside another instruction's
+				// operands, so advance byte-wise unless the full Lddd shape matches.
+				i++
 			}
 		} else {
 			i += 1 // Move to the next byte
@@ -668,7 +684,7 @@ func ReplaceLabelOffsets(bytecode []byte) []byte {
 	}
 
 	logging.Logger.Debug().Msg("Label offsets replacement completed")
-	return bytecode
+	return bytecode, nil
 }
 
 // isDigit checks if the given byte is a digit.
