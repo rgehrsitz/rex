@@ -42,7 +42,7 @@
                   "properties": {
                     "type": {
                       "type": "string",
-                      "enum": ["updateStore", "sendMessage"]
+                      "enum": ["updateStore"]
                     },
                     "target": {
                       "type": "string",

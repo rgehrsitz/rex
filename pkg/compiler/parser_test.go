@@ -159,7 +159,7 @@ func TestParser(t *testing.T) {
                 },
                 "actions": [
                     {
-                        "type": "sendMessage",
+                        "type": "updateStore",
                         "target": "alert_service",
                         "value": "High temperature and low humidity or high pressure detected"
                     }
@@ -186,7 +186,7 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "GT", ruleset.Rules[0].Conditions.All[1].Any[1].Operator)
 	assert.Equal(t, 1000.0, ruleset.Rules[0].Conditions.All[1].Any[1].Value)
 	assert.Len(t, ruleset.Rules[0].Actions, 1)
-	assert.Equal(t, "sendMessage", ruleset.Rules[0].Actions[0].Type)
+	assert.Equal(t, "updateStore", ruleset.Rules[0].Actions[0].Type)
 	assert.Equal(t, "alert_service", ruleset.Rules[0].Actions[0].Target)
 	assert.Equal(t, "High temperature and low humidity or high pressure detected", ruleset.Rules[0].Actions[0].Value)
 }
@@ -197,6 +197,78 @@ func TestParseInvalidJSON(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "Failed to unmarshal JSON data")
 	assert.Contains(t, err.Error(), "line 1, column")
+}
+
+func TestParseRejectsRulesCompilerCannotFaithfullyExecute(t *testing.T) {
+	tests := []struct {
+		name      string
+		jsonData  string
+		wantError string
+	}{
+		{
+			name: "hybrid leaf and nested group",
+			jsonData: `{"rules":[{
+				"name":"hybrid",
+				"conditions":{"all":[{
+					"fact":"temperature","operator":"GT","value":30,
+					"any":[{"fact":"humidity","operator":"LT","value":50}]
+				}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: "condition cannot contain both leaf fields and a nested group",
+		},
+		{
+			name: "condition group containing both all and any",
+			jsonData: `{"rules":[{
+				"name":"dual_group",
+				"conditions":{
+					"all":[{"fact":"temperature","operator":"GT","value":30}],
+					"any":[{"fact":"humidity","operator":"LT","value":50}]
+				},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: "condition group must contain exactly one of all or any",
+		},
+		{
+			name: "nested group containing both all and any",
+			jsonData: `{"rules":[{
+				"name":"nested_dual_group",
+				"conditions":{"all":[{
+					"all":[{"fact":"temperature","operator":"GT","value":30}],
+					"any":[{"fact":"humidity","operator":"LT","value":50}]
+				}]},
+				"actions":[{"type":"updateStore","target":"status","value":"hot"}]
+			}]}`,
+			wantError: "condition group must contain exactly one of all or any",
+		},
+		{
+			name: "unsupported action",
+			jsonData: `{"rules":[{
+				"name":"message",
+				"conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},
+				"actions":[{"type":"sendMessage","target":"alerts","value":"hot"}]
+			}]}`,
+			wantError: "unsupported action type",
+		},
+		{
+			name: "duplicate rule names",
+			jsonData: `{"rules":[
+				{"name":"same","conditions":{"all":[{"fact":"a","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"first","value":true}]},
+				{"name":"same","conditions":{"all":[{"fact":"b","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"second","value":true}]}
+			]}`,
+			wantError: `duplicate rule name "same"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ruleset, err := Parse([]byte(tt.jsonData))
+			assert.Nil(t, ruleset)
+			if assert.Error(t, err) {
+				assert.Contains(t, err.Error(), tt.wantError)
+			}
+		})
+	}
 }
 
 func TestParseInvalidRuleStructure(t *testing.T) {
@@ -898,6 +970,11 @@ func TestValidateAction(t *testing.T) {
 			expectedErrMsg: "Empty or missing target field",
 		},
 		{
+			name:           "Unsupported Type",
+			action:         &Action{Type: "sendMessage", Target: "alerts", Value: "hot"},
+			expectedErrMsg: "unsupported action type",
+		},
+		{
 			name:           "Invalid Value Type",
 			action:         &Action{Type: "updateStore", Target: "alarm", Value: make(chan int)},
 			expectedErrMsg: "Invalid action value",
@@ -974,7 +1051,7 @@ func TestIsActionValueValid(t *testing.T) {
 		{"Valid Boolean", "updateStore", true, true},
 		{"Invalid Type", "updateStore", make(chan int), false},
 		{"Invalid Action Type", "invalidType", "test", false},
-		{"Valid sendMessage", "sendMessage", "test message", true},
+		{"Unsupported sendMessage", "sendMessage", "test message", false},
 	}
 
 	for _, tt := range tests {

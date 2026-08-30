@@ -21,10 +21,20 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	if len(ruleset.Rules) == 0 {
 		return nil, logging.NewError(logging.ErrorTypeParse, "Missing rules field", nil, nil)
 	}
+	ruleNames := make(map[string]int, len(ruleset.Rules))
 	for i, rule := range ruleset.Rules {
 		if err := validateRule(&rule); err != nil {
 			return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid rule: %v", err), err, map[string]interface{}{"rule_name": rule.Name})
 		}
+		if firstIndex, exists := ruleNames[rule.Name]; exists {
+			return nil, logging.NewError(
+				logging.ErrorTypeCompile,
+				fmt.Sprintf("duplicate rule name %q at rules[%d].name; first declared at rules[%d].name", rule.Name, i, firstIndex),
+				nil,
+				map[string]interface{}{"rule_name": rule.Name, "rule_index": i, "first_rule_index": firstIndex},
+			)
+		}
+		ruleNames[rule.Name] = i
 
 		// Validate and compile custom scripts
 		for scriptName, script := range rule.Scripts {
@@ -118,6 +128,9 @@ func validateAndOrderConditionGroup(cg *ConditionGroup) error {
 		logging.Logger.Error().Msg("Empty condition group detected")
 		return logging.NewError(logging.ErrorTypeCompile, "Empty condition group", nil, nil)
 	}
+	if len(cg.All) > 0 && len(cg.Any) > 0 {
+		return logging.NewError(logging.ErrorTypeCompile, "condition group must contain exactly one of all or any", nil, nil)
+	}
 
 	var err error
 	cg.All, err = orderConditionsAndGroups(cg.All)
@@ -158,7 +171,7 @@ func orderConditionsAndGroups(cogs []*ConditionOrGroup) ([]*ConditionOrGroup, er
 
 // isCondition checks if the given ConditionOrGroup is a valid condition.
 func isCondition(cog *ConditionOrGroup) bool {
-	return cog.Fact != "" && cog.Operator != "" && cog.Value != nil
+	return cog != nil && cog.Fact != "" && cog.Operator != "" && cog.Value != nil
 }
 
 func validateConditionOrGroup(cog *ConditionOrGroup) error {
@@ -166,8 +179,18 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 	if cog == nil {
 		return logging.NewError(logging.ErrorTypeCompile, "Nil condition or group received", nil, nil)
 	}
+	hasAll := len(cog.All) > 0
+	hasAny := len(cog.Any) > 0
+	hasGroup := hasAll || hasAny
+	hasLeafFields := cog.Fact != "" || cog.Operator != "" || cog.Value != nil
+	if hasGroup && hasLeafFields {
+		return logging.NewError(logging.ErrorTypeCompile, "condition cannot contain both leaf fields and a nested group", nil, nil)
+	}
+	if hasAll && hasAny {
+		return logging.NewError(logging.ErrorTypeCompile, "condition group must contain exactly one of all or any", nil, nil)
+	}
 
-	if len(cog.All) == 0 && len(cog.Any) == 0 {
+	if !hasGroup {
 		if cog.Fact == "" {
 			return logging.NewError(logging.ErrorTypeCompile, "Empty or missing fact field", nil, nil)
 		} else if !isFactValid(cog.Fact) {
@@ -219,6 +242,9 @@ func validateAction(action *Action) error {
 	}
 	if action.Type == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing type field", nil, nil)
+	}
+	if action.Type != "updateStore" {
+		return logging.NewError(logging.ErrorTypeCompile, "unsupported action type", nil, map[string]interface{}{"action_type": action.Type})
 	}
 	if action.Target == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing target field", nil, nil)
@@ -302,7 +328,7 @@ func isStringOrList(value interface{}) bool {
 func isActionValueValid(actionType string, value interface{}) bool {
 	// Placeholder for more complex validation logic based on action type
 	switch actionType {
-	case "sendMessage", "updateStore":
+	case "updateStore":
 		switch value.(type) {
 		case float64, float32, int, int64, int32:
 			return true

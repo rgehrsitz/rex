@@ -76,7 +76,7 @@
       },
       "actions": [
         {
-          "type": "sendMessage",
+          "type": "updateStore",
           "target": "weather:alert-service",
           "value": "Alert - Pressure or flow rate exceeded limits!"
         }

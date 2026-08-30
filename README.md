@@ -336,7 +336,8 @@ A condition object has the following properties:
 
 An action object has the following properties:
 
-- type: a string indicating the action type ("updateStore" or "sendMessage") (sendMessage is not yet implemented).
+- type: the supported action type, `updateStore`. Unsupported action types are
+  rejected during compilation.
 - fact: a string identifying the fact to update or send. Based on the way Redis works, the recommendation is 'channel
   ' for the naming of facts.
 - value: the value to update or send.
@@ -472,7 +473,7 @@ Scripts are defined in the Scripts section of a rule and can be referenced in ac
       },
       "actions": [
         {
-          "type": "sendMessage",
+          "type": "updateStore",
           "target": "alert-service",
           "value": "Alert - Pressure or flow rate exceeded limits!"
         }
