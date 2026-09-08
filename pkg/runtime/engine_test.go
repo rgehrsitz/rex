@@ -325,7 +325,7 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 		{
 			name: "unsupported version",
 			mutate: func(data []byte) []byte {
-				binary.LittleEndian.PutUint32(data[0:4], compiler.Version+1)
+				binary.LittleEndian.PutUint32(data[0:4], compiler.BatchVersion+1)
 				return data
 			},
 			recalculateChecksum: true,
@@ -465,7 +465,7 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 
 func TestExecuteActionContextPassesContextToStore(t *testing.T) {
 	store := &contextCaptureStore{}
-	engine := &Engine{Facts: make(map[string]interface{}), store: store}
+	engine := &Engine{facts: make(map[string]interface{}), store: store}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -480,19 +480,19 @@ func TestExecuteActionContextPassesContextToStore(t *testing.T) {
 }
 
 func TestProcessFactUpdateContextHonorsCancellation(t *testing.T) {
-	engine := &Engine{Facts: make(map[string]interface{}), store: &contextCaptureStore{}}
+	engine := &Engine{facts: make(map[string]interface{}), store: &contextCaptureStore{}}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
 	err := engine.ProcessFactUpdateContext(ctx, "temperature", 35.0)
 	assert.ErrorIs(t, err, context.Canceled)
-	assert.NotContains(t, engine.Facts, "temperature")
+	assert.NotContains(t, engine.facts, "temperature")
 }
 
 func TestProcessFactUpdateContextReturnsStoreError(t *testing.T) {
 	storeErr := errors.New("store unavailable")
 	engine := &Engine{
-		Facts:               make(map[string]interface{}),
+		facts:               make(map[string]interface{}),
 		store:               &contextCaptureStore{mGetErr: storeErr},
 		factRuleIndex:       map[string][]string{"temperature": {"temperature_rule"}},
 		factDependencyIndex: map[string][]string{"temperature_rule": {"temperature", "humidity"}},
@@ -671,7 +671,7 @@ func TestExecuteActionContextTraceRecordsFailure(t *testing.T) {
 	output := captureStructuredLogs(t)
 	storeErr := errors.New("redis unavailable")
 	engine := &Engine{
-		Facts: make(map[string]interface{}),
+		facts: make(map[string]interface{}),
 		store: &contextCaptureStore{setAndPublishErr: storeErr},
 	}
 
@@ -742,7 +742,7 @@ func TestScriptActionExecutesOnce(t *testing.T) {
 
 	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
 	assert.Equal(t, 1, factStore.publishCount)
-	assert.Equal(t, "hot", engine.Facts["status"])
+	assert.Equal(t, "hot", engine.facts["status"])
 }
 
 func TestProcessFactUpdateContextEnforcesActionLimit(t *testing.T) {
@@ -770,8 +770,8 @@ func TestProcessFactUpdateContextEnforcesActionLimit(t *testing.T) {
 	err = engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
 	require.ErrorContains(t, err, "exceeded action limit of 1")
 	assert.Equal(t, 1, factStore.publishCount)
-	assert.Equal(t, "hot", engine.Facts["first_status"])
-	assert.NotContains(t, engine.Facts, "second_status")
+	assert.Equal(t, "hot", engine.facts["first_status"])
+	assert.NotContains(t, engine.facts, "second_status")
 }
 
 func TestProcessFactUpdate(t *testing.T) {
@@ -1107,7 +1107,7 @@ func createTestEngine(t *testing.T, redisStore *store.RedisStore, jsonRuleset st
 	// Synchronize engine's fact store with Redis store
 	facts, _ := redisStore.MGetFacts("temperature", "humidity", "pressure", "status")
 	for k, v := range facts {
-		engine.Facts[k] = v
+		engine.facts[k] = v
 	}
 
 	return engine
@@ -1184,7 +1184,7 @@ func TestNestedScriptCalls(t *testing.T) {
 
 	engine.ProcessFactUpdate("temperature", 35.0)
 
-	heatIndex, exists := engine.Facts["heat_index"]
+	heatIndex, exists := engine.facts["heat_index"]
 	assert.True(t, exists, "Heat index calculation result not found in engine facts")
 	if exists {
 		t.Logf("Calculated heat index: %v", heatIndex)
@@ -1249,7 +1249,7 @@ func TestScriptErrorHandling(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	status, exists := engine.Facts["status"]
+	status, exists := engine.facts["status"]
 	assert.False(t, exists, "Error script execution should not result in a status fact")
 	assert.Nil(t, status)
 }
@@ -1311,7 +1311,7 @@ func TestEdgeCases(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	status, exists := engine.Facts["status"]
+	status, exists := engine.facts["status"]
 	assert.False(t, exists, "Edge case script execution should not result in a status fact")
 	assert.Nil(t, status)
 }

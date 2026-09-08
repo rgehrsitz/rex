@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -38,7 +39,7 @@ type MockEngineFactory struct{}
 
 func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.ContextStore, priorityThreshold int) (*runtime.Engine, error) {
 	// Updated to include priorityThreshold parameter
-	return &runtime.Engine{Facts: make(map[string]interface{})}, nil
+	return &runtime.Engine{}, nil
 }
 
 type actionCountingStore struct {
@@ -198,7 +199,7 @@ func TestRunMainLoop(t *testing.T) {
 
 	deps := &RexDependencies{
 		Store:  store.NewRedisStore(mr.Addr(), "", 0),
-		Engine: &runtime.Engine{Facts: make(map[string]interface{})},
+		Engine: &runtime.Engine{},
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -218,7 +219,7 @@ func TestConsumeMessagesStopsOnCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	err := consumeMessages(ctx, &runtime.Engine{Facts: make(map[string]interface{})}, make(chan *redis.Message), nil)
+	err := consumeMessages(ctx, &runtime.Engine{}, make(chan *redis.Message), nil)
 	assert.NoError(t, err)
 }
 
@@ -226,7 +227,7 @@ func TestConsumeMessagesStopsOnSignal(t *testing.T) {
 	signals := make(chan os.Signal, 1)
 	signals <- syscall.SIGTERM
 
-	err := consumeMessages(context.Background(), &runtime.Engine{Facts: make(map[string]interface{})}, make(chan *redis.Message), signals)
+	err := consumeMessages(context.Background(), &runtime.Engine{}, make(chan *redis.Message), signals)
 	assert.NoError(t, err)
 }
 
@@ -236,10 +237,10 @@ func TestConsumeMessagesContinuesAfterMalformedEvent(t *testing.T) {
 	messages <- &redis.Message{Channel: "rex_updates", Payload: `{"test:key":"value"}`}
 	close(messages)
 
-	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	engine := &runtime.Engine{}
 	err := consumeMessages(context.Background(), engine, messages, nil)
 	require.NoError(t, err)
-	assert.Equal(t, "value", engine.Facts["test:key"])
+	assert.Equal(t, "value", engine.Snapshot()["test:key"])
 }
 
 func TestConsumeMessagesProcessesDuplicateDeliveries(t *testing.T) {
@@ -270,7 +271,7 @@ func TestConsumeMessagesRecordsEventMetrics(t *testing.T) {
 	close(messages)
 
 	metrics := observability.NewMetrics()
-	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	engine := &runtime.Engine{}
 	require.NoError(t, consumeMessagesWithMetrics(context.Background(), engine, messages, nil, metrics))
 
 	response := httptest.NewRecorder()
@@ -340,9 +341,7 @@ func TestProcessMessage(t *testing.T) {
 	require.NoError(t, err)
 	defer mr.Close()
 
-	engine := &runtime.Engine{
-		Facts: make(map[string]interface{}),
-	}
+	engine := &runtime.Engine{}
 
 	msg := &redis.Message{
 		Channel: "rex_updates",
@@ -352,11 +351,11 @@ func TestProcessMessage(t *testing.T) {
 	err = processMessage(context.Background(), engine, msg)
 	require.NoError(t, err)
 
-	assert.Equal(t, "value", engine.Facts["test:key"])
+	assert.Equal(t, "value", engine.Snapshot()["test:key"])
 }
 
 func TestProcessMessagePreservesEqualsInValue(t *testing.T) {
-	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	engine := &runtime.Engine{}
 
 	err := processMessage(context.Background(), engine, &redis.Message{
 		Channel: "rex_updates",
@@ -364,11 +363,11 @@ func TestProcessMessagePreservesEqualsInValue(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, "a=b", engine.Facts["test:key"])
+	assert.Equal(t, "a=b", engine.Snapshot()["test:key"])
 }
 
 func TestProcessMessageDecodesJSONValues(t *testing.T) {
-	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	engine := &runtime.Engine{}
 
 	err := processMessage(context.Background(), engine, &redis.Message{
 		Channel: "rex_updates",
@@ -376,9 +375,9 @@ func TestProcessMessageDecodesJSONValues(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, "a=b", engine.Facts["test:string"])
-	assert.Equal(t, true, engine.Facts["test:bool"])
-	assert.Equal(t, 3.5, engine.Facts["test:number"])
+	assert.Equal(t, "a=b", engine.Snapshot()["test:string"])
+	assert.Equal(t, true, engine.Snapshot()["test:bool"])
+	assert.Equal(t, 3.5, engine.Snapshot()["test:number"])
 }
 
 func TestProcessMessageAssignsOneTraceIDToAllFactsInEvent(t *testing.T) {
@@ -443,7 +442,7 @@ func TestProcessMessageRejectsMalformedEventEnvelope(t *testing.T) {
 }
 
 func TestProcessMessagePreservesLegacyFloatValues(t *testing.T) {
-	engine := &runtime.Engine{Facts: make(map[string]interface{})}
+	engine := &runtime.Engine{}
 
 	err := processMessage(context.Background(), engine, &redis.Message{
 		Channel: "rex_updates",
@@ -451,7 +450,7 @@ func TestProcessMessagePreservesLegacyFloatValues(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	assert.True(t, math.IsNaN(engine.Facts["test:number"].(float64)))
+	assert.True(t, math.IsNaN(engine.Snapshot()["test:number"].(float64)))
 }
 
 func TestSortedKeys(t *testing.T) {
@@ -495,4 +494,26 @@ func TestRun(t *testing.T) {
 
 	err = run(ctx, args, &MockStoreFactory{}, &MockEngineFactory{})
 	assert.NoError(t, err)
+}
+
+func TestV4MessageIsOneBatchAndOutputNotificationIsIgnored(t *testing.T) {
+	source := []byte(`{"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"GT","value":0},{"fact":"b","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	artifact, err := compiler.CompileBatch(source)
+	require.NoError(t, err)
+	path := t.TempDir() + "/v4.bytecode"
+	require.NoError(t, os.WriteFile(path, artifact, 0644))
+	memory, err := store.NewMemoryStore(nil)
+	require.NoError(t, err)
+	engine, err := runtime.NewEngineFromFile(path, memory, 0)
+	require.NoError(t, err)
+	require.NoError(t, processMessage(context.Background(), engine, &redis.Message{Payload: `{"b":1,"a":1}`}))
+	events, err := memory.DrainPublications()
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.NoError(t, processMessage(context.Background(), engine, &redis.Message{Payload: `{"_rex":{"trace_id":"chain","hop":1,"kind":"committed_output"},"facts":{"a":1,"b":1}}`}))
+	events, err = memory.DrainPublications()
+	require.NoError(t, err)
+	require.Empty(t, events)
+	require.Error(t, processMessage(context.Background(), engine, &redis.Message{Payload: `{"a":{"bad":true},"b":1}`}))
+	require.Error(t, processMessage(context.Background(), engine, &redis.Message{Payload: strings.Repeat("x", store.MaxEventBytes+1)}))
 }

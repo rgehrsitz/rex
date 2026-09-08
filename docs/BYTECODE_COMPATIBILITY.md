@@ -7,15 +7,42 @@ changes.
 
 ## Current support
 
-The compiler writes **format version 3**. The runtime accepts **only version
-3** and rejects every other version before it attempts to decode or execute an
-artifact. Version-1 and version-2 artifacts must be recompiled from their
-source ruleset; Rex does not provide legacy readers or an in-place migrator.
+`rexc` writes **v4** by default, and `rexd` defaults to the v4 batch contract.
+V3 is retained with its original semantics: compile using `rexc -legacy-v3`
+and explicitly set `engine.allow_legacy_v3: true` to run it in the daemon.
+Versions 1, 2, and unknown versions are rejected. Keep the source JSON and
+recompile; changing a version field is not a migration.
 
-The version is the first little-endian `uint32` in the file. There is
-currently no magic-number prefix, so tools should use the version together
-with successful structural validation and checksum verification to recognize a
-Rex artifact.
+Embedded APIs `GenerateBytecode` / `WriteBytecodeToFile` and `compiler.Version`
+remain explicitly v3 for existing integrations and the frozen semantics corpus.
+New callers use `CompileBatch`, `BatchVersion`, and `LoadProgram` or the
+version-dispatching `NewEngineFromFile`. `DecodeBatch` accepts only v4.
+
+## Version-4 format and meaning
+
+V4 uses a bounded structured rule IR so nested groups can retain three-valued
+semantics. It does not reinterpret v3 jumps. The 16-byte header is:
+
+| Offset | Field | Meaning |
+| ---: | --- | --- |
+| 0 | uint32 version | Little-endian `4`. |
+| 4 | uint32 checksum | IEEE CRC-32 of the payload only. |
+| 8 | uint32 payload length | Exact byte count after the header. |
+| 12 | four bytes | ASCII `REXB`. |
+
+The payload is canonical JSON for a validated rule AST with applied priority
+defaults. Source-order rules/actions and boolean grouping are retained; map keys
+are deterministically encoded. The compiler and loader reject scripts, invalid
+operator/constant combinations, excessive nesting, more than 10,000 rules,
+100,000 condition nodes, 65,536 distinct dependencies, and payloads above 8 MiB.
+The CRC detects corruption, not malicious authorship; load-time semantic
+validation remains required. The file loader bounds reads to 8 MiB plus header.
+
+V4 means deduplicated batch rounds, a shared snapshot, Unknown propagation,
+staged/coalesced writes, conflict rejection, and bounded local derived rounds.
+See the [decision record](decisions/REX-M4.md) and [migration guide](M4_MIGRATION.md).
+The default [source schema](../examples/rex-rules-schema.json) describes v4;
+[the legacy schema](../examples/rex-v3-rules-schema.json) remains available.
 
 ## Version-3 format
 
@@ -24,7 +51,7 @@ section says otherwise. The fixed header is 28 bytes:
 
 | Offset | Field | Meaning |
 | ---: | --- | --- |
-| 0 | `version` | Format version; currently `3`. |
+| 0 | `version` | Format version; legacy `3`. |
 | 4 | `checksum` | IEEE CRC-32 of the entire artifact with bytes 4–7 treated as zero. |
 | 8 | `constPoolSize` | Constant-pool size; currently `0`. |
 | 12 | `numRules` | Number of rule starts and rule-execution-index entries. |
@@ -76,7 +103,7 @@ field or attempt an in-place index conversion.
 ## Compatibility contract
 
 Within a format version, Rex preserves the meaning and binary layout of all
-documented fields and opcodes. A current compiler produces deterministic v3
+documented fields and opcodes. The legacy compiler API produces deterministic v3
 artifacts for the same parsed ruleset: map-derived index and script data are
 sorted before serialization. This reproducibility is useful for review and
 deployment, but it is not a promise that a future *format version* will be

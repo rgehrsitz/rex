@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
@@ -23,11 +24,12 @@ import (
 const DefaultMaxActionsPerEvaluation = 32
 
 type Engine struct {
+	coordinator             *Coordinator
 	bytecode                []byte
 	ruleExecutionIndex      map[string]compiler.RuleExecutionIndex
 	factRuleIndex           map[string][]string
 	factDependencyIndex     map[string][]string
-	Facts                   map[string]interface{}
+	facts                   map[string]interface{}
 	store                   store.ContextStore
 	priorityThreshold       int
 	maxActionsPerEvaluation int
@@ -48,17 +50,38 @@ func (e *Engine) SetScriptsEnabled(enabled bool) {
 }
 
 // SetMaxActionsPerEvaluation caps actions executed for one rule evaluation.
-// A non-positive limit disables the cap for compatibility with embedded uses.
-func (e *Engine) SetMaxActionsPerEvaluation(limit int) {
+// A non-positive limit disables the cap only for legacy v3 embedded uses.
+// V4 limits must remain positive; use SetBatchLimits for validated configuration.
+func (e *Engine) SetMaxActionsPerEvaluation(limit int) error {
+	if e.coordinator != nil {
+		limits := e.coordinator.limits
+		limits.ActionsPerRule = limit
+		if err := limits.Validate(); err != nil {
+			return err
+		}
+		e.coordinator.limits = limits
+	}
 	e.maxActionsPerEvaluation = limit
+	return nil
 }
 
 // New method to create an engine from a file
 func NewEngineFromFile(filename string, store store.ContextStore, priorityThreshold int) (*Engine, error) {
 
-	bytecode, err := os.ReadFile(filename)
+	file, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	bytecode, err := io.ReadAll(io.LimitReader(file, compiler.MaxProgramBytes+17))
+	if len(bytecode) > compiler.MaxProgramBytes+16 {
+		return nil, fmt.Errorf("artifact exceeds byte limit")
+	}
 	if err != nil {
 		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to read bytecode file", err, map[string]interface{}{"filename": filename})
+	}
+	if len(bytecode) >= 4 && binary.LittleEndian.Uint32(bytecode) == compiler.BatchVersion {
+		return newBatchEngine(bytecode, store)
 	}
 	if err := validateBytecode(bytecode); err != nil {
 		return nil, logging.NewError(logging.ErrorTypeRuntime, fmt.Sprintf("Invalid bytecode file: %v", err), err, map[string]interface{}{"filename": filename})
@@ -71,7 +94,7 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		factRuleIndex:           make(map[string][]string),
 		factDependencyIndex:     make(map[string][]string),
 		traceConditions:         true,
-		Facts:                   make(map[string]interface{}),
+		facts:                   make(map[string]interface{}),
 		store:                   store,
 		priorityThreshold:       priorityThreshold,
 		maxActionsPerEvaluation: DefaultMaxActionsPerEvaluation,
@@ -204,6 +227,12 @@ func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
 // ProcessFactUpdateContext evaluates rules affected by a fact update with a
 // caller-owned context for store operations and action execution.
 func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, factValue interface{}) error {
+	if e.coordinator != nil {
+		return e.ProcessBatchContext(ctx, map[string]interface{}{factName: factValue})
+	}
+	if e.facts == nil {
+		e.facts = make(map[string]interface{})
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -213,11 +242,11 @@ func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, 
 
 	// Update the fact value in the store
 	if num, ok := factValue.(int); ok {
-		e.Facts[factName] = float64(num)
+		e.facts[factName] = float64(num)
 	} else if num, ok := factValue.(float32); ok {
-		e.Facts[factName] = float64(num)
+		e.facts[factName] = float64(num)
 	} else {
-		e.Facts[factName] = factValue
+		e.facts[factName] = factValue
 	}
 
 	// Find all rules that reference the updated fact
@@ -274,11 +303,11 @@ func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, 
 	var missingFacts map[string]struct{}
 	for fact, value := range factValues {
 		if value != nil {
-			e.Facts[fact] = value
+			e.facts[fact] = value
 		} else {
 			// Fact does not exist in the store
 			logger.Warn().Str("fact", fact).Msg("Fact not found in store")
-			delete(e.Facts, fact)
+			delete(e.facts, fact)
 			if missingFacts == nil {
 				missingFacts = make(map[string]struct{})
 			}
@@ -334,7 +363,7 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 		Str("ruleName", ruleName).
 		Msg("Starting rule evaluation")
 	logger.Debug().
-		Interface("facts", e.Facts).
+		Interface("facts", e.facts).
 		Msg("Current facts")
 
 	rule, found := e.ruleExecutionIndex[ruleName]
@@ -408,7 +437,7 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 			offset += nameLen
 			comparisonFactName = factName
 
-			factValue = e.Facts[factName]
+			factValue = e.facts[factName]
 			relevantFacts[factName] = factValue
 			logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Loaded fact")
 
@@ -575,7 +604,7 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 				paramName := string(e.bytecode[offset : offset+paramNameLen])
 				offset += paramNameLen
 
-				params[paramName] = e.Facts[paramName]
+				params[paramName] = e.facts[paramName]
 			}
 
 			logger.Debug().Interface("scriptName", scriptName).Interface("params", params).Msg("Script parameters")
@@ -750,7 +779,7 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 		}
 
 		// Update the fact value in the local fact store
-		e.Facts[factName] = factValue
+		e.facts[factName] = factValue
 
 		logger.Debug().
 			Str("factName", factName).

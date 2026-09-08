@@ -257,6 +257,8 @@ transaction, retry, durability, or exactly-once guarantee.
 
 ### REX-012: memory and routing boundaries
 
+Historical v3 findings (preserved for compatibility):
+
 - `Engine.Facts` grows for process lifetime. Document fixed-cardinality facts
   as the current assumption, or design bounded/cacheable state before dynamic
   fact names are supported.
@@ -266,6 +268,14 @@ transaction, retry, durability, or exactly-once guarantee.
 - Derived updates route to `strings.Split(key, ":")[0]`; the parser does not
   enforce the documented `group:key` form and configuration may omit that
   channel. Add validation/linting and an explicit routing contract.
+
+**M4 local resolution (review pending):** v4 retains no event facts and bounds
+per-event, per-round, and chain work/state. The public mutable field is removed;
+legacy inspection returns a copy and v4 returns explicit chain results. The
+10,000-name churn regression leaves v4 retained facts empty. V4 derived rounds
+run locally, with committed notifications on `rex_results`; migration of legacy
+prefix-channel consumers is explicit. Legacy v3 still retains unbounded facts
+and its original routing behavior. See [M4 migration](M4_MIGRATION.md).
 
 ### REX-013: small repository maintenance
 

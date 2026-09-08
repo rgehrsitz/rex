@@ -345,7 +345,7 @@ func measure(ctx context.Context, f fixture, o options, run int) (result, error)
 	runtime.ReadMemStats(&retained)
 	r.HeapBefore, r.HeapAfter = before.HeapAlloc, retained.HeapAlloc
 	r.RetainedDelta = int64(retained.HeapAlloc) - int64(before.HeapAlloc)
-	r.FactsRetained = len(engine.Facts)
+	r.FactsRetained = len(engine.Snapshot())
 	runtime.KeepAlive(engine)
 	r.AllocsPerEvent = float64(after.Mallocs-before.Mallocs) / float64(o.events)
 	r.BytesPerEvent = float64(after.TotalAlloc-before.TotalAlloc) / float64(o.events)
