@@ -1,0 +1,796 @@
+[
+  {
+    "name": "numeric-match",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "out": true
+      },
+      "local": {
+        "a": 1,
+        "out": true
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:00Z"
+        }
+      ],
+      "errors": []
+    }
+  },
+  {
+    "name": "priority-ties-multiple-actions",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "late",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": "late"
+            }
+          ]
+        },
+        {
+          "name": "first",
+          "priority": 0,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": "first"
+            },
+            {
+              "type": "updateStore",
+              "target": "x",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "name": "tie",
+          "priority": 0,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": "tie"
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "out": "late",
+        "x": 2
+      },
+      "local": {
+        "a": 1,
+        "out": "late",
+        "x": 2
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": "first",
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:00Z"
+        },
+        {
+          "key": "x",
+          "value": 2,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:01Z"
+        },
+        {
+          "key": "out",
+          "value": "tie",
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:02Z"
+        },
+        {
+          "key": "out",
+          "value": "late",
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:03Z"
+        }
+      ],
+      "errors": []
+    }
+  },
+  {
+    "name": "nested-all-any",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "any": [
+                  {
+                    "fact": "b",
+                    "operator": "EQ",
+                    "value": true
+                  },
+                  {
+                    "all": [
+                      {
+                        "fact": "c",
+                        "operator": "CONTAINS",
+                        "value": "yes"
+                      },
+                      {
+                        "fact": "d",
+                        "operator": "NEQ",
+                        "value": 0
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {
+      "b": false,
+      "c": "yes indeed",
+      "d": 1
+    },
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "b": false,
+        "c": "yes indeed",
+        "d": 1,
+        "out": true
+      },
+      "local": {
+        "a": 1,
+        "b": false,
+        "c": "yes indeed",
+        "d": 1,
+        "out": true
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:00Z"
+        }
+      ],
+      "errors": []
+    }
+  },
+  {
+    "name": "missing-prefilter-even-when-any-matches",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "any": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "missing",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1
+      },
+      "local": {
+        "a": 1
+      },
+      "actions": [],
+      "errors": []
+    }
+  },
+  {
+    "name": "null-dependency-and-recovery",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "any": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "missing",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {
+      "missing": null
+    },
+    "batches": [
+      {
+        "a": 1
+      },
+      {
+        "missing": true
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "missing": true,
+        "out": true
+      },
+      "local": {
+        "a": 1,
+        "missing": true,
+        "out": true
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:00Z"
+        }
+      ],
+      "errors": []
+    }
+  },
+  {
+    "name": "type-mismatch-null-input",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "NEQ",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": "wrong"
+      },
+      {
+        "a": null
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": null
+      },
+      "local": {
+        "a": null
+      },
+      "actions": [],
+      "errors": []
+    }
+  },
+  {
+    "name": "overlapping-batch-evaluates-twice",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "b",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "b": 1,
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "b": 1,
+        "out": true
+      },
+      "local": {
+        "a": 1,
+        "b": 1,
+        "out": true
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:00Z"
+        },
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:01Z"
+        }
+      ],
+      "errors": []
+    }
+  },
+  {
+    "name": "read-failure-keeps-input-local",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "b",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {
+      "b": 1
+    },
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "b": 1
+      },
+      "local": {
+        "a": 1
+      },
+      "actions": [],
+      "errors": [
+        "injected read failure"
+      ]
+    },
+    "fail_read": 1
+  },
+  {
+    "name": "write-failure-keeps-local-write",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            },
+            {
+              "type": "updateStore",
+              "target": "next",
+              "value": 2
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1
+      },
+      "local": {
+        "a": 1,
+        "out": true
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "write_failed",
+          "at": "1970-01-01T00:00:00Z"
+        }
+      ],
+      "errors": [
+        "injected write failure"
+      ]
+    },
+    "fail_action": 1
+  },
+  {
+    "name": "publish-failure-after-persistence",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            },
+            {
+              "type": "updateStore",
+              "target": "next",
+              "value": 2
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "out": true
+      },
+      "local": {
+        "a": 1,
+        "out": true
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "publish_failed",
+          "at": "1970-01-01T00:00:00Z"
+        }
+      ],
+      "errors": [
+        "injected publish failure"
+      ]
+    },
+    "fail_publish": 1
+  },
+  {
+    "name": "action-limit-is-per-rule",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            },
+            {
+              "type": "updateStore",
+              "target": "next",
+              "value": 2
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1,
+        "out": true
+      },
+      "local": {
+        "a": 1,
+        "out": true
+      },
+      "actions": [
+        {
+          "key": "out",
+          "value": true,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:00Z"
+        }
+      ],
+      "errors": [
+        "rule \"r\" exceeded action limit of 1"
+      ]
+    },
+    "action_limit": 1
+  },
+  {
+    "name": "cycle-bounded-by-harness-not-runtime",
+    "contract": "current-v3",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "cycle",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "a",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    "initial": {},
+    "batches": [
+      {
+        "a": 1
+      }
+    ],
+    "expected": {
+      "facts": {
+        "a": 1
+      },
+      "local": {
+        "a": 1
+      },
+      "actions": [
+        {
+          "key": "a",
+          "value": 1,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:00Z"
+        },
+        {
+          "key": "a",
+          "value": 1,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:01Z"
+        },
+        {
+          "key": "a",
+          "value": 1,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:02Z"
+        },
+        {
+          "key": "a",
+          "value": 1,
+          "outcome": "succeeded",
+          "at": "1970-01-01T00:00:03Z"
+        }
+      ],
+      "errors": [
+        "harness delivery limit reached"
+      ]
+    },
+    "deliver": 3
+  }
+]
