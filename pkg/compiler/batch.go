@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"strings"
+	"unicode/utf8"
 )
 
 // BatchVersion is the current artifact/execution contract. Version remains the
@@ -21,6 +22,9 @@ const batchHeaderSize = 16
 func ParseBatch(data []byte) (*Ruleset, error) {
 	if len(data) > MaxProgramBytes {
 		return nil, fmt.Errorf("program exceeds %d bytes", MaxProgramBytes)
+	}
+	if !utf8.Valid(data) {
+		return nil, fmt.Errorf("program must be valid UTF-8")
 	}
 	// Bound nesting before recursive source validation. Ignore brackets in strings.
 	depth := 0
@@ -51,6 +55,9 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 	}
 	rules, err := Parse(data)
 	if err != nil {
+		return nil, err
+	}
+	if err := validateBatchShapes(data); err != nil {
 		return nil, err
 	}
 	if len(rules.Rules) > MaxProgramRules {
@@ -149,4 +156,66 @@ func DecodeBatch(data []byte) (*Ruleset, error) {
 		return nil, fmt.Errorf("batch artifact checksum mismatch")
 	}
 	return ParseBatch(payload)
+}
+
+// validateBatchShapes checks field presence that the shared legacy AST loses
+// (for example, an explicitly empty all beside a populated any).
+func validateBatchShapes(data []byte) error {
+	var root struct {
+		Rules []map[string]json.RawMessage `json:"rules"`
+	}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return err
+	}
+	var group func(json.RawMessage, bool) error
+	group = func(raw json.RawMessage, leafAllowed bool) error {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return err
+		}
+		all, hasAll := fields["all"]
+		any, hasAny := fields["any"]
+		if hasAll == hasAny {
+			if !hasAll && leafAllowed {
+				return nil
+			} // shared parser validates leaf fields
+			return fmt.Errorf("v4 condition group requires exactly one of all or any")
+		}
+		if len(fields) != 1 {
+			return fmt.Errorf("v4 group cannot contain leaf fields")
+		}
+		children := all
+		if hasAny {
+			children = any
+		}
+		var nodes []json.RawMessage
+		if err := json.Unmarshal(children, &nodes); err != nil {
+			return err
+		}
+		if len(nodes) == 0 {
+			return fmt.Errorf("v4 condition group cannot be empty")
+		}
+		for _, node := range nodes {
+			if err := group(node, true); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for i, r := range root.Rules {
+		if _, ok := r["scripts"]; ok {
+			name := fmt.Sprintf("rules[%d]", i)
+			if rawName, ok := r["name"]; ok {
+				var ruleName string
+				if json.Unmarshal(rawName, &ruleName) == nil && ruleName != "" {
+					name = fmt.Sprintf("rule %q", ruleName)
+				}
+			}
+			return fmt.Errorf("v4 scripts unavailable until M6: %s", name)
+		}
+		if err := group(r["conditions"], false); err != nil {
+			return err
+		}
+	}
+	return nil
 }

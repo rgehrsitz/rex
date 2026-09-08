@@ -105,7 +105,10 @@ func (l Limits) Validate() error {
 	return nil
 }
 
-type Budget struct{ Actions, Work int }
+type Budget struct {
+	Actions int `json:"actions"`
+	Work    int `json:"work"`
+}
 type ActionProposal struct {
 	Rule   string      `json:"rule"`
 	Target string      `json:"target"`
@@ -117,11 +120,16 @@ type ConditionResult struct {
 	State  store.FactState `json:"state"`
 	Result Truth           `json:"result"`
 }
+type RuleResult struct {
+	Rule   string `json:"rule"`
+	Result Truth  `json:"result"`
+}
 type Evaluation struct {
-	Rules      []string          `json:"rules"`
-	Actions    []ActionProposal  `json:"actions"`
-	Writes     []store.Write     `json:"writes"`
-	Conditions []ConditionResult `json:"conditions,omitempty"`
+	RuleResults []RuleResult      `json:"rule_results,omitempty"`
+	Rules       []string          `json:"rules"`
+	Actions     []ActionProposal  `json:"actions"`
+	Writes      []store.Write     `json:"writes"`
+	Conditions  []ConditionResult `json:"conditions,omitempty"`
 }
 
 func fieldBytes(key string, value interface{}, limit int) (int, error) {
@@ -247,8 +255,14 @@ func compareV4(f store.Fact, constant interface{}, op string) Truth {
 // Evaluate is pure with respect to state and transport. It never calls an
 // adapter. Inputs must not be concurrently mutated by the caller. Budget is
 // copied on entry; a failed evaluation does not consume the caller's budget.
-func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, event map[string]interface{}, limits Limits, budget Budget, trace bool) (Evaluation, Budget, error) {
+func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, event map[string]interface{}, limits Limits, budget Budget, trace bool) (retEval Evaluation, retBudget Budget, retErr error) {
 	empty := Evaluation{}
+	result := Evaluation{}
+	defer func() {
+		if retErr != nil {
+			retEval = Evaluation{Conditions: result.Conditions, RuleResults: result.RuleResults}
+		}
+	}()
 	if err := limits.Validate(); err != nil {
 		return empty, budget, err
 	}
@@ -297,7 +311,7 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 		}
 		values[k] = store.Fact{State: state, Value: v}
 	}
-	result := Evaluation{Rules: []string{}, Actions: []ActionProposal{}, Writes: []store.Write{}}
+	result = Evaluation{Rules: []string{}, Actions: []ActionProposal{}, Writes: []store.Write{}}
 	var group func(string, []*compiler.ConditionOrGroup, bool) (Truth, error)
 	group = func(rule string, nodes []*compiler.ConditionOrGroup, all bool) (Truth, error) {
 		unknown := false
@@ -361,6 +375,9 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 		if err != nil {
 			return empty, budget, err
 		}
+		if trace {
+			result.RuleResults = append(result.RuleResults, RuleResult{Rule: rule.Name, Result: matched})
+		}
 		if matched != True {
 			continue
 		}
@@ -399,10 +416,11 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 }
 
 type RoundResult struct {
-	Round       int                `json:"round"`
-	Evaluation  Evaluation         `json:"evaluation"`
-	Commit      store.CommitResult `json:"commit"`
-	CommitError string             `json:"commit_error,omitempty"`
+	EvaluationError string             `json:"evaluation_error,omitempty"`
+	Round           int                `json:"round"`
+	Evaluation      Evaluation         `json:"evaluation"`
+	Commit          store.CommitResult `json:"commit"`
+	CommitError     string             `json:"commit_error,omitempty"`
 }
 type ChainResult struct {
 	ChainID string        `json:"chain_id"`
@@ -472,6 +490,7 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		}
 		eval, budget, err := c.program.Evaluate(ctx, snapshot, event, c.limits, result.Budget, c.trace)
 		if err != nil {
+			result.Rounds = append(result.Rounds, RoundResult{Round: round, Evaluation: eval, EvaluationError: err.Error(), Commit: store.CommitResult{Outcome: store.NotCommitted}})
 			return result, fmt.Errorf("evaluate round %d: %w", round, err)
 		}
 		result.Budget = budget
@@ -518,4 +537,12 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		event = next
 	}
 	return result, nil
+}
+
+// ValidateEvent checks a proposed input against v4 scalar and payload limits.
+func ValidateEvent(event map[string]interface{}, limits Limits) error {
+	if err := limits.Validate(); err != nil {
+		return err
+	}
+	return validateEvent(event, limits)
 }

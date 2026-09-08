@@ -1,8 +1,9 @@
 # REX-M4 migration and validation
 
-Status: local implementation, review/integration pending. Execution contract v4
-is the default for `rexc` and `rexd`. [D1–D5](decisions/REX-M4.md) define the
-semantics, truth tables, adapter failure scope, and budget ownership.
+Status: merged in [PR #35](https://github.com/rgehrsitz/rex/pull/35), revision
+`f6e036c`. Execution contract v4 is the default for `rexc` and `rexd`.
+[D1–D5](decisions/REX-M4.md) define the semantics, truth tables, adapter failure
+scope, and budget ownership.
 
 ## Before/after examples
 
