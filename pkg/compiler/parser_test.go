@@ -914,34 +914,6 @@ func TestParseRejectsOversizedBytecodeFields(t *testing.T) {
 			},
 			expectedErr: "Action string value exceeds bytecode limit",
 		},
-		{
-			name: "script name",
-			mutate: func(ruleset *Ruleset) {
-				ruleset.Rules[0].Scripts = map[string]Script{overlong: {Params: []string{"value"}, Body: "return value;"}}
-			},
-			expectedErr: "Script name exceeds bytecode limit",
-		},
-		{
-			name: "script parameter",
-			mutate: func(ruleset *Ruleset) {
-				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: []string{overlong}, Body: "return value;"}}
-			},
-			expectedErr: "Script parameter exceeds bytecode limit",
-		},
-		{
-			name: "script body",
-			mutate: func(ruleset *Ruleset) {
-				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: []string{"value"}, Body: overlong}}
-			},
-			expectedErr: "Script body exceeds bytecode limit",
-		},
-		{
-			name: "script parameter count",
-			mutate: func(ruleset *Ruleset) {
-				ruleset.Rules[0].Scripts = map[string]Script{"script": {Params: make([]string, MaxBytecodeStringLength+1), Body: "return value;"}}
-			},
-			expectedErr: "Script parameter count exceeds bytecode limit",
-		},
 	}
 
 	for _, tt := range tests {
@@ -955,6 +927,44 @@ func TestParseRejectsOversizedBytecodeFields(t *testing.T) {
 
 			_, err = Parse(jsonData)
 			assert.ErrorContains(t, err, tt.expectedErr)
+		})
+	}
+}
+
+func TestParseRejectsRetiredScriptsBeforeValidation(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{
+			name:   "empty declaration",
+			source: `{"rules":[{"name":"declares_scripts","scripts":{}}]}`,
+			want:   `rule "declares_scripts" declares scripts`,
+		},
+		{
+			name:   "action call",
+			source: `{"rules":[{"name":"calls_script","actions":[{"type":"updateStore","target":"out","value":"{calculate}"}]}]}`,
+			want:   `rule "calls_script" action 0 calls "{calculate}"`,
+		},
+		{
+			name:   "nonterminating body",
+			source: `{"rules":[{"name":"infinite","scripts":{"loop":{"body":"for (;;) {}"}}}]}`,
+			want:   `rule "infinite" declares scripts`,
+		},
+		{
+			name:   "memory growth body",
+			source: `{"rules":[{"name":"memory","scripts":{"grow":{"body":"for (;;) { values.push(values); }"}}}]}`,
+			want:   `rule "memory" declares scripts`,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ruleset, err := Parse([]byte(test.source))
+			assert.Nil(t, ruleset)
+			assert.ErrorContains(t, err, "scripts are no longer supported")
+			assert.ErrorContains(t, err, test.want)
 		})
 	}
 }

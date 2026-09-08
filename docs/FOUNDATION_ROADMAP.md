@@ -57,12 +57,12 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M2 | Establish an independent semantics safety net | M0 | Complete | [Current-v3 safety net](../internal/semantics/README.md): memory store, 12 scenarios, 128 seeds, truth tables, mutation checks, and disassembly goldens. Local validation complete; review pending. Next: M4. |
 | REX-M3 | Harden deployment and operational visibility | M0 | Planned | Fix startup errors, TLS/secrets, readiness, and latency visibility. |
 | REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Complete | [PR #35](https://github.com/rgehrsitz/rex/pull/35), `f6e036c`; [migration](M4_MIGRATION.md). |
-| REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Local complete; review pending | [M5 tooling contract](decisions/REX-M5.md), [commands and validation](M5_TOOLING.md). |
-| REX-M6 | Constrain script execution | M0; integrate with M4 | Planned | Retain disabled default; design isolated worker lifecycle and limits. |
+| REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
+| REX-M6 | Constrain script execution | M0; integrate with M4 | Local complete; review pending | [D6 removal decision](decisions/REX-M6.md) and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Planned | Design journal, commit, acknowledgement, and crash recovery together. |
 | REX-M8 | Extend the proven foundation | Capability-specific gates below | Planned | Start with ruleset reloads; split each capability into its own proposal. |
 
-Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M7 -> M8. M3 can run after
+Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
 earlier wherever scripts are enabled; final integration must satisfy M4's
 evaluation contract. A scripts-disabled release need not wait for M6. These
@@ -157,8 +157,8 @@ bytecode interpreter.
 - [x] Cover nested `all`/`any`, type mismatches, missing/null inputs, priority
   ties, overlapping dependencies, multiple actions, cycles, and store failures.
 - [x] Use an injected clock and controllable action results in the harness.
-  Keep arbitrary JavaScript out of the deterministic oracle until M6 supplies
-  a suitable contract; test its integration separately.
+  Arbitrary JavaScript stayed outside the deterministic oracle and was removed
+  in M6.
 - [x] Add deterministic disassembly fixtures and retain parser/loader fuzzing.
 
 **Acceptance criteria:** scenarios run without Redis; differential tests detect
@@ -289,20 +289,22 @@ daemon dry-run. Keep the CLI and production runtime on the same evaluator.
 
 ## REX-M6 — Constrain script execution
 
-**Outcome:** a script cannot continue indefinitely inside the daemon after its
-caller times out, and script state cannot leak across evaluations.
+**Outcome:** script code cannot execute in the daemon, and script state cannot
+exist or leak across evaluations.
 
-- [ ] Retain scripts disabled by default and reject or explicitly diagnose a
+- [x] Retain scripts disabled by default and reject or explicitly diagnose a
   ruleset requiring unavailable script capabilities at load time.
-- [ ] Design a separate worker process protocol with bounded request/result
-  sizes, hard wall-time termination, CPU/memory limits, and cancellation.
-- [ ] Isolate mutable VM state per invocation or implement a verified reset;
+- [x] Design a separate worker process protocol with bounded request/result
+  sizes, hard wall-time termination, CPU/memory limits, and cancellation, or
+  record why the capability is removed instead.
+- [x] Isolate mutable VM state per invocation or implement a verified reset;
   bound worker count, queue length, and restart rate. Kill and reap timed-out
-  workers before reuse.
-- [ ] Validate script syntax, references, and parameter contracts before use.
-- [ ] Define clock/randomness/host-access behavior and record nondeterministic
+  workers before reuse. Removal leaves no VM, worker, queue, or mutable state.
+- [x] Validate script syntax, references, and parameter contracts before use,
+  or reject the capability before those inputs can execute.
+- [x] Define clock/randomness/host-access behavior and record nondeterministic
   results needed for replay. Complete D6 before claiming deterministic scripts.
-- [ ] Publish platform support for enforced limits. Where guarantees cannot be
+- [x] Publish platform support for enforced limits. Where guarantees cannot be
   enforced, keep that capability unavailable rather than silently weakening it.
 
 **Acceptance criteria:** infinite loops, memory exhaustion, malformed output,
@@ -311,7 +313,8 @@ orphaned workers or corrupt subsequent evaluations. No partial script result is
 committed. Test compatibility with M4 and update REX-006 with verified guarantees.
 Process separation alone is not a complete security boundary for hostile authors;
 any untrusted-author claim also requires restricted host access and a reviewed
-threat model.
+threat model. Removal satisfies these cases by rejecting code before evaluation,
+with no worker or script result created.
 
 **Suggested PRs:** protocol/worker lifecycle; enforced platform limits;
 determinism and validation; evaluator integration. If JavaScript's value does
@@ -396,7 +399,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D3 | Missing/null/invalid facts | Distinguish them in representation and diagnostics. Prefer explicit indeterminate comparisons: true satisfies `any`, false fails `all`, otherwise unknown propagates; only true fires. Define full truth tables, including `NEQ`, and version the behavior. | Resolved in [M4 contract](decisions/REX-M4.md). |
 | D4 | Failure and commit scope | Evaluation errors discard staged outputs. Specify adapter commit scope, observable partial/unknown outcomes, and recovery. Snapshot evaluation alone is not a storage transaction. | Resolved in [D4](decisions/REX-M4.md); durable recovery remains M7. |
 | D5 | Derived rounds and resource budgets | Outputs feed a subsequent ordered round; enforce action, event, chain/fan-out, payload, and state limits. Define chain IDs, budget ownership, and restart behavior. | Resolved in [D5](decisions/REX-M4.md); persistence remains M7. |
-| D6 | Script capability and determinism | Isolated bounded workers if retaining general JavaScript; explicit time/randomness inputs or recorded results for replay. Document supported platforms and host-access limits. | Before M6 integration. Open. |
+| D6 | Script capability and determinism | Isolated bounded workers if retaining general JavaScript; explicit time/randomness inputs or recorded results for replay. Document supported platforms and host-access limits. | Resolved by removal in [REX-M6](decisions/REX-M6.md). |
 | D7 | Durable topology, ordering, retention | Start with a documented single Redis commit domain and one state owner per partition; choose supported versions, persistence settings, retention, and consumer recovery together. | Before M7 implementation. Open. |
 
 ## Review, validation, and completion discipline
@@ -519,12 +522,12 @@ Next concrete action:
   independent operational lane.
 
 
-### 2026-09-08 — REX-M5 local completion; review pending
+### 2026-09-08 — REX-M5 complete
 
 - Starting revision: `f6e036c765d57c6c352617831dfb5052c86cae2e`, merged M4
-  [PR #35](https://github.com/rgehrsitz/rex/pull/35). All seven review threads were
-  resolved and all hosted checks passed. M5 is local on `codex/rex-m5-tools`;
-  review and integration remain pending.
+  [PR #35](https://github.com/rgehrsitz/rex/pull/35). M5 merged in
+  [PR #36](https://github.com/rgehrsitz/rex/pull/36) at `039f5c6` after all
+  review threads were resolved and all hosted checks passed.
 - Delivered `rexc explain`, `bundle`, `test`, `simulate`, `compare`, and `lint`,
   v4 artifact sidecars, and offline `rexd --dry-run --bundle`. The shared
   production evaluator now exposes false/unknown rule results and failed-round
@@ -549,5 +552,27 @@ Next concrete action:
   Lint proves the documented simple self-cycle, not arbitrary multi-rule cycles.
   Offline memory outcomes do not predict Redis delivery failures. These bounds
   are explicit in the tooling guide, rather than claiming general equivalence.
-- Next concrete action: review/integrate M5, then REX-M6. M3 remains the separate
-  operational-hardening lane; durable recovery remains M7.
+- Next concrete action: REX-M6. M3 remains the separate operational-hardening
+  lane; durable recovery remains M7.
+
+### 2026-09-08 — REX-M6 local completion; review pending
+
+- Starting revision: `039f5c649448fc2261239bade97bde250cb497f3`, merged M5
+  [PR #36](https://github.com/rgehrsitz/rex/pull/36).
+- Resolved D6 and REX-006 by deliberately removing general-purpose JavaScript.
+  The [decision record](decisions/REX-M6.md) explains why an operating-system
+  worker sandbox was not justified; the [migration guide](M6_SCRIPT_REMOVAL.md)
+  covers affected source, artifacts, configuration, and rollback.
+- Both source contracts reject any `scripts` field and brace-form action call.
+  Programmatic v3 generation rejects non-nil script maps, and v3 loading rejects
+  both reserved script opcodes before returning an engine.
+- Removed the Otto VM, all runtime execution paths, script-specific benchmarks,
+  and the production dependency. `engine.scripts_enabled=true` now fails daemon
+  startup, while `false` remains compatible for script-free deployments.
+- Tests cover empty definitions, calls, nonterminating/allocation-growth bodies,
+  embedded API inputs, legacy artifacts, and the configuration tripwire. Normal
+  and race suites, formatting/module checks, vet/build, M5 CLI smoke, all six
+  release cross-builds and checksums, three ten-second fuzz runs, and
+  `govulncheck` pass. The scan reports no reachable vulnerabilities.
+- Next concrete action after review/integration: REX-M7 on the main sequence, or
+  REX-M3 in the independent operational-hardening lane.

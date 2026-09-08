@@ -1,12 +1,9 @@
 package runtime
 
 import (
-	"runtime"
 	"testing"
-	"time"
 
 	"rgehrsitz/rex/pkg/compiler"
-	"rgehrsitz/rex/pkg/scripting"
 	"rgehrsitz/rex/pkg/store"
 
 	"github.com/alicebob/miniredis/v2"
@@ -49,17 +46,6 @@ func createMockEngine(b *testing.B, redisStore *store.RedisStore) *Engine {
 						Target: "temperature_status",
 						Value:  "high",
 					},
-					{
-						Type:   "updateStore",
-						Target: "heat_index",
-						Value:  "{calculate_heat_index}",
-					},
-				},
-				Scripts: map[string]compiler.Script{
-					"calculate_heat_index": {
-						Params: []string{"temperature", "humidity"},
-						Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
-					},
 				},
 			},
 		},
@@ -79,8 +65,7 @@ func createMockEngine(b *testing.B, redisStore *store.RedisStore) *Engine {
 			"temperature_status": "",
 			"heat_index":         0.0,
 		},
-		store:        redisStore,
-		ScriptEngine: scripting.NewSafeVM(),
+		store: redisStore,
 	}
 
 	// Initialize Redis store with the same facts
@@ -95,15 +80,6 @@ func createMockEngine(b *testing.B, redisStore *store.RedisStore) *Engine {
 		if err != nil {
 			b.Fatalf("Failed to set fact in Redis store: %v", err)
 		}
-	}
-
-	// Add the script to the engine
-	err := engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
-		Params: []string{"temperature", "humidity"},
-		Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
-	})
-	if err != nil {
-		b.Fatalf("Failed to set script: %v", err)
 	}
 
 	return engine
@@ -171,49 +147,5 @@ func BenchmarkFullRuleEvaluation(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		engine.ProcessFactUpdate("temperature", float64(25+i%10))
-	}
-}
-
-func BenchmarkSetScript(b *testing.B) {
-	s, redisStore := setupMiniRedis(b)
-	defer s.Close()
-
-	engine := createMockEngine(b, redisStore)
-	script := compiler.Script{
-		Params: []string{"temperature", "humidity"},
-		Body:   "return temperature + humidity;",
-	}
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		engine.ScriptEngine.SetScript("calculate_heat_index", script)
-	}
-}
-
-func BenchmarkRunScript(b *testing.B) {
-	s, redisStore := setupMiniRedis(b)
-	defer s.Close()
-
-	engine := createMockEngine(b, redisStore)
-
-	expectedResult := 25.0*1.8 + 32 + (60.0/100)*10
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		start := time.Now()
-		initialGoroutines := runtime.NumGoroutine()
-		result, err := engine.ScriptEngine.RunScript("calculate_heat_index", map[string]interface{}{"temperature": 25.0, "humidity": 60.0}, 1*time.Second)
-		elapsed := time.Since(start)
-		finalGoroutines := runtime.NumGoroutine()
-
-		// Log and verify results
-		b.Logf("Script execution time: %s, Goroutines before: %d, after: %d", elapsed, initialGoroutines, finalGoroutines)
-		if err != nil {
-			b.Fatalf("Failed to run script: %v (elapsed time: %s)", err, elapsed)
-		}
-
-		if result != expectedResult {
-			b.Fatalf("Incorrect result: got %v, want %v (elapsed time: %s)", result, expectedResult, elapsed)
-		}
 	}
 }

@@ -84,4 +84,4 @@ V4 artifacts contain a bounded, CRC-checked structured rule IR (JSON encoding)
 with a new version/header; tree grouping is retained to represent Unknown
 correctly. The old binary jump program remains v3 and never acquires v4 meaning.
 The default compiler/daemon path is v4; v3 requires explicit CLI/config opt-in.
-Scripts are rejected in v4 until M6 supplies a safe explicit invocation contract.
+Scripts are rejected in v4. M6 subsequently removed them from every contract.

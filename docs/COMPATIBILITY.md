@@ -12,7 +12,7 @@ turn an upstream dependency's broad compatibility claim into a Rex guarantee.
 | Redis transport | Redis Pub/Sub through `github.com/redis/go-redis/v9` | Unit and integration-style tests use `miniredis` | Validate a production Redis version and deployment topology in staging before treating it as supported for your environment. |
 | Rules source | JSON rulesets accepted by the current `rexc` | Parser, compiler, and fuzz tests | Preserve the source ruleset with every deployed bytecode artifact. |
 | Bytecode | V4 default; v3 explicit compatibility | Compiler and runtime validation tests | `rexd` rejects versions 1, 2, and all unknown versions. Recompile retained JSON rulesets with the current `rexc`; see [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
-| Scripts | Rejected in v4; legacy Otto disabled by default | Legacy integration tests remain separate | V4 awaits M6. Legacy scripts are not sandboxed. |
+| Scripts | Removed on every platform and execution contract | Source, compiler-API, artifact-loader, and daemon-config rejection tests | Migrate calculations to producer facts or declarative rules; see [M6 migration](M6_SCRIPT_REMOVAL.md). |
 
 The upstream `go-redis` project publishes its own supported Redis versions.
 When its compatibility policy changes, reassess the pinned dependency and

@@ -5,17 +5,20 @@ type Ruleset struct {
 	Rules []Rule `json:"rules"`
 }
 
+// Script is retained only so embedded callers and the JSON decoder receive a
+// specific M6 migration error. No compiler or runtime executes it.
 type Script struct {
 	Params []string `json:"params"`
 	Body   string   `json:"body"`
 }
 
 type Rule struct {
-	Name       string            `json:"name"`
-	Priority   int               `json:"priority"`
-	Conditions ConditionGroup    `json:"conditions"`
-	Actions    []Action          `json:"actions"`
-	Scripts    map[string]Script `json:"scripts,omitempty"`
+	Name       string         `json:"name"`
+	Priority   int            `json:"priority"`
+	Conditions ConditionGroup `json:"conditions"`
+	Actions    []Action       `json:"actions"`
+	// Scripts is a retired capability. Any non-nil value is rejected.
+	Scripts map[string]Script `json:"scripts,omitempty"`
 }
 
 type ConditionGroup struct {

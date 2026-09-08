@@ -9,8 +9,9 @@ The default v4 execution contract evaluates each affected rule once per batch,
 against the same snapshot. Outputs are staged, conflicts reject the round, and
 committed outputs feed bounded subsequent rounds. See the
 [M4 migration guide](docs/M4_MIGRATION.md) before recompiling v3 rulesets.
-Scripts are unavailable in v4 until M6. Existing script examples below apply
-only to explicit legacy-v3 deployments.
+M6 removed JavaScript execution from every contract; see the
+[script migration guide](docs/M6_SCRIPT_REMOVAL.md) before upgrading a legacy
+v3 deployment that used scripts.
 
 Use the [M5 authoring tools](docs/M5_TOOLING.md) to explain, lint, test, replay,
 and compare v4 rulesets offline. `rexd --dry-run --bundle ...` emits simulated
@@ -38,7 +39,7 @@ For platform, toolchain, and runtime expectations, see the
 - Support for various data types and comparison operations
 - Logical and control flow instructions
 - Action execution based on rules
-- **New:** Scripting capabilities using Otto (JavaScript engine)
+- Offline explain, lint, scenario-test, replay, and comparison tools
 
 ## Getting Started
 
@@ -290,7 +291,6 @@ for the tag and verification procedure.
 - `cmd/rexd`: Main application entry point for the runtime engine
 - `pkg/compiler`: Contains the bytecode compiler and related functions
 - `pkg/runtime`: Contains the runtime engine and related functions
-- `pkg/scripting`: Contains the scripting engine and related functions using Otto
 - `pkg/store`: Contains the Redis store implementation
 - `pkg/logging`: Contains logging utilities
 - `tools/redis_setup`: Redis setup and CLI tool
@@ -370,145 +370,13 @@ An action object has the following properties:
   ' for the naming of facts.
 - value: the value to update.
 
-### Scripting
+### Removed scripting capability
 
-REX supports scripting using the Otto JavaScript engine, but `rexd` disables
-script execution by default. Enable `engine.scripts_enabled` only for rulesets
-from fully trusted authors. The current in-process runner is not a security
-boundary: its timeout cannot reliably stop an infinite script, and its VM is
-shared mutable state. Do not use it for untrusted rule content.
-
-### Defining Scripts
-
-Scripts are defined in the Scripts section of a rule and can be referenced in actions. Here's an example:
-
-```json
-{
-  "rules": [
-    {
-      "name": "rule-1",
-      "conditions": {
-        "all": [{ "fact": "temperature", "operator": "GT", "value": 30 }]
-      },
-      "actions": [
-        {
-          "type": "updateStore",
-          "target": "heat_index",
-          "value": "{calculate_heat_index}"
-        }
-      ],
-      "scripts": {
-        "calculate_heat_index": {
-          "params": ["temperature", "humidity"],
-          "body": "return temperature * 1.8 + 32 + (humidity / 100) * 10;"
-        }
-      }
-    }
-  ]
-}
-```
-
-### Example JSON Ruleset with Scripts
-
-```json
-{
-  "rules": [
-    {
-      "name": "rule-1",
-      "priority": 10,
-      "conditions": {
-        "all": [
-          {
-            "fact": "temperature",
-            "operator": "GT",
-            "value": 30.0
-          },
-          {
-            "fact": "humidity",
-            "operator": "LT",
-            "value": 60
-          },
-          {
-            "any": [
-              {
-                "fact": "pressure",
-                "operator": "LT",
-                "value": 1010
-              },
-              {
-                "fact": "flow_rate",
-                "operator": "GT",
-                "value": 5.0
-              }
-            ]
-          }
-        ]
-      },
-      "actions": [
-        {
-          "type": "updateStore",
-          "target": "temperature_status",
-          "value": true
-        },
-        {
-          "type": "updateStore",
-          "target": "heat_index",
-          "value": "{calculate_heat_index}"
-        }
-      ],
-      "scripts": {
-        "calculate_heat_index": {
-          "params": ["temperature", "humidity"],
-          "body": "return temperature * 1.8 + 32 + (humidity / 100) * 10;"
-        }
-      }
-    },
-    {
-      "name": "rule-2",
-      "priority": 5,
-      "conditions": {
-        "all": [
-          {
-            "any": [
-              {
-                "fact": "pressure",
-                "operator": "EQ",
-                "value": 1013
-              },
-              {
-                "fact": "flow_rate",
-                "operator": "GTE",
-                "value": 5.0
-              }
-            ]
-          },
-          {
-            "any": [
-              {
-                "fact": "temperature",
-                "operator": "EQ",
-                "value": 72
-              },
-              {
-                "fact": "flow_rate",
-                "operator": "LT",
-                "value": 5.0
-              }
-            ]
-          }
-        ]
-      },
-      "actions": [
-        {
-          "type": "updateStore",
-          "target": "alert-service",
-          "value": "Alert - Pressure or flow rate exceeded limits!"
-        }
-      ]
-    }
-  ]
-}
-```
+REX no longer accepts JavaScript definitions or `{script}` action values. The
+compiler rejects them for both v3 and v4, and the runtime rejects legacy v3
+artifacts containing script opcodes before execution. Move calculations into
+producer-supplied facts or express them with declarative rules. See the
+[M6 migration guide](docs/M6_SCRIPT_REMOVAL.md).
 
 ### Execution Order
 

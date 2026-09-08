@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"rgehrsitz/rex/pkg/logging"
 )
@@ -42,6 +43,9 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 	if len(ruleset.Rules) == 0 {
 		return nil, logging.NewError(logging.ErrorTypeParse, "Missing rules field", nil, nil)
 	}
+	if err := rejectScriptCapabilities(jsonData, &ruleset); err != nil {
+		return nil, logging.NewError(logging.ErrorTypeCompile, err.Error(), err, nil)
+	}
 	ruleNames := make(map[string]int, len(ruleset.Rules))
 	for i, rule := range ruleset.Rules {
 		if err := validateRule(&rule); err != nil {
@@ -57,13 +61,6 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 		}
 		ruleNames[rule.Name] = i
 
-		// Validate and compile custom scripts
-		for scriptName, script := range rule.Scripts {
-			if err := validateAndCompileScript(scriptName, script); err != nil {
-				return nil, logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid script: %v", err), err, map[string]interface{}{"rule_name": rule.Name, "script_name": scriptName})
-			}
-		}
-
 		ruleset.Rules[i] = rule
 
 		for j, action := range rule.Actions {
@@ -76,6 +73,26 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 
 	logging.Logger.Debug().Interface("ruleset", ruleset).Msg("Parsed JSON data")
 	return &ruleset, nil
+}
+
+func rejectScriptCapabilities(jsonData []byte, ruleset *Ruleset) error {
+	var raw struct {
+		Rules []map[string]json.RawMessage `json:"rules"`
+	}
+	if err := json.Unmarshal(jsonData, &raw); err != nil {
+		return err
+	}
+	for i, rule := range ruleset.Rules {
+		if _, present := raw.Rules[i]["scripts"]; present {
+			return fmt.Errorf("scripts are no longer supported: rule %q declares scripts", rule.Name)
+		}
+		for j, action := range rule.Actions {
+			if value, ok := action.Value.(string); ok && strings.HasPrefix(value, "{") && strings.HasSuffix(value, "}") {
+				return fmt.Errorf("scripts are no longer supported: rule %q action %d calls %q", rule.Name, j, value)
+			}
+		}
+	}
+	return nil
 }
 
 func applyRuleDefaults(jsonData []byte, ruleset *Ruleset) error {
@@ -159,12 +176,6 @@ func validateRule(rule *Rule) error {
 	}
 	if len(rule.Actions) == 0 {
 		return logging.NewError(logging.ErrorTypeCompile, "At least one action is required", nil, map[string]interface{}{"rule_name": rule.Name})
-	}
-	// Validate scripts
-	for name, script := range rule.Scripts {
-		if err := validateScript(name, script); err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -389,47 +400,6 @@ func isActionValueValid(actionType string, value interface{}) bool {
 	default:
 		return false
 	}
-}
-
-func validateAndCompileScript(name string, script Script) error {
-	// TODO: Implement script validation and compilation
-	// This could involve checking for syntax errors, disallowed operations, etc.
-	// For now, we'll just do a basic check on the script body
-	if script.Body == "" {
-		return fmt.Errorf("script body cannot be empty")
-	}
-	if name == "" {
-		return fmt.Errorf("script name cannot be empty")
-	}
-	// You might want to add more validation logic here
-	return nil
-}
-
-func validateScript(name string, script Script) error {
-	if name == "" {
-		return logging.NewError(logging.ErrorTypeCompile, "Script name is required", nil, nil)
-	}
-	if err := validateBytecodeString("Script name", name); err != nil {
-		return err
-	}
-	if len(script.Params) == 0 {
-		return logging.NewError(logging.ErrorTypeCompile, "Script must have at least one parameter", nil, map[string]interface{}{"script_name": name})
-	}
-	if script.Body == "" {
-		return logging.NewError(logging.ErrorTypeCompile, "Script body is required", nil, map[string]interface{}{"script_name": name})
-	}
-	if len(script.Params) > MaxBytecodeStringLength {
-		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Script parameter count exceeds bytecode limit of %d", MaxBytecodeStringLength), nil, map[string]interface{}{"script_name": name, "parameter_count": len(script.Params)})
-	}
-	for _, param := range script.Params {
-		if err := validateBytecodeString("Script parameter", param); err != nil {
-			return err
-		}
-	}
-	if err := validateBytecodeString("Script body", script.Body); err != nil {
-		return err
-	}
-	return nil
 }
 
 func validateBytecodeString(field, value string) error {

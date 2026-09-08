@@ -8,10 +8,14 @@ changes.
 ## Current support
 
 `rexc` writes **v4** by default, and `rexd` defaults to the v4 batch contract.
-V3 is retained with its original semantics: compile using `rexc -legacy-v3`
-and explicitly set `engine.allow_legacy_v3: true` to run it in the daemon.
+V3 is retained for script-free artifacts: compile using `rexc -legacy-v3` and
+explicitly set `engine.allow_legacy_v3: true` to run it in the daemon.
 Versions 1, 2, and unknown versions are rejected. Keep the source JSON and
 recompile; changing a version field is not a migration.
+
+M6 removed scripting from every contract. The compiler rejects script source,
+and the v3 loader rejects `SCRIPT_DEF` and `SCRIPT_CALL` before execution. Their
+opcode numbers remain reserved only to provide a deterministic migration error.
 
 Embedded APIs `GenerateBytecode` / `WriteBytecodeToFile` and `compiler.Version`
 remain explicitly v3 for existing integrations and the frozen semantics corpus.
@@ -104,8 +108,8 @@ field or attempt an in-place index conversion.
 
 Within a format version, Rex preserves the meaning and binary layout of all
 documented fields and opcodes. The legacy compiler API produces deterministic v3
-artifacts for the same parsed ruleset: map-derived index and script data are
-sorted before serialization. This reproducibility is useful for review and
+artifacts for the same parsed ruleset: map-derived index data is sorted before
+serialization. This reproducibility is useful for review and
 deployment, but it is not a promise that a future *format version* will be
 byte-identical.
 
@@ -119,6 +123,10 @@ internals may retain the version when they neither change valid serialized
 bytes nor alter their meaning. If there is uncertainty, create a new format
 version and retain an explicit reader for the old version only when supporting
 existing deployed artifacts is a release requirement.
+
+M6 is a documented support narrowing: v3 script opcodes are rejected instead of
+being assigned new meaning. Script-free v3 bytes and execution remain unchanged.
+This exception does not make reserved opcodes available for reuse.
 
 `compiler.GenerateBytecode` returns an error that callers must check. Label
 resolution is an internal compiler step, so unresolved control-flow labels

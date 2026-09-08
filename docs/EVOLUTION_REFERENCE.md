@@ -32,14 +32,14 @@ The maintenance and delivery baseline is in place:
 - `rexd` owns subscription lifecycle, supports graceful shutdown, traces,
   health and Prometheus-style metrics, bounded action execution, and bounded
   derived-event hops.
-- Scripts are disabled by default.
+- M6 removed JavaScript from source, artifacts, and runtime execution.
 - The repository has a Docker Compose smoke demo and a successful `v0.1.0-alpha`
   release.
 
 The 2026-08-29 local baseline passed `go test ./...`, `go test -race ./...`,
 `go vet ./...`, `go build ./...`, and `go mod tidy -diff`; aggregate statement
-coverage was 83.2%. The locally installed `govulncheck` must be rebuilt with Go
-1.26 before it can be used locally; CI remains the project scan of record.
+coverage was 83.2%. M6 local validation rebuilt `govulncheck` with Go 1.26.6
+and found no reachable vulnerabilities; CI remains the project scan of record.
 
 ## Product boundaries
 
@@ -54,13 +54,14 @@ coverage was 83.2%. The locally installed `govulncheck` must be rebuilt with Go
 
 - Redis Pub/Sub is durable, queued, or exactly-once. It is a best-effort
   transport and does not expose queue lag.
-- The current Otto integration is a sandbox or safe for untrusted scripts.
+- Executable extension code is available; JavaScript was removed in M6.
 - A malformed but syntactically valid ruleset has fully defined business
   semantics until the language-validation work below is complete.
 
 ### Current decisions
 
-- Scripts are for trusted rulesets only and remain disabled by default.
+- Script fields and brace-form calls are rejected by all compiler contracts;
+  legacy script opcodes are rejected at artifact load.
 - NATS and other transports wait until the subscription/transport boundary is
   independent of the Redis implementation.
 - A generated, per-ruleset application is out of scope; Rex deploys bytecode
@@ -78,10 +79,10 @@ The compiler must reject shapes whose meaning it cannot faithfully execute.
 - Validation now accepts only the runtime-supported `updateStore` action;
   `sendMessage` is rejected during compilation rather than emitted into an
   artifact that can only fail at runtime.
-- Validate referenced scripts and their syntax/identifiers before deployment.
+- Reject retired script definitions and calls before deployment.
 
 Add table-driven compile-and-run semantic tests for nested boolean groups,
-invalid group shapes, duplicate names, unsupported actions, and scripts.
+invalid group shapes, duplicate names, unsupported actions, and retired scripts.
 
 ### Runtime state and event semantics
 

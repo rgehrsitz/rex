@@ -583,73 +583,37 @@ func extractOpcodes(instructions []byte) []Opcode {
 
 // Add this to codegen_test.go
 
-func TestGenerateBytecodeWithScripts(t *testing.T) {
-	ruleset := &Ruleset{
-		Rules: []Rule{
-			{
-				Name: "ScriptRule",
-				Conditions: ConditionGroup{
-					All: []*ConditionOrGroup{
-						{
-							Fact:     "temperature",
-							Operator: "GT",
-							Value:    30.0,
-						},
-					},
-				},
-				Actions: []Action{
-					{
-						Type:   "updateStore",
-						Target: "status",
-						Value:  "hot",
-					},
-				},
-				Scripts: map[string]Script{
-					"calculate_heat_index": {
-						Params: []string{"temperature", "humidity"},
-						Body:   "return temperature * 1.8 + 32 + (humidity / 100) * 10;",
-					},
-				},
-			},
+func TestGenerateBytecodeRejectsRetiredScripts(t *testing.T) {
+	tests := []struct {
+		name string
+		rule Rule
+	}{
+		{
+			name: "definition",
+			rule: Rule{Name: "script_rule", Scripts: map[string]Script{
+				"calculate": {Params: []string{"value"}, Body: "return value;"},
+			}},
+		},
+		{
+			name: "empty definition map",
+			rule: Rule{Name: "empty_scripts", Scripts: map[string]Script{}},
+		},
+		{
+			name: "action call",
+			rule: Rule{Name: "script_call", Actions: []Action{{
+				Type: "updateStore", Target: "status", Value: "{calculate}",
+			}}},
 		},
 	}
 
-	bytecodeFile := mustGenerateBytecode(t, ruleset)
-
-	// Check if SCRIPT_DEF opcode exists in the bytecode
-	scriptDefFound := false
-	for _, b := range bytecodeFile.Instructions {
-		if Opcode(b) == SCRIPT_DEF {
-			scriptDefFound = true
-			break
-		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			bytecode, err := GenerateBytecode(&Ruleset{Rules: []Rule{test.rule}})
+			assert.Empty(t, bytecode)
+			assert.ErrorContains(t, err, "scripts are no longer supported")
+			assert.ErrorContains(t, err, test.rule.Name)
+		})
 	}
-
-	assert.True(t, scriptDefFound, "SCRIPT_DEF opcode not found in bytecode")
-
-	// You can add more specific checks here, such as verifying the script name, params, and body in the bytecode
-}
-
-func TestGenerateBytecodeEncodesZeroParamsForUndefinedActionScript(t *testing.T) {
-	ruleset := &Ruleset{Rules: []Rule{{
-		Name: "UndefinedActionScript",
-		Conditions: ConditionGroup{All: []*ConditionOrGroup{{
-			Fact:     "temperature",
-			Operator: "GT",
-			Value:    30.0,
-		}}},
-		Actions: []Action{{
-			Type:   "updateStore",
-			Target: "status",
-			Value:  "{missing_script}",
-		}},
-	}}}
-
-	bytecode := mustGenerateBytecode(t, ruleset)
-	want := append([]byte{byte(SCRIPT_CALL), byte(len("missing_script"))}, []byte("missing_script")...)
-	want = append(want, 0)
-
-	assert.True(t, bytes.Contains(bytecode.Instructions, want))
 }
 
 func TestGenerateBytecodePreservesLabelLikeActionStrings(t *testing.T) {
@@ -710,10 +674,6 @@ func deterministicRuleset() *Ruleset {
 			{Fact: "humidity", Operator: "LT", Value: 50.0},
 		}},
 		Actions: []Action{{Type: "updateStore", Target: "status", Value: "comfortable"}},
-		Scripts: map[string]Script{
-			"zeta":  {Params: []string{"humidity"}, Body: "return humidity;"},
-			"alpha": {Params: []string{"temperature"}, Body: "return temperature;"},
-		},
 	}}}
 }
 
@@ -732,10 +692,6 @@ func TestBytecodeSerializationIsDeterministic(t *testing.T) {
 
 		if i == 0 {
 			expected = data
-			alpha := bytes.Index(bytecode.Instructions, []byte{byte(SCRIPT_DEF), 5, 'a', 'l', 'p', 'h', 'a'})
-			zeta := bytes.Index(bytecode.Instructions, []byte{byte(SCRIPT_DEF), 4, 'z', 'e', 't', 'a'})
-			assert.GreaterOrEqual(t, alpha, 0)
-			assert.Greater(t, zeta, alpha)
 			continue
 		}
 

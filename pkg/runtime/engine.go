@@ -10,11 +10,9 @@ import (
 	"math"
 	"os"
 	"rgehrsitz/rex/pkg/compiler"
-	"rgehrsitz/rex/pkg/scripting"
 	"rgehrsitz/rex/pkg/store"
 	"sort"
 	"strings"
-	"time"
 
 	"rgehrsitz/rex/pkg/logging"
 )
@@ -33,20 +31,18 @@ type Engine struct {
 	store                   store.ContextStore
 	priorityThreshold       int
 	maxActionsPerEvaluation int
-	scriptsEnabled          bool
 	traceConditions         bool
-	ScriptEngine            *scripting.SafeVM
 	executionObserver       ExecutionObserver
 }
 
-// SetScriptsEnabled controls whether this engine may evaluate embedded
-// JavaScript. Scripts are disabled by default because the in-process Otto VM is
-// not an isolation boundary. Enable them only for rulesets from trusted authors.
-func (e *Engine) SetScriptsEnabled(enabled bool) {
-	e.scriptsEnabled = enabled
+// SetScriptsEnabled is retained as a migration diagnostic. JavaScript was
+// removed in M6 because the in-process VM could not enforce cancellation or
+// isolation. Script-free callers may continue setting false.
+func (e *Engine) SetScriptsEnabled(enabled bool) error {
 	if enabled {
-		logging.Logger.Warn().Msg("Script execution enabled for trusted rulesets")
+		return fmt.Errorf("scripts are no longer supported; migrate to declarative v4 rules")
 	}
+	return nil
 }
 
 // SetMaxActionsPerEvaluation caps actions executed for one rule evaluation.
@@ -98,7 +94,6 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		store:                   store,
 		priorityThreshold:       priorityThreshold,
 		maxActionsPerEvaluation: DefaultMaxActionsPerEvaluation,
-		ScriptEngine:            scripting.NewSafeVM(),
 	}
 
 	offset := 0
@@ -554,66 +549,6 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 			offset += nameLen
 			logger.Debug().Str("actionTarget", action.Target).Msg("Encountered ACTION_TARGET opcode")
 
-		case compiler.SCRIPT_DEF:
-			logger.Debug().Msg("Encountered SCRIPT_DEF opcode")
-			scriptNameLen := int(e.bytecode[offset])
-			offset++
-			scriptName := string(e.bytecode[offset : offset+scriptNameLen])
-			offset += scriptNameLen
-
-			paramsCount := int(e.bytecode[offset])
-			offset++
-			params := make([]string, paramsCount)
-			for i := 0; i < paramsCount; i++ {
-				paramLen := int(e.bytecode[offset])
-				offset++
-				params[i] = string(e.bytecode[offset : offset+paramLen])
-				offset += paramLen
-			}
-
-			bodyLen := int(e.bytecode[offset])
-			offset++
-			body := string(e.bytecode[offset : offset+bodyLen])
-			offset += bodyLen
-
-			script := compiler.Script{
-				Params: params,
-				Body:   body,
-			}
-			err := e.ScriptEngine.SetScript(scriptName, script)
-			if err != nil {
-				return logging.NewError(logging.ErrorTypeRuntime, "Failed to set script", err, map[string]interface{}{"ruleName": ruleName, "scriptName": scriptName})
-			}
-			logger.Debug().Str("scriptName", scriptName).Str("body", body).Strs("params", params).Msg("Script defined")
-
-		case compiler.SCRIPT_CALL:
-			logger.Debug().Msg("Encountered SCRIPT_CALL opcode")
-			scriptNameLen := int(e.bytecode[offset])
-			offset++
-			scriptName := string(e.bytecode[offset : offset+scriptNameLen])
-			offset += scriptNameLen
-
-			logger.Debug().Str("scriptName", scriptName).Msg("Calling script")
-
-			paramsCount := int(e.bytecode[offset])
-			offset++
-			params := make(map[string]interface{})
-			for i := 0; i < paramsCount; i++ {
-				paramNameLen := int(e.bytecode[offset])
-				offset++
-				paramName := string(e.bytecode[offset : offset+paramNameLen])
-				offset += paramNameLen
-
-				params[paramName] = e.facts[paramName]
-			}
-
-			logger.Debug().Interface("scriptName", scriptName).Interface("params", params).Msg("Script parameters")
-
-			action.Value = map[string]interface{}{
-				"scriptName": scriptName,
-				"params":     params,
-			}
-
 		default:
 			err := logging.NewError(logging.ErrorTypeRuntime, "Unknown opcode encountered", nil, map[string]interface{}{"opcode": opcode})
 			logger.Warn().Err(err).Msg("Unknown opcode")
@@ -710,14 +645,10 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 		return err
 	}
 	logger := traceLogger(ctx)
-	skipped := false
 	defer func() {
-		switch {
-		case err != nil:
+		if err != nil {
 			e.recordActionFailed(action, err)
-		case skipped:
-			e.recordActionSkipped(action)
-		default:
+		} else {
 			e.recordActionSucceeded(action)
 		}
 	}()
@@ -732,47 +663,6 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 	case "updateStore":
 		factName := action.Target
 		factValue := action.Value
-
-		// Check if the factValue is a script call
-		if scriptInfo, ok := factValue.(map[string]interface{}); ok {
-			if scriptName, ok := scriptInfo["scriptName"].(string); ok {
-				if !e.scriptsEnabled {
-					logger.Warn().
-						Str("event", "action_skipped").
-						Str("outcome", "skipped").
-						Str("action_type", action.Type).
-						Str("scriptName", scriptName).
-						Str("actionTarget", factName).
-						Msg("Skipping script action because script execution is disabled; enable engine.scripts_enabled only for trusted rulesets")
-					skipped = true
-					return nil
-				}
-				params, ok := scriptInfo["params"].(map[string]interface{})
-				if !ok {
-					return fmt.Errorf("invalid script action parameters for %q", scriptName)
-				}
-				logger.Debug().
-					Str("scriptName", scriptName).
-					Interface("params", params).
-					Msg("Executing script")
-				result, err := e.ScriptEngine.RunScript(scriptName, params, 100*time.Millisecond)
-				if err != nil {
-					logger.Error().
-						Err(err).
-						Str("event", "action_failed").
-						Str("action_type", action.Type).
-						Str("action_target", action.Target).
-						Str("scriptName", scriptName).
-						Msg("Failed to run script")
-					return err
-				}
-				factValue = result
-				logger.Debug().
-					Str("scriptName", scriptName).
-					Interface("scriptResult", result).
-					Msg("Script executed")
-			}
-		}
 
 		if err := ctx.Err(); err != nil {
 			return err

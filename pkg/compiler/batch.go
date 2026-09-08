@@ -104,12 +104,12 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 		if err := check(r.Conditions.Any); err != nil {
 			return nil, err
 		}
-		if len(r.Scripts) > 0 {
-			return nil, fmt.Errorf("v4 scripts unavailable until M6: rule %q", r.Name)
+		if r.Scripts != nil {
+			return nil, fmt.Errorf("scripts are no longer supported: rule %q declares scripts", r.Name)
 		}
-		for _, a := range r.Actions {
+		for actionIndex, a := range r.Actions {
 			if v, ok := a.Value.(string); ok && strings.HasPrefix(v, "{") && strings.HasSuffix(v, "}") {
-				return nil, fmt.Errorf("v4 script calls unavailable: rule %q", r.Name)
+				return nil, fmt.Errorf("scripts are no longer supported: rule %q action %d calls %q", r.Name, actionIndex, v)
 			}
 		}
 	}
@@ -211,7 +211,7 @@ func validateBatchShapes(data []byte) error {
 					name = fmt.Sprintf("rule %q", ruleName)
 				}
 			}
-			return fmt.Errorf("v4 scripts unavailable until M6: %s", name)
+			return fmt.Errorf("scripts are no longer supported: %s declares scripts", name)
 		}
 		if err := group(r["conditions"], false); err != nil {
 			return err

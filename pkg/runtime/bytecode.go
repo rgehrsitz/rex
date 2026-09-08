@@ -170,11 +170,8 @@ func validateInstructions(data []byte) (map[int]ruleMetadata, error) {
 			compiler.LOAD_CONST_STRING, compiler.ACTION_TYPE, compiler.ACTION_TARGET, compiler.ACTION_VALUE_STRING:
 			_, offset, err = readByteString(data, offset)
 
-		case compiler.SCRIPT_DEF:
-			offset, err = validateScriptDefinition(data, offset)
-
-		case compiler.SCRIPT_CALL:
-			offset, err = validateScriptCall(data, offset)
+		case compiler.SCRIPT_DEF, compiler.SCRIPT_CALL:
+			return nil, fmt.Errorf("scripts are no longer supported (opcode %s at instruction-section offset %d); recompile a script-free ruleset", opcode, start)
 
 		case compiler.EQ_FLOAT, compiler.NEQ_FLOAT, compiler.LT_FLOAT, compiler.LTE_FLOAT,
 			compiler.GT_FLOAT, compiler.GTE_FLOAT, compiler.EQ_STRING, compiler.NEQ_STRING,
@@ -214,45 +211,6 @@ func validateInstructions(data []byte) (map[int]ruleMetadata, error) {
 	}
 
 	return ruleStarts, nil
-}
-
-func validateScriptDefinition(data []byte, offset int) (int, error) {
-	_, offset, err := readByteString(data, offset)
-	if err != nil {
-		return offset, err
-	}
-	if offset >= len(data) {
-		return offset, fmt.Errorf("missing script parameter count")
-	}
-	params := int(data[offset])
-	offset++
-	for i := 0; i < params; i++ {
-		_, offset, err = readByteString(data, offset)
-		if err != nil {
-			return offset, err
-		}
-	}
-	_, offset, err = readByteString(data, offset)
-	return offset, err
-}
-
-func validateScriptCall(data []byte, offset int) (int, error) {
-	_, offset, err := readByteString(data, offset)
-	if err != nil {
-		return offset, err
-	}
-	if offset >= len(data) {
-		return offset, fmt.Errorf("missing script argument count")
-	}
-	params := int(data[offset])
-	offset++
-	for i := 0; i < params; i++ {
-		_, offset, err = readByteString(data, offset)
-		if err != nil {
-			return offset, err
-		}
-	}
-	return offset, nil
 }
 
 func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]ruleMetadata) (map[string]struct{}, error) {
