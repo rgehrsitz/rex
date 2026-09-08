@@ -82,6 +82,9 @@ func rejectScriptCapabilities(jsonData []byte, ruleset *Ruleset) error {
 	if err := json.Unmarshal(jsonData, &raw); err != nil {
 		return err
 	}
+	if len(raw.Rules) != len(ruleset.Rules) {
+		return fmt.Errorf("decoded rule count changed while checking retired script capabilities")
+	}
 	for i, rule := range ruleset.Rules {
 		if _, present := raw.Rules[i]["scripts"]; present {
 			return fmt.Errorf("scripts are no longer supported: rule %q declares scripts", rule.Name)

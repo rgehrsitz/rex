@@ -6,9 +6,15 @@ explicit legacy v3, embedded compiler APIs, and daemon artifact loading.
 ## Detect affected rulesets
 
 An affected source contains either a `scripts` member on a rule or an action
-value written as `{name}`. Current `rexc` rejects both with the rule name and,
-for a call, the action index. `rexd` also rejects an older v3 artifact containing
-`SCRIPT_DEF` or `SCRIPT_CALL`, even if `engine.scripts_enabled` is false.
+value whose first and last characters are braces. A `scripts` value of `null`
+or `{}` is still a declaration and is rejected. Brace-form strings such as
+`{name}`, `{}`, and `{literal text}` were script calls under the legacy encoder;
+they are all rejected now. There is no escape form. Producers must rename or
+restructure a constant that needs leading and trailing braces.
+
+Current `rexc` reports the rule name and, for a call, the action index. `rexd`
+also rejects an older v3 artifact containing `SCRIPT_DEF` or `SCRIPT_CALL`, even
+if `engine.scripts_enabled` is false.
 
 Run compilation in validation mode before deployment:
 
@@ -19,6 +25,10 @@ rexc -rules rules.json -validate
 Also remove `engine.scripts_enabled: true` from daemon configuration. Leaving it
 set to `false` is supported so existing script-free configurations need not
 change immediately.
+
+Embedded callers using `SetScriptsEnabled` must check its returned error. A
+statement that ignores the return value still compiles, but a stale `true` call
+does not enable any capability.
 
 ## Replace a calculation
 

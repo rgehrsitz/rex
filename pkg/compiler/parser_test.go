@@ -943,9 +943,24 @@ func TestParseRejectsRetiredScriptsBeforeValidation(t *testing.T) {
 			want:   `rule "declares_scripts" declares scripts`,
 		},
 		{
+			name:   "null declaration",
+			source: `{"rules":[{"name":"null_scripts","scripts":null}]}`,
+			want:   `rule "null_scripts" declares scripts`,
+		},
+		{
 			name:   "action call",
 			source: `{"rules":[{"name":"calls_script","actions":[{"type":"updateStore","target":"out","value":"{calculate}"}]}]}`,
 			want:   `rule "calls_script" action 0 calls "{calculate}"`,
+		},
+		{
+			name:   "empty brace action value",
+			source: `{"rules":[{"name":"empty_braces","actions":[{"type":"updateStore","target":"out","value":"{}"}]}]}`,
+			want:   `rule "empty_braces" action 0 calls "{}"`,
+		},
+		{
+			name:   "brace literal action value",
+			source: `{"rules":[{"name":"brace_literal","actions":[{"type":"updateStore","target":"out","value":"{literal text}"}]}]}`,
+			want:   `rule "brace_literal" action 0 calls "{literal text}"`,
 		},
 		{
 			name:   "nonterminating body",
@@ -967,6 +982,12 @@ func TestParseRejectsRetiredScriptsBeforeValidation(t *testing.T) {
 			assert.ErrorContains(t, err, test.want)
 		})
 	}
+}
+
+func TestRejectScriptCapabilitiesChecksDecodedRuleCount(t *testing.T) {
+	ruleset := &Ruleset{Rules: []Rule{{Name: "first"}, {Name: "second"}}}
+	err := rejectScriptCapabilities([]byte(`{"rules":[{"name":"first"}]}`), ruleset)
+	assert.ErrorContains(t, err, "decoded rule count changed")
 }
 
 func TestValidateConditionOrGroup(t *testing.T) {

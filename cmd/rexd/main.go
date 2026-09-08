@@ -174,6 +174,7 @@ func parseConfig(args []string) (*Config, error) {
 }
 
 func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory) (*RexDependencies, error) {
+	// Reject the retired capability before allocating a store or engine.
 	if config.ScriptsEnabled {
 		return nil, fmt.Errorf("scripts are no longer supported; migrate to declarative v4 rules")
 	}

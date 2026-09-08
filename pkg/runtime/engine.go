@@ -37,7 +37,8 @@ type Engine struct {
 
 // SetScriptsEnabled is retained as a migration diagnostic. JavaScript was
 // removed in M6 because the in-process VM could not enforce cancellation or
-// isolation. Script-free callers may continue setting false.
+// isolation. Script-free callers may continue setting false. Callers must check
+// the returned error; ignoring it makes a stale true call a no-op.
 func (e *Engine) SetScriptsEnabled(enabled bool) error {
 	if enabled {
 		return fmt.Errorf("scripts are no longer supported; migrate to declarative v4 rules")

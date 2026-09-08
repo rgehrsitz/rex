@@ -150,6 +150,9 @@ The configuration file is in JSON format and supports the following options:
 }
 ```
 
+`scripts_enabled` remains only as an M6 migration tripwire: `false` is accepted,
+while `true` fails startup. See the [M6 migration guide](docs/M6_SCRIPT_REMOVAL.md).
+
 In legacy v3, `engine.priority_threshold` only controls the additional high-priority
 diagnostic emitted after a matching rule. It does not filter candidates or
 change their execution order.

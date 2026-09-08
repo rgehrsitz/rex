@@ -1,8 +1,9 @@
 # REX foundation roadmap
 
-Created: 2026-09-07. Last planning review: 2026-09-07.
+Created: 2026-09-07. Last planning review: 2026-09-08.
 
-Status: implementation underway; REX-M0 and REX-M1 complete locally.
+Status: REX-M0, M1, M2, M4, M5, and M6 are complete; REX-M3 remains an
+independent operational-hardening lane.
 
 ## Purpose and authority
 
@@ -58,7 +59,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M3 | Harden deployment and operational visibility | M0 | Planned | Fix startup errors, TLS/secrets, readiness, and latency visibility. |
 | REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Complete | [PR #35](https://github.com/rgehrsitz/rex/pull/35), `f6e036c`; [migration](M4_MIGRATION.md). |
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
-| REX-M6 | Constrain script execution | M0; integrate with M4 | Local complete; review pending | [D6 removal decision](decisions/REX-M6.md) and [migration guide](M6_SCRIPT_REMOVAL.md). |
+| REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Planned | Design journal, commit, acknowledgement, and crash recovery together. |
 | REX-M8 | Extend the proven foundation | Capability-specific gates below | Planned | Start with ruleset reloads; split each capability into its own proposal. |
 
@@ -555,7 +556,7 @@ Next concrete action:
 - Next concrete action: REX-M6. M3 remains the separate operational-hardening
   lane; durable recovery remains M7.
 
-### 2026-09-08 — REX-M6 local completion; review pending
+### 2026-09-08 — REX-M6 complete in PR #37
 
 - Starting revision: `039f5c649448fc2261239bade97bde250cb497f3`, merged M5
   [PR #36](https://github.com/rgehrsitz/rex/pull/36).

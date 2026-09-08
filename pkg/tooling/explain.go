@@ -79,6 +79,8 @@ func Lint(source []byte, channels []string) LintReport {
 	// Inspect the decoded shape first so undefined legacy references retain their
 	// stable, specific diagnostic after the compiler's script capability removal.
 	var inspected compiler.Ruleset
+	// Parse below remains authoritative. A failed advisory decode simply yields
+	// no specialized legacy-reference diagnostics.
 	_ = json.Unmarshal(source, &inspected)
 	undefinedScript := false
 	for _, r := range inspected.Rules {
@@ -87,7 +89,7 @@ func Lint(source []byte, channels []string) LintReport {
 				name := strings.TrimSuffix(strings.TrimPrefix(v, "{"), "}")
 				if _, ok := r.Scripts[name]; !ok {
 					undefinedScript = true
-					add("REX-L004", "error", r.Name, "undefined script reference: "+name)
+					add("REX-L004", "error", r.Name, "undefined script reference: "+name+"; scripts were removed in M6, so migrate the calculation to producer facts or declarative rules")
 				}
 			}
 		}

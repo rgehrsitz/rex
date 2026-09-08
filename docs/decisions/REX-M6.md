@@ -1,7 +1,7 @@
 # REX-M6 — Remove in-process scripting
 
-Status: implemented locally; review pending, 2026-09-08. Depends on M4, merged
-in PR #35, and follows M5, merged in PR #36 at
+Status: complete in PR #37, 2026-09-08. Depends on M4, merged in PR #35, and
+follows M5, merged in PR #36 at
 `039f5c649448fc2261239bade97bde250cb497f3`.
 
 ## Decision
@@ -19,9 +19,10 @@ that worker contract was not justified by the remaining legacy capability.
 
 ## Contract
 
-- JSON source containing a `scripts` field is rejected, including an explicitly
-  empty object. An action string enclosed in braces, such as `{calculate}`, is
-  rejected as a retired script call.
+- JSON source containing a `scripts` field is rejected, including `null` and an
+  explicitly empty object. An action string enclosed in braces, including
+  `{calculate}`, `{}`, or a brace-wrapped literal, is rejected as a retired
+  script call. There is no escape form for such a constant.
 - Both the default v4 compiler and explicit legacy-v3 compiler apply that rule.
   The embedded `GenerateBytecode` API applies it to programmatically built ASTs,
   including a non-nil empty script map.
@@ -31,7 +32,8 @@ that worker contract was not justified by the remaining legacy capability.
 - `engine.scripts_enabled` remains in configuration as a migration tripwire.
   `false` is accepted; `true` prevents daemon startup. The embedded
   `SetScriptsEnabled(false)` call remains source compatible and enabling it
-  returns an error.
+  returns an error. Embedded callers must check that returned error because a
+  statement that ignores it still compiles.
 - Script-free v3 artifacts keep their bytecode version and behavior. V4 meaning
   and replay remain unchanged.
 

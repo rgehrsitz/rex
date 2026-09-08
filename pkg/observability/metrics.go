@@ -52,7 +52,8 @@ func (m *Metrics) ActionSucceeded(string) {
 	m.actionsSucceeded.Add(1)
 }
 
-// ActionSkipped records an intentionally skipped action.
+// ActionSkipped retains the observer metric contract. Current engines do not
+// emit this outcome after M6 removed scripting.
 func (m *Metrics) ActionSkipped(string) {
 	m.actionsSkipped.Add(1)
 }
@@ -108,7 +109,7 @@ rex_rules_fired_total %d
 # HELP rex_actions_succeeded_total Number of actions completed successfully.
 # TYPE rex_actions_succeeded_total counter
 rex_actions_succeeded_total %d
-# HELP rex_actions_skipped_total Number of actions intentionally skipped.
+# HELP rex_actions_skipped_total Compatibility counter for skipped actions; current engines do not emit this outcome.
 # TYPE rex_actions_skipped_total counter
 rex_actions_skipped_total %d
 # HELP rex_action_failures_total Number of actions that failed.
