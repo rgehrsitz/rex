@@ -54,7 +54,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | --- | --- | --- | --- | --- |
 | REX-M0 | Record an implementation baseline | None | Complete | [Local baseline report](baselines/rex-m0/README.md): checks, 108 measured runs, source fingerprints, and review budgets. Next: M1. |
 | REX-M1 | Improve lookup and Redis efficiency | M0 | Complete | [Implementation and performance report](baselines/rex-m1/README.md): equivalent outputs, no budget flags, and documented map-memory tradeoff. Next: M2. |
-| REX-M2 | Establish an independent semantics safety net | M0 | Planned | Add an in-memory store, scenarios, and reference interpreter. |
+| REX-M2 | Establish an independent semantics safety net | M0 | Complete | [Current-v3 safety net](../internal/semantics/README.md): memory store, 12 scenarios, 128 seeds, truth tables, mutation checks, and disassembly goldens. Local validation complete; review pending. Next: M4. |
 | REX-M3 | Harden deployment and operational visibility | M0 | Planned | Fix startup errors, TLS/secrets, readiness, and latency visibility. |
 | REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Planned | Record state/commit semantics before changing execution behavior. |
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Planned | Expose the scenario runner through stable CLI commands. |
@@ -148,18 +148,18 @@ revision links can be recorded; hosted CI remains an integration gate.
 **Outcome:** runtime changes can be checked against behavior defined outside the
 bytecode interpreter.
 
-- [ ] Add a first-class in-memory store and declarative scenario fixtures with
+- [x] Add a first-class in-memory store and declarative scenario fixtures with
   initial facts, ordered input batches, expected facts/actions, and expected errors.
-- [ ] Implement a small AST reference interpreter that does not reuse compiler
+- [x] Implement a small AST reference interpreter that does not reuse compiler
   traversal, emitted jumps, or bytecode execution to decide conditions.
-- [ ] Compare reference and bytecode execution over a deterministic corpus and
+- [x] Compare reference and bytecode execution over a deterministic corpus and
   generated valid rules. Preserve reproducible seeds and minimized failures.
-- [ ] Cover nested `all`/`any`, type mismatches, missing/null inputs, priority
+- [x] Cover nested `all`/`any`, type mismatches, missing/null inputs, priority
   ties, overlapping dependencies, multiple actions, cycles, and store failures.
-- [ ] Use an injected clock and controllable action results in the harness.
+- [x] Use an injected clock and controllable action results in the harness.
   Keep arbitrary JavaScript out of the deterministic oracle until M6 supplies
   a suitable contract; test its integration separately.
-- [ ] Add deterministic disassembly fixtures and retain parser/loader fuzzing.
+- [x] Add deterministic disassembly fixtures and retain parser/loader fuzzing.
 
 **Acceptance criteria:** scenarios run without Redis; differential tests detect
 deliberately introduced semantic faults; generated failures can be replayed.
@@ -470,3 +470,22 @@ Next concrete action:
   action counts, priority ordering, and missing-dependency behavior agree.
   The [report](baselines/rex-m1/README.md) records memory costs, commands,
   fingerprints, and pending integration/hosted-CI scope. Next: REX-M2.
+
+### 2026-09-08 — REX-M2 local completion
+
+- M0/M1 and priority/v3 work merged in [PR #33](https://github.com/rgehrsitz/rex/pull/33),
+  revision `79b64fad4b217525b294c13a0115af4741d286ef`; all PR checks passed.
+- Added the [M2 contract and reproduction guide](../internal/semantics/README.md),
+  first-class JSON memory store, authored current-v3 scenarios, independent AST
+  evaluator, seeded differential tests/reduction/replay, and disassembly goldens.
+- Three deliberate semantic mutations are detected. Comparisons include state
+  after each dispatched fact and ordered action attempts with an injected clock.
+  No semantic failure was found in the initial deterministic generated corpus.
+- Normal and race-enabled `go test -count=1 ./...`, `go vet ./...`, and
+  `go build ./...` pass locally. Existing script integration tests remain separate
+  from the deterministic oracle. Ten-second fuzz smoke runs (`GOMAXPROCS=2`)
+  passed: parser 704,919 executions; loader 199,543 executions. These are bounded
+  smoke checks, not exhaustive fuzzing.
+- Production compiler/runtime behavior and bytecode format remain unchanged.
+  M4 must add a separate contract/corpus for intentional semantic changes.
+- Next default milestone: **REX-M4**. M3 remains an independent operational lane.

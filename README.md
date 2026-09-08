@@ -515,6 +515,11 @@ Rule evaluation is sequential for each fact update.
 
 ## Testing
 
+The [current-v3 semantics safety net](internal/semantics/README.md) runs authored
+scenarios and seeded differential checks against an independent AST interpreter.
+Embedded tools can use `store.NewMemoryStore(initial)` for JSON facts without a
+Redis service; snapshots and ordered publications are available for inspection.
+
 To run the tests:
 
 ```bash
