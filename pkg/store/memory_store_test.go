@@ -18,16 +18,16 @@ func TestMemoryStoreOwnershipAndLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, float64(1), value.(map[string]interface{})["n"])
 	value.(map[string]interface{})["n"] = 3
-	require.Equal(t, float64(1), s.Snapshot()["nested"].(map[string]interface{})["n"])
+	require.Equal(t, float64(1), snapshot(t, s)["nested"].(map[string]interface{})["n"])
 	require.NoError(t, s.SetAndPublishFactContext(ctx, "out", map[string]interface{}{"x": 1}))
-	events := s.DrainPublications()
+	events := drain(t, s)
 	require.Len(t, events, 1)
 	events[0].Value.(map[string]interface{})["x"] = 2
-	require.Equal(t, float64(1), s.Snapshot()["out"].(map[string]interface{})["x"])
-	require.Empty(t, s.DrainPublications())
+	require.Equal(t, float64(1), snapshot(t, s)["out"].(map[string]interface{})["x"])
+	require.Empty(t, drain(t, s))
 	require.Error(t, s.SetAndPublishFactContext(ctx, "bad", math.NaN()))
-	require.NotContains(t, s.Snapshot(), "bad")
-	require.Empty(t, s.DrainPublications())
+	require.NotContains(t, snapshot(t, s), "bad")
+	require.Empty(t, drain(t, s))
 	values, err := s.MGetFactsContext(ctx, "absent")
 	require.NoError(t, err)
 	require.Contains(t, values, "absent")
@@ -51,11 +51,11 @@ func TestMemoryStoreConcurrentPublications(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			_ = s.SetAndPublishFactContext(context.Background(), "out", i)
-			_ = s.Snapshot()
+			_ = snapshot(t, s)
 		}(i)
 	}
 	wg.Wait()
-	require.Len(t, s.DrainPublications(), 20)
+	require.Len(t, drain(t, s), 20)
 }
 
 func TestMemoryStoreMatchesRedisJSONFacts(t *testing.T) {
@@ -76,4 +76,44 @@ func TestMemoryStoreMatchesRedisJSONFacts(t *testing.T) {
 	got, err := memory.MGetFactsContext(ctx, keys...)
 	require.NoError(t, err)
 	require.Equal(t, want, got)
+}
+
+func snapshot(t *testing.T, s *MemoryStore) map[string]interface{} {
+	t.Helper()
+	values, err := s.Snapshot()
+	require.NoError(t, err)
+	return values
+}
+func drain(t *testing.T, s *MemoryStore) []FactUpdate {
+	t.Helper()
+	events, err := s.DrainPublications()
+	require.NoError(t, err)
+	return events
+}
+func TestMemoryStoreZeroValue(t *testing.T) {
+	var s MemoryStore
+	require.Empty(t, snapshot(t, &s))
+	require.Empty(t, drain(t, &s))
+	require.NoError(t, s.SetAndPublishFactContext(context.Background(), "a", 1))
+	require.Equal(t, float64(1), snapshot(t, &s)["a"])
+	require.Len(t, drain(t, &s), 1)
+	require.NoError(t, s.Close())
+	require.Equal(t, float64(1), snapshot(t, &s)["a"])
+}
+func TestMemoryStoreReportsCopyErrors(t *testing.T) {
+	// The public write path rejects this; inject corrupted internal state to
+	// verify defensive inspection behavior rather than silently returning nil.
+	s := &MemoryStore{facts: map[string]interface{}{"bad": math.NaN()}, publications: []FactUpdate{{Key: "bad", Value: math.NaN()}}}
+	values, err := s.MGetFactsContext(context.Background(), "bad")
+	require.ErrorContains(t, err, "copy fact")
+	require.Nil(t, values)
+	values, err = s.Snapshot()
+	require.ErrorContains(t, err, "snapshot fact")
+	require.Nil(t, values)
+	events, err := s.DrainPublications()
+	require.ErrorContains(t, err, "copy publication")
+	require.Nil(t, events)
+	require.Len(t, s.publications, 1, "a failed copy must not drain the queue")
+	s.publications[0].Value = true
+	require.Len(t, drain(t, s), 1)
 }

@@ -118,7 +118,7 @@ func runScenario(t *testing.T, s scenario, oracle bool, mutate func(*compiler.By
 	_ = json.Unmarshal(s.Rules, &presence)
 	for i := range authored.Rules {
 		if _, ok := presence.Rules[i]["priority"]; !ok {
-			authored.Rules[i].Priority = 10
+			authored.Rules[i].Priority = compiler.DefaultRulePriority
 		}
 		if len(authored.Rules[i].Scripts) > 0 {
 			t.Fatal("scripts excluded from deterministic oracle")
@@ -132,7 +132,7 @@ func runScenario(t *testing.T, s scenario, oracle bool, mutate func(*compiler.By
 	backend := &controlledStore{MemoryStore: memory, plan: s, clock: &clock{}, actions: []attempt{}}
 	limit := s.Limit
 	if limit == 0 {
-		limit = 32
+		limit = rex.DefaultMaxActionsPerEvaluation
 	}
 	local := map[string]interface{}{}
 	var eval evaluator
@@ -168,7 +168,7 @@ func runScenario(t *testing.T, s scenario, oracle bool, mutate func(*compiler.By
 		var saved map[string]interface{}
 		raw, _ := json.Marshal(local)
 		_ = json.Unmarshal(raw, &saved)
-		out.Checkpoints = append(out.Checkpoints, checkpoint{Facts: memory.Snapshot(), Local: saved, Errors: append([]string{}, out.Errors...), ActionCount: len(backend.actions)})
+		out.Checkpoints = append(out.Checkpoints, checkpoint{Facts: memorySnapshot(t, memory), Local: saved, Errors: append([]string{}, out.Errors...), ActionCount: len(backend.actions)})
 	}
 	process := func(batch map[string]interface{}, persist bool) {
 		keys := []string{}
@@ -204,7 +204,7 @@ func runScenario(t *testing.T, s scenario, oracle bool, mutate func(*compiler.By
 	if s.Deliver > 0 && len(backend.queue) > 0 {
 		out.Errors = append(out.Errors, "harness delivery limit reached")
 	}
-	out.Facts = memory.Snapshot()
+	out.Facts = memorySnapshot(t, memory)
 	out.Local = local
 	out.Actions = backend.actions
 	return out
@@ -303,5 +303,24 @@ func TestReplayScenario(t *testing.T) {
 	}
 	if a, b := runScenario(t, s, true, nil), runScenario(t, s, false, nil); !reflect.DeepEqual(a, b) {
 		t.Fatalf("replayed mismatch: %s\n%s", asJSON(a), asJSON(b))
+	}
+}
+
+func memorySnapshot(t *testing.T, memory *store.MemoryStore) map[string]interface{} {
+	t.Helper()
+	values, err := memory.Snapshot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return values
+}
+func TestCurrentV3Defaults(t *testing.T) {
+	// Pin the characterized contract even though harness setup uses production
+	// constants. A default change requires explicit corpus/migration review.
+	if compiler.DefaultRulePriority != 10 {
+		t.Fatal("current-v3 priority default changed")
+	}
+	if rex.DefaultMaxActionsPerEvaluation != 32 {
+		t.Fatal("current-v3 action limit changed")
 	}
 }

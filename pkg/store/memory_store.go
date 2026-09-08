@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 )
 
@@ -19,6 +20,7 @@ type FactUpdate struct {
 
 // MemoryStore is a concurrency-safe ContextStore for JSON facts. Values are
 // copied through JSON, matching Redis numeric decoding and preventing aliases.
+// The zero value is ready to use.
 // SetAndPublish is atomic here; this does not imply Redis delivery guarantees.
 type MemoryStore struct {
 	mu           sync.Mutex
@@ -63,6 +65,9 @@ func (s *MemoryStore) write(ctx context.Context, key string, value interface{}, 
 	if err != nil {
 		return err
 	}
+	if s.facts == nil {
+		s.facts = make(map[string]interface{})
+	}
 	s.facts[key] = value
 	if publish {
 		s.publications = append(s.publications, FactUpdate{Key: key, Value: value})
@@ -90,29 +95,45 @@ func (s *MemoryStore) MGetFactsContext(ctx context.Context, keys ...string) (map
 	}
 	out := make(map[string]interface{}, len(keys))
 	for _, k := range keys {
-		out[k], _ = copyJSON(s.facts[k])
+		value, err := copyJSON(s.facts[k])
+		if err != nil {
+			return nil, fmt.Errorf("copy fact %q: %w", k, err)
+		}
+		out[k] = value
 	}
 	return out, nil
 }
 
 // Snapshot returns an independent copy, including after Close, for inspection.
-func (s *MemoryStore) Snapshot() map[string]interface{} {
+func (s *MemoryStore) Snapshot() (map[string]interface{}, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	value, _ := copyJSON(s.facts)
-	return value.(map[string]interface{})
+	out := make(map[string]interface{}, len(s.facts))
+	for key, value := range s.facts {
+		copied, err := copyJSON(value)
+		if err != nil {
+			return nil, fmt.Errorf("snapshot fact %q: %w", key, err)
+		}
+		out[key] = copied
+	}
+	return out, nil
 }
 
 // DrainPublications returns successful publications in write order and clears
-// the queue. It remains available after Close for final inspection.
-func (s *MemoryStore) DrainPublications() []FactUpdate {
+// the queue only after every value is copied successfully. It remains available
+// after Close for final inspection.
+func (s *MemoryStore) DrainPublications() ([]FactUpdate, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	out := make([]FactUpdate, len(s.publications))
 	for i, event := range s.publications {
 		out[i].Key = event.Key
-		out[i].Value, _ = copyJSON(event.Value)
+		value, err := copyJSON(event.Value)
+		if err != nil {
+			return nil, fmt.Errorf("copy publication %d for %q: %w", i, event.Key, err)
+		}
+		out[i].Value = value
 	}
 	s.publications = nil
-	return out
+	return out, nil
 }

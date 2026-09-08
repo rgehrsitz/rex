@@ -92,7 +92,9 @@ JavaScript to these comparisons.
 facts. JSON copying prevents callers from mutating stored nested values and
 normalizes numbers as Redis decoding does. It supports cancellation, close,
 thread-safe access, independent snapshots, and ordered publications retrieved
-with `DrainPublications`. Missing and null facts both read as nil. It has no
+with `DrainPublications`. `Snapshot` and `DrainPublications` return a value and
+an error; copy failures are reported, and a failed drain preserves its queue.
+The zero-value store is also usable. Missing and null facts both read as nil. It has no
 routing, background consumer, automatic cycle execution, TTL, or persistence.
 Its write-and-enqueue is atomic; the Redis adapter has a different failure
 contract, which the controlled test wrapper explicitly models.
@@ -114,3 +116,8 @@ test (using miniredis, with no Redis service required). Parser and loader fuzz
 smoke runs are recorded with the milestone evidence in the foundation roadmap.
 This M2 implementation is local work pending review; no performance improvement
 or hosted check result is claimed.
+
+PR review follow-up: harness setup now references the production priority and
+action-limit constants, while `TestCurrentV3Defaults` pins their characterized
+values (10 and 32). An intentional default change therefore still requires
+contract review rather than silently changing both sides of the comparison.
