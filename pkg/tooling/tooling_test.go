@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	stdruntime "runtime"
 	"strings"
 	"testing"
 
@@ -16,13 +17,20 @@ import (
 
 func fixture(t *testing.T) ([]byte, Scenario) {
 	t.Helper()
-	source, err := os.ReadFile("../../examples/m5/rules.json")
+	source, err := os.ReadFile(fixturePath(t, "rules.json"))
 	require.NoError(t, err)
-	raw, err := os.ReadFile("../../examples/m5/scenario.json")
+	raw, err := os.ReadFile(fixturePath(t, "scenario.json"))
 	require.NoError(t, err)
 	var scenario Scenario
 	require.NoError(t, Decode(raw, &scenario))
 	return source, scenario
+}
+
+func fixturePath(t *testing.T, name string) string {
+	t.Helper()
+	_, file, _, ok := stdruntime.Caller(0)
+	require.True(t, ok)
+	return filepath.Join(filepath.Dir(file), "..", "..", "examples", "m5", name)
 }
 func TestReplayDeterminismAndIntegrity(t *testing.T) {
 	source, s := fixture(t)
@@ -75,7 +83,7 @@ func TestCompareAndScenarioAssertions(t *testing.T) {
 	comparison, err := Compare(context.Background(), b, source)
 	require.NoError(t, err)
 	require.False(t, comparison.Changed)
-	candidate, err := os.ReadFile("../../examples/m5/candidate.json")
+	candidate, err := os.ReadFile(fixturePath(t, "candidate.json"))
 	require.NoError(t, err)
 	comparison, err = Compare(context.Background(), b, candidate)
 	require.NoError(t, err)
@@ -89,6 +97,19 @@ func TestCompareAndScenarioAssertions(t *testing.T) {
 	report, err = Test(context.Background(), source, Suite{SchemaVersion, []Scenario{s}})
 	require.NoError(t, err)
 	require.False(t, report.Passed)
+
+	valid := s
+	valid.Expect.Actions = Actions(comparison.Before)
+	malformed := valid
+	malformed.Name = "malformed"
+	malformed.Events = []Input{{ID: "bad", Facts: nil}}
+	report, err = Test(context.Background(), source, Suite{SchemaVersion, []Scenario{valid, malformed}})
+	require.NoError(t, err)
+	require.False(t, report.Passed)
+	require.Len(t, report.Scenarios, 2)
+	require.True(t, report.Scenarios[0].Passed)
+	require.Equal(t, []string{"validation"}, report.Scenarios[1].Mismatches)
+	require.NotEmpty(t, report.Scenarios[1].Error)
 }
 func TestReplayCycleRetainsPriorVirtualCommits(t *testing.T) {
 	source := []byte(`{"rules":[{"name":"cycle","conditions":{"all":[{"fact":"a","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"a","value":true}]}]}`)
@@ -117,11 +138,11 @@ func TestCLIOutputsAndExitCodes(t *testing.T) {
 		code int
 	}{
 		{[]string{"simulate", "-bundle", path}, 0},
-		{[]string{"explain", "-rules", "../../examples/m5/rules.json"}, 0},
-		{[]string{"bundle", "-rules", "../../examples/m5/rules.json", "-scenario", "../../examples/m5/scenario.json"}, 0},
-		{[]string{"test", "-rules", "../../examples/m5/rules.json", "-scenario", "../../examples/m5/suite.json"}, 0},
-		{[]string{"compare", "-rules", "../../examples/m5/candidate.json", "-bundle", path}, 2},
-		{[]string{"lint", "-rules", "../../examples/m5/rules.json", "-channels", "rex_results"}, 0},
+		{[]string{"explain", "-rules", fixturePath(t, "rules.json")}, 0},
+		{[]string{"bundle", "-rules", fixturePath(t, "rules.json"), "-scenario", fixturePath(t, "scenario.json")}, 0},
+		{[]string{"test", "-rules", fixturePath(t, "rules.json"), "-scenario", fixturePath(t, "suite.json")}, 0},
+		{[]string{"compare", "-rules", fixturePath(t, "candidate.json"), "-bundle", path}, 2},
+		{[]string{"lint", "-rules", fixturePath(t, "rules.json"), "-channels", "rex_results"}, 0},
 		{[]string{"simulate"}, 1},
 		{[]string{"simulate", "-bundle", path, "unexpected"}, 1},
 	}
@@ -133,6 +154,28 @@ func TestCLIOutputsAndExitCodes(t *testing.T) {
 			require.True(t, json.Valid(out.Bytes()), out.String())
 		}
 	}
+
+	malformed := s
+	malformed.Name = "malformed"
+	malformed.Events = []Input{{ID: "bad", Facts: nil}}
+	suitePath := filepath.Join(t.TempDir(), "malformed-suite.json")
+	suiteJSON, err := JSON(Suite{SchemaVersion: SchemaVersion, Scenarios: []Scenario{s, malformed}})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(suitePath, suiteJSON, 0600))
+	var out, diagnostics bytes.Buffer
+	code := RunCLI(context.Background(), []string{"test", "-rules", fixturePath(t, "rules.json"), "-scenario", suitePath}, &out, &diagnostics)
+	require.Equal(t, 2, code, diagnostics.String())
+	var testReport TestReport
+	require.NoError(t, json.Unmarshal(out.Bytes(), &testReport))
+	require.Len(t, testReport.Scenarios, 2)
+	require.True(t, testReport.Scenarios[0].Passed)
+	require.False(t, testReport.Scenarios[1].Passed)
+
+	out.Reset()
+	diagnostics.Reset()
+	require.Equal(t, 1, RunCLI(context.Background(), []string{"simulate", "-h"}, &out, &diagnostics))
+	require.Contains(t, diagnostics.String(), "-bundle")
+	require.NotContains(t, diagnostics.String(), "-rules")
 }
 func TestLintStableDiagnostics(t *testing.T) {
 	source := []byte(`{"rules":[{"name":"a","conditions":{"all":[{"fact":"x","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"x","value":true},{"type":"updateStore","target":"x","value":false}]}]}`)
@@ -147,12 +190,27 @@ func TestLintStableDiagnostics(t *testing.T) {
 	require.True(t, HasLintErrors(r))
 	missing := strings.Replace(string(source), `"value":false}`, `"value":"{missing}"}`, 1)
 	r = Lint([]byte(missing), nil)
+	require.Len(t, r.Diagnostics, 1)
 	require.Equal(t, "REX-L004", r.Diagnostics[0].ID)
 	artifact, err := compiler.CompileBatch(source)
 	require.NoError(t, err)
 	explanation, err := Explain(artifact)
 	require.NoError(t, err)
 	require.Equal(t, []string{"x"}, explanation.Rules[0].Dependencies)
+}
+
+func TestReportBudgetUsesSnakeCase(t *testing.T) {
+	source, scenario := fixture(t)
+	bundle, err := NewBundle(source, scenario)
+	require.NoError(t, err)
+	report, err := Replay(context.Background(), bundle)
+	require.NoError(t, err)
+	encoded, err := JSON(report)
+	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"actions"`)
+	require.Contains(t, string(encoded), `"work"`)
+	require.NotContains(t, string(encoded), `"Actions"`)
+	require.NotContains(t, string(encoded), `"Work"`)
 }
 
 func TestReplaySnapshotDiagnostics(t *testing.T) {

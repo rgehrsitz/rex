@@ -29,31 +29,28 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 	command := args[0]
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(diagnostics)
-	rulesPath := fs.String("rules", "", "v4 source JSON")
-	artifactPath := fs.String("artifact", "", "v4 compiled artifact (explain)")
-	bundlePath := fs.String("bundle", "", "complete replay bundle")
-	scenarioPath := fs.String("scenario", "", "scenario JSON (bundle) or suite JSON (test)")
-	channels := fs.String("channels", "", "comma-separated input channels (lint)")
+	var rulesPath, artifactPath, bundlePath, scenarioPath, channels string
+	switch command {
+	case "explain":
+		fs.StringVar(&rulesPath, "rules", "", "v4 source JSON")
+		fs.StringVar(&artifactPath, "artifact", "", "v4 compiled artifact")
+	case "lint":
+		fs.StringVar(&rulesPath, "rules", "", "v4 source JSON")
+		fs.StringVar(&channels, "channels", "", "comma-separated input channels")
+	case "bundle", "test":
+		fs.StringVar(&rulesPath, "rules", "", "v4 source JSON")
+		fs.StringVar(&scenarioPath, "scenario", "", "scenario or suite JSON")
+	case "simulate":
+		fs.StringVar(&bundlePath, "bundle", "", "complete replay bundle")
+	case "compare":
+		fs.StringVar(&rulesPath, "rules", "", "candidate v4 source JSON")
+		fs.StringVar(&bundlePath, "bundle", "", "complete replay bundle")
+	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return 1
 	}
 	if fs.NArg() != 0 {
 		fmt.Fprintln(diagnostics, "unexpected positional arguments")
-		return 1
-	}
-	allowed := map[string]map[string]bool{
-		"explain": {"rules": true, "artifact": true}, "lint": {"rules": true, "channels": true},
-		"bundle": {"rules": true, "scenario": true}, "simulate": {"bundle": true},
-		"compare": {"rules": true, "bundle": true}, "test": {"rules": true, "scenario": true},
-	}
-	invalid := ""
-	fs.Visit(func(f *flag.Flag) {
-		if !allowed[command][f.Name] {
-			invalid = f.Name
-		}
-	})
-	if invalid != "" {
-		fmt.Fprintf(diagnostics, "-%s is not supported by %s\n", invalid, command)
 		return 1
 	}
 	fail := func(err error) int { fmt.Fprintln(diagnostics, err); return 1 }
@@ -68,17 +65,17 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 		return code
 	}
 	readSource := func() ([]byte, error) {
-		if *rulesPath == "" {
+		if rulesPath == "" {
 			return nil, fmt.Errorf("-rules is required")
 		}
-		return ReadFile(*rulesPath)
+		return ReadFile(rulesPath)
 	}
 	readBundle := func() (Bundle, error) {
 		var b Bundle
-		if *bundlePath == "" {
+		if bundlePath == "" {
 			return b, fmt.Errorf("-bundle is required")
 		}
-		raw, err := ReadFile(*bundlePath)
+		raw, err := ReadFile(bundlePath)
 		if err != nil {
 			return b, err
 		}
@@ -87,13 +84,13 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 	}
 	switch command {
 	case "explain":
-		if (*rulesPath == "") == (*artifactPath == "") {
+		if (rulesPath == "") == (artifactPath == "") {
 			return fail(fmt.Errorf("explain requires exactly one of -rules or -artifact"))
 		}
 		var artifact []byte
 		var err error
-		if *artifactPath != "" {
-			artifact, err = ReadFile(*artifactPath)
+		if artifactPath != "" {
+			artifact, err = ReadFile(artifactPath)
 		} else {
 			var source []byte
 			source, err = readSource()
@@ -115,8 +112,8 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 			return fail(err)
 		}
 		var names []string
-		if *channels != "" {
-			names = strings.Split(*channels, ",")
+		if channels != "" {
+			names = strings.Split(channels, ",")
 		}
 		r := Lint(source, names)
 		code := 0
@@ -129,7 +126,10 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 		if err != nil {
 			return fail(err)
 		}
-		raw, err := ReadFile(*scenarioPath)
+		if scenarioPath == "" {
+			return fail(fmt.Errorf("-scenario is required"))
+		}
+		raw, err := ReadFile(scenarioPath)
 		if err != nil {
 			return fail(err)
 		}
@@ -179,7 +179,10 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 		if err != nil {
 			return fail(err)
 		}
-		raw, err := ReadFile(*scenarioPath)
+		if scenarioPath == "" {
+			return fail(fmt.Errorf("-scenario is required"))
+		}
+		raw, err := ReadFile(scenarioPath)
 		if err != nil {
 			return fail(err)
 		}
@@ -208,6 +211,7 @@ type TestResult struct {
 	Name       string   `json:"name"`
 	Passed     bool     `json:"passed"`
 	Mismatches []string `json:"mismatches"`
+	Error      string   `json:"error,omitempty"`
 	Report     Report   `json:"report"`
 }
 type TestReport struct {
@@ -221,20 +225,58 @@ func Test(ctx context.Context, source []byte, suite Suite) (TestReport, error) {
 	if suite.SchemaVersion != SchemaVersion || len(suite.Scenarios) == 0 || len(suite.Scenarios) > 100 {
 		return r, fmt.Errorf("suite requires schema 1 and 1..100 named scenarios")
 	}
+	if _, err := compiler.CompileBatch(source); err != nil {
+		return r, err
+	}
 	names := map[string]bool{}
 	reportBytes := 0
-	for _, s := range suite.Scenarios {
-		if names[s.Name] || s.Expect == nil || s.Expect.FinalState == nil || s.Expect.Actions == nil {
-			return r, fmt.Errorf("scenario %q requires unique name and explicit expected final_state/actions", s.Name)
+	appendResult := func(result TestResult) error {
+		r.Passed = r.Passed && result.Passed
+		r.Scenarios = append(r.Scenarios, result)
+		entryJSON, err := JSON(result)
+		if err != nil {
+			return err
+		}
+		reportBytes += len(entryJSON)
+		if reportBytes > MaxDocumentBytes {
+			return fmt.Errorf("suite report exceeds byte limit")
+		}
+		return nil
+	}
+	for i, s := range suite.Scenarios {
+		name := s.Name
+		if name == "" {
+			name = fmt.Sprintf("scenario[%d]", i)
+		}
+		validationError := ""
+		switch {
+		case s.Name == "":
+			validationError = "scenario name is required"
+		case names[s.Name]:
+			validationError = fmt.Sprintf("duplicate scenario name %q", s.Name)
+		case s.Expect == nil || s.Expect.FinalState == nil || s.Expect.Actions == nil:
+			validationError = "explicit expected final_state and actions are required"
+		}
+		if validationError != "" {
+			if err := appendResult(TestResult{Name: name, Passed: false, Mismatches: []string{"validation"}, Error: validationError}); err != nil {
+				return r, err
+			}
+			continue
 		}
 		names[s.Name] = true
 		b, err := NewBundle(source, s)
 		if err != nil {
-			return r, err
+			if err := appendResult(TestResult{Name: name, Passed: false, Mismatches: []string{"validation"}, Error: err.Error()}); err != nil {
+				return r, err
+			}
+			continue
 		}
 		report, err := Replay(ctx, b)
 		if err != nil {
-			return r, err
+			if err := appendResult(TestResult{Name: name, Passed: false, Mismatches: []string{"replay"}, Error: err.Error()}); err != nil {
+				return r, err
+			}
+			continue
 		}
 		mismatch := []string{}
 		if !reflect.DeepEqual(s.Expect.FinalState, report.FinalState) {
@@ -247,15 +289,8 @@ func Test(ctx context.Context, source []byte, suite Suite) (TestReport, error) {
 			mismatch = append(mismatch, "error")
 		}
 		passed := len(mismatch) == 0
-		r.Passed = r.Passed && passed
-		r.Scenarios = append(r.Scenarios, TestResult{s.Name, passed, mismatch, report})
-		entryJSON, err := JSON(r.Scenarios[len(r.Scenarios)-1])
-		if err != nil {
+		if err := appendResult(TestResult{Name: s.Name, Passed: passed, Mismatches: mismatch, Report: report}); err != nil {
 			return r, err
-		}
-		reportBytes += len(entryJSON)
-		if reportBytes > MaxDocumentBytes {
-			return r, fmt.Errorf("suite report exceeds byte limit")
 		}
 	}
 	return r, nil

@@ -59,3 +59,9 @@ func TestBatchRejectsAmbiguousAndEmptyConditions(t *testing.T) {
 		require.Error(t, err)
 	}
 }
+
+func TestBatchScriptFieldErrorNamesRule(t *testing.T) {
+	source := strings.Replace(v4Source, `"name":"r"`, `"name":"r","scripts":{}`, 1)
+	_, err := CompileBatch([]byte(source))
+	require.ErrorContains(t, err, `rule "r"`)
+}

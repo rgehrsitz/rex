@@ -83,17 +83,22 @@ func Lint(source []byte, channels []string) LintReport {
 		add("REX-L001", "error", "", err.Error())
 		return out
 	}
+	undefinedScript := false
 	for _, r := range parsed.Rules {
 		for _, a := range r.Actions {
 			if v, ok := a.Value.(string); ok && strings.HasPrefix(v, "{") && strings.HasSuffix(v, "}") {
 				name := strings.TrimSuffix(strings.TrimPrefix(v, "{"), "}")
 				if _, ok := r.Scripts[name]; !ok {
+					undefinedScript = true
 					add("REX-L004", "error", r.Name, "undefined script reference: "+name)
 				}
 			}
 		}
 	}
 	if _, err := compiler.ParseBatch(source); err != nil {
+		if undefinedScript && strings.Contains(err.Error(), "script calls unavailable") {
+			return out
+		}
 		add("REX-L001", "error", "", err.Error())
 		return out
 	}

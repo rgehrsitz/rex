@@ -98,11 +98,19 @@ all multi-rule cycles. Budgets remain the runtime safeguard. Arbitrary fact keys
 are valid in v4, so lint does not require the legacy `group:key` convention.
 Scripts remain unavailable even when their references are defined.
 
-Exit status is 0 for successful commands and lint warnings, 1 for bad input,
-unsupported contracts or I/O failures, and 2 for scenario mismatches, replay
-execution errors, lint errors, or comparison differences. Tool commands emit one
-JSON document on stdout and diagnostics on stderr. Redirect stdout to save it.
-Unknown or irrelevant flags are rejected rather than silently ignored.
+Exit status is 0 for successful commands and lint warnings, 1 for global input,
+unsupported-contract or I/O failures, and 2 for per-scenario validation errors,
+scenario mismatches, replay execution errors, lint errors, or comparison
+differences. `rexc test` continues after a malformed scenario and includes its
+validation error in the JSON report. Tool commands emit one JSON document on
+stdout and diagnostics on stderr. Redirect stdout to save it. Each command's
+help lists only its accepted flags; unknown flags are rejected.
+
+Schema-1 result fields use snake_case. M5 adds JSON tags to the M4 `Budget`
+type, so serialized chain results now use `budget.actions` and `budget.work`
+instead of Go's default `Actions` and `Work`. This corrects the new tooling
+contract before integration; Go field names and evaluation semantics are
+unchanged.
 
 ## Verification
 

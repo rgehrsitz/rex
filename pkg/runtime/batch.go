@@ -105,7 +105,10 @@ func (l Limits) Validate() error {
 	return nil
 }
 
-type Budget struct{ Actions, Work int }
+type Budget struct {
+	Actions int `json:"actions"`
+	Work    int `json:"work"`
+}
 type ActionProposal struct {
 	Rule   string      `json:"rule"`
 	Target string      `json:"target"`

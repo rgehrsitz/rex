@@ -26,11 +26,12 @@ inputs and limits independently. It reports action/fact/result differences and
 condition traces as causal evidence, without claiming complete counterfactual
 proof. Recorded digests are integrity/provenance checks, not signatures.
 
-CLI exit codes: 0 success (including lint warnings), 1 invalid input/unsupported
-capability/I/O failure, 2 scenario mismatch, replay evaluation error, lint error,
-or comparison difference. Machine-readable stdout contains one JSON document;
-diagnostics go to stderr. Output is deterministic and excludes wall time, random
-IDs, absolute paths and local timestamps.
+CLI exit codes: 0 success (including lint warnings), 1 global invalid input,
+unsupported capability or I/O failure, and 2 per-scenario validation/mismatch,
+replay evaluation error, lint error, or comparison difference. A test suite
+collects scenario-local failures rather than aborting the report. Machine-readable
+stdout contains one JSON document; diagnostics go to stderr. Output is
+deterministic and excludes wall time, random IDs, absolute paths and timestamps.
 
 `rexd --dry-run --bundle ...` is deliberately offline. It intercepts execution
 before configuration, store construction, subscriptions or metrics startup. This

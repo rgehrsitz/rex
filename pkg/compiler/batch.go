@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"strings"
+	"unicode/utf8"
 )
 
 // BatchVersion is the current artifact/execution contract. Version remains the
@@ -21,6 +22,9 @@ const batchHeaderSize = 16
 func ParseBatch(data []byte) (*Ruleset, error) {
 	if len(data) > MaxProgramBytes {
 		return nil, fmt.Errorf("program exceeds %d bytes", MaxProgramBytes)
+	}
+	if !utf8.Valid(data) {
+		return nil, fmt.Errorf("program must be valid UTF-8")
 	}
 	// Bound nesting before recursive source validation. Ignore brackets in strings.
 	depth := 0
@@ -198,9 +202,16 @@ func validateBatchShapes(data []byte) error {
 		}
 		return nil
 	}
-	for _, r := range root.Rules {
+	for i, r := range root.Rules {
 		if _, ok := r["scripts"]; ok {
-			return fmt.Errorf("v4 scripts unavailable until M6")
+			name := fmt.Sprintf("rules[%d]", i)
+			if rawName, ok := r["name"]; ok {
+				var ruleName string
+				if json.Unmarshal(rawName, &ruleName) == nil && ruleName != "" {
+					name = fmt.Sprintf("rule %q", ruleName)
+				}
+			}
+			return fmt.Errorf("v4 scripts unavailable until M6: %s", name)
 		}
 		if err := group(r["conditions"], false); err != nil {
 			return err
