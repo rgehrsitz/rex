@@ -1,0 +1,1252 @@
+[
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "actions-8",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 48167,
+        "after_median": 13791,
+        "after_over_before": 0.28631635767226526,
+        "investigate_above": 52835,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 52917,
+        "after_median": 15875,
+        "after_over_before": 0.2999981102481244,
+        "investigate_above": 59208,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 20289.18870493561,
+        "after_median": 69410.9054805324,
+        "after_over_before": 3.421078412250525
+      },
+      "allocs_per_event": {
+        "before_median": 317,
+        "after_median": 315,
+        "after_over_before": 0.9936908517350158,
+        "investigate_above": 317.00199999999995,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 8504.032,
+        "after_median": 8456.016,
+        "after_over_before": 0.9943537371449214,
+        "investigate_above": 8504.272,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1294672,
+        "after_median": 1423280,
+        "after_over_before": 1.099336357007798
+      }
+    },
+    "get_per_batch": {
+      "before": 80.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "batch-8",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 365542,
+        "after_median": 100584,
+        "after_over_before": 0.27516400304205807,
+        "investigate_above": 378668,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 422792,
+        "after_median": 164708,
+        "after_over_before": 0.38957217733542737,
+        "investigate_above": 461625,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 2680.423493509857,
+        "after_median": 9361.520872680976,
+        "after_over_before": 3.4925529101457826
+      },
+      "allocs_per_event": {
+        "before_median": 1712,
+        "after_median": 1680,
+        "after_over_before": 0.9813084112149533,
+        "investigate_above": 1712,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 108736.256,
+        "after_median": 106176.288,
+        "after_over_before": 0.9764570889768359,
+        "investigate_above": 108736.432,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 987096,
+        "after_median": 1115704,
+        "after_over_before": 1.1302892525144463
+      }
+    },
+    "get_per_batch": {
+      "before": 80.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "dense-1000",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 3165917,
+        "after_median": 604917,
+        "after_over_before": 0.19107165475279358,
+        "investigate_above": 3189584,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 3314541,
+        "after_median": 1045000,
+        "after_over_before": 0.3152774396213533,
+        "investigate_above": 3380832,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 313.38466286841845,
+        "after_median": 1468.800743669092,
+        "after_over_before": 4.686894151823252
+      },
+      "allocs_per_event": {
+        "before_median": 10007.002,
+        "after_median": 10005.001,
+        "after_over_before": 0.9998000400119836,
+        "investigate_above": 10007.044000000002,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 464505.328,
+        "after_median": 464457.92,
+        "after_over_before": 0.99989793873796,
+        "investigate_above": 464510.31999999995,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1533832,
+        "after_median": 1663784,
+        "after_over_before": 1.0847237507106384
+      }
+    },
+    "get_per_batch": {
+      "before": 1000.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "dependencies-32",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 67833,
+        "after_median": 34750,
+        "after_over_before": 0.5122875296684505,
+        "investigate_above": 69582,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 90833,
+        "after_median": 68417,
+        "after_over_before": 0.7532174429997909,
+        "investigate_above": 111001,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 14082.325273549168,
+        "after_median": 25936.019936707293,
+        "after_over_before": 1.8417427117255216
+      },
+      "allocs_per_event": {
+        "before_median": 469.001,
+        "after_median": 464,
+        "after_over_before": 0.9893369097294036,
+        "investigate_above": 469.004,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 57144.24,
+        "after_median": 56648.16,
+        "after_over_before": 0.991318810084796,
+        "investigate_above": 57144.560000000005,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1028752,
+        "after_median": 1156464,
+        "after_over_before": 1.1241426505124656
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "match-half",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 39250,
+        "after_median": 5666,
+        "after_over_before": 0.14435668789808917,
+        "investigate_above": 40583,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 42250,
+        "after_median": 6292,
+        "after_over_before": 0.14892307692307694,
+        "investigate_above": 43042,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 25715.066570650037,
+        "after_median": 223982.97729372568,
+        "after_over_before": 8.710184617969034
+      },
+      "allocs_per_event": {
+        "before_median": 82,
+        "after_median": 80,
+        "after_over_before": 0.975609756097561,
+        "investigate_above": 82,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 4664.016,
+        "after_median": 4616.016,
+        "after_over_before": 0.9897084401082672,
+        "investigate_above": 4664.016,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 981984,
+        "after_median": 1110592,
+        "after_over_before": 1.1309675106722716
+      }
+    },
+    "get_per_batch": {
+      "before": 5.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "match-none",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 36167,
+        "after_median": 2375,
+        "after_over_before": 0.06566759753366329,
+        "investigate_above": 36583,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 40792,
+        "after_median": 2916,
+        "after_over_before": 0.07148460482447538,
+        "investigate_above": 48458,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 27059.266314511962,
+        "after_median": 390663.1506983104,
+        "after_over_before": 14.437314972165252
+      },
+      "allocs_per_event": {
+        "before_median": 47,
+        "after_median": 45,
+        "after_over_before": 0.9574468085106383,
+        "investigate_above": 47,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 4104,
+        "after_median": 4056.016,
+        "after_over_before": 0.988307992202729,
+        "investigate_above": 4104.031999999999,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 979792,
+        "after_median": 1108400,
+        "after_over_before": 1.1312605124352924
+      }
+    },
+    "get_per_batch": {
+      "before": 0.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "missing-half",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 7917875,
+        "after_median": 66667,
+        "after_over_before": 0.008419809608007199,
+        "investigate_above": 8145124,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 8114209,
+        "after_median": 130709,
+        "after_over_before": 0.016108655815988963,
+        "investigate_above": 8446916,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 126.11690510565215,
+        "after_median": 13476.271654684015,
+        "after_over_before": 106.85539455154337
+      },
+      "allocs_per_event": {
+        "before_median": 535,
+        "after_median": 530,
+        "after_over_before": 0.9906542056074766,
+        "investigate_above": 535,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 91336.16,
+        "after_median": 80416.288,
+        "after_over_before": 0.8804430578206922,
+        "investigate_above": 91336.368,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1078440,
+        "after_median": 1206600,
+        "after_over_before": 1.1188383220206966
+      }
+    },
+    "get_per_batch": {
+      "before": 50.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "shared-100",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 377625,
+        "after_median": 59167,
+        "after_over_before": 0.15668189341277722,
+        "investigate_above": 380835,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 402959,
+        "after_median": 131625,
+        "after_over_before": 0.3266461352147489,
+        "investigate_above": 422708,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 2614.79523048276,
+        "after_median": 14334.280260665446,
+        "after_over_before": 5.481989600393665
+      },
+      "allocs_per_event": {
+        "before_median": 1007,
+        "after_median": 1005,
+        "after_over_before": 0.9980139026812314,
+        "investigate_above": 1007.0039999999999,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 46904.128,
+        "after_median": 46856.144,
+        "after_over_before": 0.9989769770370746,
+        "investigate_above": 46904.528,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1035208,
+        "after_median": 1163704,
+        "after_over_before": 1.1241257795534811
+      }
+    },
+    "get_per_batch": {
+      "before": 100.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-100",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 10833,
+        "after_median": 7542,
+        "after_over_before": 0.6962060371088341,
+        "investigate_above": 25999,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 11875,
+        "after_median": 8708,
+        "after_over_before": 0.7333052631578947,
+        "investigate_above": 32207,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 89271.7655723436,
+        "after_median": 127843.18448167834,
+        "after_over_before": 1.4320673917676403
+      },
+      "allocs_per_event": {
+        "before_median": 107,
+        "after_median": 105,
+        "after_over_before": 0.9813084112149533,
+        "investigate_above": 107,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 5144.016,
+        "after_median": 5096.016,
+        "after_over_before": 0.9906687693039835,
+        "investigate_above": 5144.031999999999,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 522728,
+        "after_median": 523224,
+        "after_over_before": 1.000948868245053
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-1000",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 38917,
+        "after_median": 5750,
+        "after_over_before": 0.14775034046817587,
+        "investigate_above": 39126,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 42375,
+        "after_median": 6500,
+        "after_over_before": 0.15339233038348082,
+        "investigate_above": 49500,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 25173.64528783093,
+        "after_median": 165640.60593321337,
+        "after_over_before": 6.579921343901867
+      },
+      "allocs_per_event": {
+        "before_median": 107,
+        "after_median": 105,
+        "after_over_before": 0.9813084112149533,
+        "investigate_above": 107.00200000000001,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 5144.016,
+        "after_median": 5096.016,
+        "after_over_before": 0.9906687693039835,
+        "investigate_above": 5144.24,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 969968,
+        "after_median": 1107592,
+        "after_over_before": 1.141885093116474
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-10000",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 332750,
+        "after_median": 5958,
+        "after_over_before": 0.0179053343350864,
+        "investigate_above": 335750,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 350625,
+        "after_median": 7709,
+        "after_over_before": 0.02198645276292335,
+        "investigate_above": 365585,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 2970.4867261617333,
+        "after_median": 156159.5250751596,
+        "after_over_before": 52.57034939756779
+      },
+      "allocs_per_event": {
+        "before_median": 107,
+        "after_median": 105,
+        "after_over_before": 0.9813084112149533,
+        "investigate_above": 107,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 5144.016,
+        "after_median": 5096.016,
+        "after_over_before": 0.9906687693039835,
+        "investigate_above": 5144.016,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 5585656,
+        "after_median": 6390376,
+        "after_over_before": 1.1440690225105161
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "unique-100",
+    "runs": 5,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 403209,
+        "after_median": 84458,
+        "after_over_before": 0.20946457048329775,
+        "investigate_above": 404626,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 470375,
+        "after_median": 178750,
+        "after_over_before": 0.3800159447249535,
+        "investigate_above": 525085,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 2424.9218902953844,
+        "after_median": 10142.630744849444,
+        "after_over_before": 4.182662866561014
+      },
+      "allocs_per_event": {
+        "before_median": 1029,
+        "after_median": 1020,
+        "after_over_before": 0.9912536443148688,
+        "investigate_above": 1029.002,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 110632.32,
+        "after_median": 98360.352,
+        "after_over_before": 0.8890742958296454,
+        "investigate_above": 110632.64000000001,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1125448,
+        "after_median": 1253944,
+        "after_over_before": 1.1141732003611007
+      }
+    },
+    "get_per_batch": {
+      "before": 100.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "info-discard",
+    "fixture": "shared-100",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 475625,
+        "after_median": 156833,
+        "after_over_before": 0.3297408672798949,
+        "investigate_above": 480166,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 491375,
+        "after_median": 175709,
+        "after_over_before": 0.35758636479267364,
+        "investigate_above": 497168,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 2087.7516813619436,
+        "after_median": 6212.112558460172,
+        "after_over_before": 2.9755035591242844
+      },
+      "allocs_per_event": {
+        "before_median": 1007.056,
+        "after_median": 1005.062,
+        "after_over_before": 0.9980199710840311,
+        "investigate_above": 1007.0669999999999,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 46920.2,
+        "after_median": 46877.344,
+        "after_over_before": 0.9990866194091245,
+        "investigate_above": 46939.624,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1032824,
+        "after_median": 1164856,
+        "after_over_before": 1.1278359139601712
+      }
+    },
+    "get_per_batch": {
+      "before": 100.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "actions-8",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 18167750,
+        "after_median": 12028333,
+        "after_over_before": 0.6620705921206533,
+        "investigate_above": 18274667,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 18729167,
+        "after_median": 12250792,
+        "after_over_before": 0.6541023420849417,
+        "investigate_above": 19622625,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 54.94559836306073,
+        "after_median": 82.39173877743383,
+        "after_over_before": 1.4995148152363158
+      },
+      "allocs_per_event": {
+        "before_median": 3391.24,
+        "after_median": 2269.18,
+        "after_over_before": 0.6691298757976434,
+        "investigate_above": 3391.24,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 130646.4,
+        "after_median": 94121.84,
+        "after_over_before": 0.7204319445465011,
+        "investigate_above": 130646.71999999999,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1444344,
+        "after_median": 1575032,
+        "after_over_before": 1.0904825997130878
+      }
+    },
+    "get_per_batch": {
+      "before": 80.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "batch-8",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 19011041,
+        "after_median": 12676125,
+        "after_over_before": 0.6667770060566384,
+        "investigate_above": 19290293,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 19678875,
+        "after_median": 12865708,
+        "after_over_before": 0.6537826984520203,
+        "investigate_above": 20517208,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 52.49507332818151,
+        "after_median": 78.85342129287389,
+        "after_over_before": 1.502110889528792
+      },
+      "allocs_per_event": {
+        "before_median": 5424.32,
+        "after_median": 4272.3,
+        "after_over_before": 0.7876194619786444,
+        "investigate_above": 5424.639999999999,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 254945.44,
+        "after_median": 216030.32,
+        "after_over_before": 0.8473590270922281,
+        "investigate_above": 254960.0,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1139792,
+        "after_median": 1270208,
+        "after_over_before": 1.1144208767915549
+      }
+    },
+    "get_per_batch": {
+      "before": 80.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "dense-1000",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 228114333,
+        "after_median": 150842959,
+        "after_over_before": 0.6612603294857409,
+        "investigate_above": 238295500,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 238251292,
+        "after_median": 168396667,
+        "after_over_before": 0.7068027442218445,
+        "investigate_above": 255586000,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 4.315235420040857,
+        "after_median": 6.489298843513701,
+        "after_over_before": 1.503811081401501
+      },
+      "allocs_per_event": {
+        "before_median": 48044.2,
+        "after_median": 34041.34,
+        "after_over_before": 0.7085421341181661,
+        "investigate_above": 48044.59,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 1977982.08,
+        "after_median": 1521869.36,
+        "after_over_before": 0.7694050291901533,
+        "investigate_above": 1977996.88,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1613800,
+        "after_median": 1744040,
+        "after_over_before": 1.0807039286156896
+      }
+    },
+    "get_per_batch": {
+      "before": 1000.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "dependencies-32",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 2425416,
+        "after_median": 1611125,
+        "after_over_before": 0.6642674906077968,
+        "investigate_above": 2663334,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 2551292,
+        "after_median": 1713917,
+        "after_over_before": 0.6717839431942718,
+        "investigate_above": 5844458,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 414.94651109176715,
+        "after_median": 613.9622669473678,
+        "after_over_before": 1.4796178556411272
+      },
+      "allocs_per_event": {
+        "before_median": 1084.12,
+        "after_median": 939.12,
+        "after_over_before": 0.8662509685274694,
+        "investigate_above": 1084.1599999999999,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 82372.64,
+        "after_median": 77333.12,
+        "after_over_before": 0.9388204627167467,
+        "investigate_above": 82374.88000000002,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1179528,
+        "after_median": 1310376,
+        "after_over_before": 1.110932508596659
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "match-half",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 125083,
+        "after_median": 92333,
+        "after_over_before": 0.7381738525618989,
+        "investigate_above": 125542,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 2454041,
+        "after_median": 1621083,
+        "after_over_before": 0.660576983025141,
+        "investigate_above": 2499291,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 799.9429352707696,
+        "after_median": 1212.3943167997988,
+        "after_over_before": 1.5156010052009774
+      },
+      "allocs_per_event": {
+        "before_median": 306.02,
+        "after_median": 234.02,
+        "after_over_before": 0.7647212600483629,
+        "investigate_above": 306.02,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 13386.64,
+        "after_median": 11094.64,
+        "after_over_before": 0.8287845194910747,
+        "investigate_above": 13386.64,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1134552,
+        "after_median": 1265288,
+        "after_over_before": 1.1152313864855907
+      }
+    },
+    "get_per_batch": {
+      "before": 5.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "match-none",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 114459,
+        "after_median": 78417,
+        "after_over_before": 0.6851099520352266,
+        "investigate_above": 116249,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 122417,
+        "after_median": 85500,
+        "after_over_before": 0.698432407263697,
+        "investigate_above": 132541,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 8655.229991964485,
+        "after_median": 12674.939515188633,
+        "after_over_before": 1.4644255007615103
+      },
+      "allocs_per_event": {
+        "before_median": 81,
+        "after_median": 79,
+        "after_over_before": 0.9753086419753086,
+        "investigate_above": 81,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 5264,
+        "after_median": 5216.16,
+        "after_over_before": 0.9909118541033435,
+        "investigate_above": 5264,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1132744,
+        "after_median": 1263048,
+        "after_over_before": 1.1150339352934113
+      }
+    },
+    "get_per_batch": {
+      "before": 0.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "missing-half",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 19175459,
+        "after_median": 7718125,
+        "after_over_before": 0.4025001435428482,
+        "investigate_above": 19577792,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 19430666,
+        "after_median": 7933458,
+        "after_over_before": 0.40829573211746834,
+        "investigate_above": 20593293,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 52.08617048331649,
+        "after_median": 129.45055037519623,
+        "after_over_before": 2.4853151839346688
+      },
+      "allocs_per_event": {
+        "before_median": 4952.52,
+        "after_median": 4247.36,
+        "after_over_before": 0.8576159207837625,
+        "investigate_above": 4952.68,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 273749.12,
+        "after_median": 240023.2,
+        "after_over_before": 0.8767998961969267,
+        "investigate_above": 273758.72,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1213776,
+        "after_median": 1344304,
+        "after_over_before": 1.1075387880465588
+      }
+    },
+    "get_per_batch": {
+      "before": 50.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "shared-100",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 22681209,
+        "after_median": 15055583,
+        "after_over_before": 0.6637910263072837,
+        "investigate_above": 22804834,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 23168334,
+        "after_median": 16138291,
+        "after_over_before": 0.6965667449372924,
+        "investigate_above": 23219376,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 44.050165295580236,
+        "after_median": 65.68560831606075,
+        "after_over_before": 1.4911546387012378
+      },
+      "allocs_per_event": {
+        "before_median": 4841.28,
+        "after_median": 3439.22,
+        "after_over_before": 0.7103947716306431,
+        "investigate_above": 4841.389999999999,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 199291.52,
+        "after_median": 153647.76,
+        "after_over_before": 0.7709698837160759,
+        "investigate_above": 199296.64,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1183680,
+        "after_median": 1314048,
+        "after_over_before": 1.1101378751013788
+      }
+    },
+    "get_per_batch": {
+      "before": 100.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "sparse-100",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 2285125,
+        "after_median": 1668667,
+        "after_over_before": 0.7302300749411957,
+        "investigate_above": 2291126,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 2342500,
+        "after_median": 1810458,
+        "after_over_before": 0.7728742796157951,
+        "investigate_above": 2409792,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 436.1387479999604,
+        "after_median": 597.3247318571946,
+        "after_over_before": 1.3695750139064664
+      },
+      "allocs_per_event": {
+        "before_median": 521.02,
+        "after_median": 379.03,
+        "after_over_before": 0.7274768722889716,
+        "investigate_above": 521.04,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 21426.8,
+        "after_median": 16828.08,
+        "after_over_before": 0.7853753243601472,
+        "investigate_above": 21428.399999999998,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 680792,
+        "after_median": 674320,
+        "after_over_before": 0.9904934253046451
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "sparse-1000",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 2327958,
+        "after_median": 1650750,
+        "after_over_before": 0.7090978445487418,
+        "investigate_above": 2331541,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 2436125,
+        "after_median": 1699750,
+        "after_over_before": 0.697726922879573,
+        "investigate_above": 2518500,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 427.41039814359937,
+        "after_median": 605.4756175362377,
+        "after_over_before": 1.4166141492252904
+      },
+      "allocs_per_event": {
+        "before_median": 521.12,
+        "after_median": 379.02,
+        "after_over_before": 0.7273180841264968,
+        "investigate_above": 521.2,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 21433.12,
+        "after_median": 16826.8,
+        "after_over_before": 0.7850840194987944,
+        "investigate_above": 21437.12,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1130696,
+        "after_median": 1255096,
+        "after_over_before": 1.1100207305942535
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "sparse-10000",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 2672042,
+        "after_median": 1652583,
+        "after_over_before": 0.6184719401865689,
+        "investigate_above": 2712875,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 2732583,
+        "after_median": 1726000,
+        "after_over_before": 0.6316368066404571,
+        "investigate_above": 2805041,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 373.56638157487527,
+        "after_median": 606.3524526832409,
+        "after_over_before": 1.6231451291922732
+      },
+      "allocs_per_event": {
+        "before_median": 521.06,
+        "after_median": 379.02,
+        "after_over_before": 0.7274018347215292,
+        "investigate_above": 521.1200000000001,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 21428.56,
+        "after_median": 16826.8,
+        "after_over_before": 0.7852510854672455,
+        "investigate_above": 21433.04,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 5741392,
+        "after_median": 6543280,
+        "after_over_before": 1.1396678714848245
+      }
+    },
+    "get_per_batch": {
+      "before": 10.0,
+      "after": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "unique-100",
+    "runs": 3,
+    "metrics": {
+      "p50_ns": {
+        "before_median": 22916625,
+        "after_median": 15130666,
+        "after_over_before": 0.6602484440880801,
+        "investigate_above": 23057042,
+        "investigate": false
+      },
+      "p95_ns": {
+        "before_median": 23172375,
+        "after_median": 15400792,
+        "after_over_before": 0.6646186245475485,
+        "investigate_above": 23546916,
+        "investigate": false
+      },
+      "events_per_second": {
+        "before_median": 43.647314357090764,
+        "after_median": 66.02232181689469,
+        "after_over_before": 1.5126319405759492
+      },
+      "allocs_per_event": {
+        "before_median": 7646.64,
+        "after_median": 6237.5,
+        "after_over_before": 0.8157177531569421,
+        "investigate_above": 7646.72,
+        "investigate": false
+      },
+      "bytes_per_event": {
+        "before_median": 378421.6,
+        "after_median": 320539.12,
+        "after_over_before": 0.8470423464199719,
+        "investigate_above": 378425.44000000006,
+        "investigate": false
+      },
+      "heap_before_bytes": {
+        "before_median": 1237824,
+        "after_median": 1369280,
+        "after_over_before": 1.1061992658083863
+      }
+    },
+    "get_per_batch": {
+      "before": 100.0,
+      "after": 0.0
+    }
+  }
+]

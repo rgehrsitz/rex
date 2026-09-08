@@ -3,7 +3,8 @@
   "logging": {
     "level": "info",
     "output": "console",
-    "time_format": "unixnano"
+    "time_format": "unixnano",
+    "trace_conditions": true
   },
   "redis": {
     "address": "localhost:6379",

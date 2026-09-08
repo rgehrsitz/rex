@@ -1,0 +1,13 @@
+{
+  "before": {
+    "binary_sha256": "b3fdb24aa758117c88ee745d94a341e30335920c7b2036af5150c5b6a16d684f",
+    "source": "M0 source-manifest.sha256, all Go/fixture hashes verified against saved before tree"
+  },
+  "after": {
+    "binary_sha256": "fb0c8bf5343bcea0149c2bcacfc69221e51cbd070d93966ed42ba58d6962dcf9",
+    "source_id": "dddcdbac40af+920e6d2895128602badec1a8be184f54d3c8bb4bd1641d353bd31fae7d7196a1"
+  },
+  "pairing": "Each fixture executes all before repetitions then all after repetitions, sequentially on one disposable Redis when applicable.",
+  "harness_sha256": "267d931074de061d0e76fda6d7e74dcf299a4feb85097da88f2978be48042d33",
+  "fixtures_sha256": "ac9f6df473551a954d5c8d36132f2a203e72beee3ea59df730ec61f0a784f841"
+}

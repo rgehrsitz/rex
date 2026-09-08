@@ -24,14 +24,15 @@ const DefaultMaxActionsPerEvaluation = 32
 
 type Engine struct {
 	bytecode                []byte
-	ruleExecutionIndex      []compiler.RuleExecutionIndex
+	ruleExecutionIndex      map[string]compiler.RuleExecutionIndex
 	factRuleIndex           map[string][]string
-	factDependencyIndex     []compiler.FactDependencyIndex
+	factDependencyIndex     map[string][]string
 	Facts                   map[string]interface{}
 	store                   store.ContextStore
 	priorityThreshold       int
 	maxActionsPerEvaluation int
 	scriptsEnabled          bool
+	traceConditions         bool
 	ScriptEngine            *scripting.SafeVM
 	executionObserver       ExecutionObserver
 }
@@ -66,9 +67,10 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 
 	engine := &Engine{
 		bytecode:                bytecode,
-		ruleExecutionIndex:      make([]compiler.RuleExecutionIndex, 0),
+		ruleExecutionIndex:      make(map[string]compiler.RuleExecutionIndex),
 		factRuleIndex:           make(map[string][]string),
-		factDependencyIndex:     make([]compiler.FactDependencyIndex, 0),
+		factDependencyIndex:     make(map[string][]string),
+		traceConditions:         true,
 		Facts:                   make(map[string]interface{}),
 		store:                   store,
 		priorityThreshold:       priorityThreshold,
@@ -126,11 +128,11 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		// Adjust the byte offset by adding the size of the header
 		adjustedByteOffset := byteOffset + compiler.HeaderSize
 
-		engine.ruleExecutionIndex = append(engine.ruleExecutionIndex, compiler.RuleExecutionIndex{
+		engine.ruleExecutionIndex[name] = compiler.RuleExecutionIndex{
 			RuleName:   name,
 			ByteOffset: adjustedByteOffset,
 			Priority:   priority,
-		})
+		}
 		logging.Logger.Debug().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Int("priority", priority).Msg("Read rule execution index entry")
 	}
 
@@ -155,13 +157,9 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		logging.Logger.Debug().Str("fact", fact).Strs("rules", rules).Msg("Read fact rule index entry")
 	}
 
-	priorities := make(map[string]int, len(engine.ruleExecutionIndex))
-	for _, rule := range engine.ruleExecutionIndex {
-		priorities[rule.RuleName] = rule.Priority
-	}
 	for fact, rules := range engine.factRuleIndex {
 		sort.SliceStable(rules, func(i, j int) bool {
-			return priorities[rules[i]] < priorities[rules[j]]
+			return engine.ruleExecutionIndex[rules[i]].Priority < engine.ruleExecutionIndex[rules[j]].Priority
 		})
 		engine.factRuleIndex[fact] = rules
 	}
@@ -183,10 +181,12 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 			offset += factLen
 			facts = append(facts, fact)
 		}
-		engine.factDependencyIndex = append(engine.factDependencyIndex, compiler.FactDependencyIndex{
-			RuleName: rule,
-			Facts:    facts,
-		})
+		// The decoder permits repeated dependency records. Preserve the union
+		// previously visited by the slice scan rather than keeping only the last.
+		if existing, ok := engine.factDependencyIndex[rule]; ok {
+			facts = append(existing, facts...)
+		}
+		engine.factDependencyIndex[rule] = facts
 		logging.Logger.Debug().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
 	}
 
@@ -241,19 +241,15 @@ func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, 
 	// Create a set of all facts that need to be queried (excluding the fact that triggered the update)
 	factsToQuery := make(map[string]struct{})
 	for _, ruleName := range ruleNames {
-		for _, dep := range e.factDependencyIndex {
-			if dep.RuleName == ruleName {
-				for _, fact := range dep.Facts {
-					if fact != factName {
-						factsToQuery[fact] = struct{}{}
-					}
-				}
+		for _, fact := range e.factDependencyIndex[ruleName] {
+			if fact != factName {
+				factsToQuery[fact] = struct{}{}
 			}
 		}
 	}
 
 	// Convert the set to a slice
-	var factKeys []string
+	factKeys := make([]string, 0, len(factsToQuery))
 	for fact := range factsToQuery {
 		factKeys = append(factKeys, fact)
 	}
@@ -275,7 +271,7 @@ func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, 
 	}
 
 	// Update local fact store with retrieved facts
-	var missingFacts []string
+	var missingFacts map[string]struct{}
 	for fact, value := range factValues {
 		if value != nil {
 			e.Facts[fact] = value
@@ -283,36 +279,28 @@ func (e *Engine) ProcessFactUpdateContext(ctx context.Context, factName string, 
 			// Fact does not exist in the store
 			logger.Warn().Str("fact", fact).Msg("Fact not found in store")
 			delete(e.Facts, fact)
-			missingFacts = append(missingFacts, fact)
+			if missingFacts == nil {
+				missingFacts = make(map[string]struct{})
+			}
+			missingFacts[fact] = struct{}{}
 		}
 	}
 	if len(missingFacts) > 0 {
-		// Filtering must not mutate the persistent index's backing array.
-		ruleNames = append([]string(nil), indexedRuleNames...)
-	}
-
-	// Remove rules that depend on missing facts from ruleNames
-	for _, missingFact := range missingFacts {
-		for i := 0; i < len(ruleNames); i++ {
-			ruleName := ruleNames[i]
-			for _, dep := range e.factDependencyIndex {
-				if dep.RuleName == ruleName {
-					for _, fact := range dep.Facts {
-						if fact == missingFact {
-							// Remove the rule from ruleNames
-							ruleNames = append(ruleNames[:i], ruleNames[i+1:]...)
-							i--
-							logger.Warn().
-								Str("ruleName", ruleName).
-								Str("missingFact", missingFact).
-								Msg("Removing rule due to missing fact")
-							break
-						}
-					}
-					if len(ruleNames) == 0 {
-						break
-					}
+		// Never reuse the persistent candidate slice's backing array. Filter
+		// once in priority/source order, looking only at each candidate's facts.
+		ruleNames = make([]string, 0, len(indexedRuleNames))
+		for _, ruleName := range indexedRuleNames {
+			missing := false
+			for _, fact := range e.factDependencyIndex[ruleName] {
+				if _, absent := missingFacts[fact]; absent {
+					missing = true
+					logger.Warn().Str("ruleName", ruleName).Str("missingFact", fact).
+						Msg("Removing rule due to missing fact")
+					break
 				}
+			}
+			if !missing {
+				ruleNames = append(ruleNames, ruleName)
 			}
 		}
 	}
@@ -349,21 +337,11 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 		Interface("facts", e.Facts).
 		Msg("Current facts")
 
-	var ruleOffset int
-	var rulePriority int
-	found := false
-	for _, r := range e.ruleExecutionIndex {
-		if r.RuleName == ruleName {
-			ruleOffset = r.ByteOffset
-			rulePriority = r.Priority
-			found = true
-			break
-		}
-	}
-
+	rule, found := e.ruleExecutionIndex[ruleName]
 	if !found {
 		return logging.NewError(logging.ErrorTypeRuntime, "Rule not found in ruleExecutionIndex", nil, map[string]interface{}{"ruleName": ruleName})
 	}
+	ruleOffset, rulePriority := rule.ByteOffset, rule.Priority
 
 	logger.Debug().Str("ruleName", ruleName).Int("offset", ruleOffset).Int("priority", rulePriority).Msg("Found rule in ruleExecutionIndex")
 
@@ -460,12 +438,14 @@ func (e *Engine) evaluateRuleContext(ctx context.Context, ruleName string) error
 			if comparisonResult {
 				ruleTriggered = true
 			}
-			logger.Info().
-				Str("event", "rule_condition_evaluated").
-				Str("rule_name", ruleName).
-				Str("fact_name", comparisonFactName).
-				Bool("matched", comparisonResult).
-				Msg("Evaluated rule condition")
+			if e.traceConditions {
+				logger.Info().
+					Str("event", "rule_condition_evaluated").
+					Str("rule_name", ruleName).
+					Str("fact_name", comparisonFactName).
+					Bool("matched", comparisonResult).
+					Msg("Evaluated rule condition")
+			}
 
 		case compiler.JUMP_IF_FALSE:
 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
@@ -792,14 +772,6 @@ func (e *Engine) executeActionContext(ctx context.Context, action compiler.Actio
 		}
 
 		logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in Redis store")
-
-		// Verify the fact was stored correctly
-		storedValue, err := e.store.GetFactContext(ctx, factName)
-		if err != nil {
-			logger.Error().Err(err).Str("factName", factName).Msg("Failed to retrieve fact from Redis store")
-		} else {
-			logger.Debug().Str("factName", factName).Interface("storedValue", storedValue).Msg("Retrieved fact from Redis store")
-		}
 
 		logger.Info().
 			Str("event", "action_completed").

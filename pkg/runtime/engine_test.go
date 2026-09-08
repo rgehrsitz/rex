@@ -476,7 +476,7 @@ func TestExecuteActionContextPassesContextToStore(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Same(t, ctx, store.setAndPublishContext)
-	assert.Same(t, ctx, store.getContext)
+	assert.Nil(t, store.getContext, "successful actions must not perform a diagnostic read")
 }
 
 func TestProcessFactUpdateContextHonorsCancellation(t *testing.T) {
@@ -492,13 +492,10 @@ func TestProcessFactUpdateContextHonorsCancellation(t *testing.T) {
 func TestProcessFactUpdateContextReturnsStoreError(t *testing.T) {
 	storeErr := errors.New("store unavailable")
 	engine := &Engine{
-		Facts:         make(map[string]interface{}),
-		store:         &contextCaptureStore{mGetErr: storeErr},
-		factRuleIndex: map[string][]string{"temperature": {"temperature_rule"}},
-		factDependencyIndex: []compiler.FactDependencyIndex{{
-			RuleName: "temperature_rule",
-			Facts:    []string{"temperature", "humidity"},
-		}},
+		Facts:               make(map[string]interface{}),
+		store:               &contextCaptureStore{mGetErr: storeErr},
+		factRuleIndex:       map[string][]string{"temperature": {"temperature_rule"}},
+		factDependencyIndex: map[string][]string{"temperature_rule": {"temperature", "humidity"}},
 	}
 
 	err := engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
@@ -580,10 +577,10 @@ func TestProcessFactUpdateContextOrdersRulesByPriorityThenSourceOrder(t *testing
 	wantOrder := []string{"priority_one_first", "priority_one_second", "priority_five", "priority_ten"}
 	require.Len(t, engine.ruleExecutionIndex, 4)
 	assert.Equal(t, []int{10, 1, 5, 1}, []int{
-		engine.ruleExecutionIndex[0].Priority,
-		engine.ruleExecutionIndex[1].Priority,
-		engine.ruleExecutionIndex[2].Priority,
-		engine.ruleExecutionIndex[3].Priority,
+		engine.ruleExecutionIndex["priority_ten"].Priority,
+		engine.ruleExecutionIndex["priority_one_first"].Priority,
+		engine.ruleExecutionIndex["priority_five"].Priority,
+		engine.ruleExecutionIndex["priority_one_second"].Priority,
 	})
 	assert.Equal(t, wantOrder, engine.factRuleIndex["temperature"])
 	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))

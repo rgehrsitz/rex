@@ -1,15 +1,18 @@
 # Engine semantics audit
 
-Last verified: 2026-08-30.
+Last full audit: 2026-08-30. Individual remediation checks updated through
+2026-09-07; see each finding's evidence and integration status.
 
 This is the master, evidence-backed backlog for Rex. It consolidates the
 revival reviews, the PulsarSuite comparison, and a line-by-line verification of
 the Claude review artifact dated 2026-08-29.
 
 Use [EVOLUTION_REFERENCE.md](EVOLUTION_REFERENCE.md) for long-lived product
-reasoning and [REVIVAL_PLAN.md](REVIVAL_PLAN.md) for a short, committed
-milestone checklist. This audit is the source of truth for findings that must
-be triaged before feature work.
+reasoning, [REVIVAL_PLAN.md](REVIVAL_PLAN.md) for the earlier milestone history,
+and [FOUNDATION_ROADMAP.md](FOUNDATION_ROADMAP.md) for the next implementation
+sequence and acceptance criteria. This audit remains the source of truth for
+verified findings and remediation status. The foundation roadmap supersedes
+the suggested future-work order below; it does not mark any open defect fixed.
 
 ## Verification method
 
@@ -35,9 +38,9 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-004 | `sendMessage` compiles but fails at runtime and aborts the event | Fixed and verified 2026-08-30 | P0 |
 | REX-005 | Duplicate rule names compile but bytecode load rejects them | Fixed and verified 2026-08-30 | P0 |
 | REX-006 | Script timeout does not stop JavaScript execution | Confirmed by code inspection | P1, if scripts enabled |
-| REX-007 | Priority has no execution-order effect; documentation disagrees | Confirmed by execution and inspection | P1 |
+| REX-007 | Priority has no execution-order effect; documentation disagrees | Fixed and verified 2026-08-30 | P1 |
 | REX-008 | Bytecode jump targets are not semantically validated | Fixed and verified 2026-08-30 | P1 |
-| REX-009 | Actions perform an unnecessary post-write Redis `GET` | Confirmed by execution and inspection | P2 performance |
+| REX-009 | Actions perform an unnecessary post-write Redis `GET` | Fixed and verified in local M1 snapshot, 2026-09-07; integration pending | P2 performance |
 | REX-010 | Redis startup exits through the logger instead of returning an error | Confirmed by inspection | P1 |
 | REX-011 | TLS and environment-based Redis credentials are unsupported | Confirmed by inspection | P1 for managed Redis |
 | REX-012 | Local facts are unbounded and channel routing is convention-only | Confirmed by inspection | P2 / design decision |
@@ -73,6 +76,12 @@ and verifies that each eligible rule fires exactly once after the dependency
 appears. The complete normal and race-enabled test suites pass. Replacing the
 nested removal loop with a non-mutating filter belongs with the separately
 tracked dependency-lookup optimization rather than this isolated fix.
+
+**M1 follow-up (2026-09-07):** the runtime now builds direct dependency and
+execution maps at load time and filters into a fresh candidate slice in one
+pass. Missing-fact disappearance/recovery and stable-priority regressions pass;
+see the [M1 evidence](baselines/rex-m1/README.md). The original correctness fix
+and its history remain distinct from this performance change.
 
 Relevant code: [engine.go](../pkg/runtime/engine.go) (`ProcessFactUpdateContext`).
 
@@ -157,6 +166,14 @@ while an omitted Go `int` priority is zero.
 and test it, or remove priority from the accepted language. Correct the README,
 schema, examples, and config documentation either way.
 
+**Resolution (2026-08-30):** priority remains part of the language. The JSON
+parser applies priority 10 only when the field is omitted and preserves an
+explicit zero. Bytecode format 3 stores priority in each rule-execution-index
+entry, and the runtime stably sorts each fact's candidates once at load time: lower values
+execute first and source order breaks ties. Runtime regression coverage verifies
+both the index order and observed action order. Version-2 artifacts must be
+recompiled because their execution semantics did not honor priority.
+
 ### REX-008: structurally valid bytecode can have invalid jump semantics
 
 The bytecode decoder checks instruction framing but not that jump targets land
@@ -224,14 +241,19 @@ and one coherent evaluation per event batch.
 
 ### REX-009: post-action verification read
 
-After every `SetAndPublishFactContext`, the engine performs `GetFactContext`
-only to write a debug log. A direct probe counted one `GET` for each action.
-The store also emits a standard-library `log.Printf` on every publish,
+Before M1, after every `SetAndPublishFactContext`, the engine performed
+`GetFactContext` only to write a debug log. A direct probe counted one `GET`
+for each action. The store also emitted a standard-library `log.Printf` on every publish,
 bypassing configured structured logging.
 
-**Required work:** remove the verification read, route publish diagnostics
-through zerolog at debug level, and benchmark before/after. A Redis pipeline
-may reduce round trips, but it must not be presented as a delivery guarantee.
+**Resolution (local M1 snapshot, 2026-09-07):** the verification read is removed.
+Publication diagnostics use configured zerolog at debug level and omit arbitrary
+event values. Regression assertions fail on the saved M0 source and pass with
+M1; real Redis counters verify zero GETs with identical SET/PUBLISH/action counts.
+The [M1 report](baselines/rex-m1/README.md) records the source patch/fingerprint,
+passing normal/race checks, and repeated before/after results. Add the merged
+revision when this working-tree change is integrated. This change adds no
+transaction, retry, durability, or exactly-once guarantee.
 
 ### REX-012: memory and routing boundaries
 
@@ -253,6 +275,14 @@ may reduce round trips, but it must not be presented as a delivery guarantee.
 - Dependabot PRs #8 and #9 were refreshed, verified, and intentionally merged.
 - Rebuild or pin the local `govulncheck` tool with Go 1.26 so local scans match
   CI.
+
+**Baseline evidence (2026-09-07):** REX-M0 rebuilt a temporary, pinned
+`govulncheck` v1.1.4 with Go 1.26.6 and found no reachable vulnerabilities for
+darwin/arm64 or linux/amd64. The two non-reachable dependency advisories and
+the passing hosted CodeQL run for base commit `dddcdbac40af` are recorded in
+the [M0 report](baselines/rex-m0/README.md). The previously installed scanner
+was not replaced, and hosted CodeQL has not checked the pending working-tree
+changes. REX-013 therefore remains partially resolved.
 
 ## Semantics safety net (after P0)
 
@@ -287,7 +317,8 @@ Do not start these before P0 and the P1 contract choices are complete:
    Completed and verified 2026-08-30.
 3. ~~REX-008 as an isolated bytecode-validation PR.~~ Completed and verified
    2026-08-30. ~~REX-014 as a compiler-truthfulness follow-up.~~ Completed and
-   verified 2026-08-30. REX-007 is the next language-contract decision.
+   verified 2026-08-30. ~~REX-007 as the next language-contract decision.~~
+   Completed and verified 2026-08-30.
 4. Decide script and delivery semantics; complete REX-006, REX-010, and
    REX-011 according to that decision.
 5. Address REX-009, REX-012, and REX-013, then add the semantics safety net.

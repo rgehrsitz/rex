@@ -1,0 +1,6 @@
+b32a62ae73a8b263a040d2bb2762b5e5fe2c9b4d5eef40a32d7de71c6917bb40  rex_v0.0.0-m0_darwin_amd64.tar.gz
+9e53e5450eb0011aac84d2a0efca2f07d0d8b4a163622ef59223c158a0873eac  rex_v0.0.0-m0_darwin_arm64.tar.gz
+995f2ea8e6be8205b6ec221c5ac5c908f4140738c9637b851ccb3b96dd7740cf  rex_v0.0.0-m0_linux_amd64.tar.gz
+abaa0fbc37becfe4e6f5c4a6c6f2c51810d099a70487d20396c1db99cb11dcb9  rex_v0.0.0-m0_linux_arm64.tar.gz
+655b82a8ea09e8751b29762937ec63f8a2f619da99642f63cb06d8a6445253ed  rex_v0.0.0-m0_windows_amd64.zip
+d77bf5cb737f042c6b19829e6dda30ecb87dd84720f31ec991181596df4a0a54  rex_v0.0.0-m0_windows_arm64.zip

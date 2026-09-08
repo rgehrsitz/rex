@@ -34,6 +34,7 @@ type Config struct {
 	LogLevel                string
 	LogDestination          string
 	LogTimeFormat           string
+	TraceConditions         bool
 	RedisAddress            string
 	RedisPassword           string
 	RedisDB                 int
@@ -107,6 +108,7 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("logging.level", "info")
 	viper.SetDefault("logging.output", "console")
 	viper.SetDefault("logging.time_format", "unixnano")
+	viper.SetDefault("logging.trace_conditions", true)
 	viper.SetDefault("redis.address", "localhost:6379")
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
@@ -138,6 +140,7 @@ func parseConfig(args []string) (*Config, error) {
 		LogLevel:                viper.GetString("logging.level"),
 		LogDestination:          viper.GetString("logging.output"),
 		LogTimeFormat:           viper.GetString("logging.time_format"),
+		TraceConditions:         viper.GetBool("logging.trace_conditions"),
 		RedisAddress:            viper.GetString("redis.address"),
 		RedisPassword:           viper.GetString("redis.password"),
 		RedisDB:                 viper.GetInt("redis.database"),
@@ -160,6 +163,7 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
 	engine.SetScriptsEnabled(config.ScriptsEnabled)
+	engine.SetConditionTracing(config.TraceConditions)
 	if config.MaxActionsPerEvaluation <= 0 {
 		_ = store.Close()
 		return nil, fmt.Errorf("engine.max_actions_per_evaluation must be greater than zero")

@@ -1,0 +1,24 @@
+File: profile.test
+Type: cpu
+Time: 2026-09-07 22:57:10 EDT
+Duration: 3.82s, Total samples = 3.67s (95.99%)
+Active filters:
+   focus=rgehrsitz/rex/pkg/runtime
+Showing nodes accounting for 0.67s, 18.26% of 3.67s total
+Showing top 15 nodes out of 81
+      flat  flat%   sum%        cum   cum%
+     0.12s  3.27%  3.27%      0.83s 22.62%  rgehrsitz/rex/pkg/runtime.(*Engine).evaluateRuleContext
+     0.10s  2.72%  5.99%      0.23s  6.27%  github.com/rs/zerolog.(*Logger).newEvent
+     0.08s  2.18%  8.17%      0.12s  3.27%  github.com/rs/zerolog.(*Logger).should
+     0.05s  1.36%  9.54%      0.05s  1.36%  github.com/rs/zerolog.(*Event).Uint8
+     0.04s  1.09% 10.63%      0.04s  1.09%  github.com/rs/zerolog.(*Event).Int
+     0.04s  1.09% 11.72%      0.04s  1.09%  github.com/rs/zerolog.(*Logger).disabled (inline)
+     0.04s  1.09% 12.81%      0.04s  1.09%  rgehrsitz/rex/pkg/runtime.traceLogger
+     0.03s  0.82% 13.62%      0.03s  0.82%  aeshashbody
+     0.03s  0.82% 14.44%      0.03s  0.82%  github.com/rs/zerolog.(*Event).Str
+     0.03s  0.82% 15.26%      0.94s 25.61%  rgehrsitz/rex/pkg/runtime.(*Engine).ProcessFactUpdateContext
+     0.03s  0.82% 16.08%      0.06s  1.63%  runtime.mapaccess1_faststr
+     0.02s  0.54% 16.62%      0.02s  0.54%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
+     0.02s  0.54% 17.17%      0.03s  0.82%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+     0.02s  0.54% 17.71%      0.02s  0.54%  internal/runtime/maps.(*groupReference).key (inline)
+     0.02s  0.54% 18.26%      0.04s  1.09%  runtime.findObject

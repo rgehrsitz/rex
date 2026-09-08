@@ -1,0 +1,114 @@
+[
+  {
+    "check": "format",
+    "command": [
+      "gofmt",
+      "-l",
+      "."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.023
+  },
+  {
+    "check": "tidy",
+    "command": [
+      "go",
+      "mod",
+      "tidy",
+      "-diff"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.065
+  },
+  {
+    "check": "vet",
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.299
+  },
+  {
+    "check": "test",
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 4.719
+  },
+  {
+    "check": "race",
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 12.74
+  },
+  {
+    "check": "build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.929
+  },
+  {
+    "check": "vulnerability",
+    "command": [
+      "/private/tmp/rex-m0/govulncheck",
+      "-show",
+      "verbose",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.66
+  },
+  {
+    "check": "archives",
+    "command": [
+      "bash",
+      "scripts/release/build-archives.sh"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 15.918
+  },
+  {
+    "check": "harness-build",
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-rbp1n6gf/rex_baseline",
+      "./tools/rex_baseline"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.439
+  },
+  {
+    "check": "memory",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-rbp1n6gf/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+920e6d2895128602badec1a8be184f54d3c8bb4bd1641d353bd31fae7d7196a1",
+      "-runs",
+      "5",
+      "-warmup",
+      "100",
+      "-events",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 7.298
+  }
+]

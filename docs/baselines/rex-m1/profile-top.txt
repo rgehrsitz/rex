@@ -1,0 +1,28 @@
+File: profile.test
+Type: cpu
+Time: 2026-09-07 22:57:10 EDT
+Duration: 3.82s, Total samples = 3.67s (95.99%)
+Showing nodes accounting for 3.31s, 90.19% of 3.67s total
+Dropped 38 nodes (cum <= 0.02s)
+Showing top 20 nodes out of 104
+      flat  flat%   sum%        cum   cum%
+     1.46s 39.78% 39.78%      1.46s 39.78%  runtime.kevent
+     0.38s 10.35% 50.14%      0.38s 10.35%  runtime.usleep
+     0.37s 10.08% 60.22%      0.37s 10.08%  runtime.pthread_kill
+     0.34s  9.26% 69.48%      0.34s  9.26%  runtime.madvise
+     0.12s  3.27% 72.75%      0.83s 22.62%  rgehrsitz/rex/pkg/runtime.(*Engine).evaluateRuleContext
+     0.10s  2.72% 75.48%      0.23s  6.27%  github.com/rs/zerolog.(*Logger).newEvent
+     0.08s  2.18% 77.66%      0.12s  3.27%  github.com/rs/zerolog.(*Logger).should
+     0.06s  1.63% 79.29%      0.06s  1.63%  runtime.pthread_cond_wait
+     0.05s  1.36% 80.65%      0.05s  1.36%  github.com/rs/zerolog.(*Event).Uint8
+     0.04s  1.09% 81.74%      0.04s  1.09%  github.com/rs/zerolog.(*Event).Int
+     0.04s  1.09% 82.83%      0.04s  1.09%  github.com/rs/zerolog.(*Logger).disabled (inline)
+     0.04s  1.09% 83.92%      0.04s  1.09%  rgehrsitz/rex/pkg/runtime.traceLogger
+     0.04s  1.09% 85.01%      0.04s  1.09%  runtime.pthread_cond_timedwait_relative_np
+     0.03s  0.82% 85.83%      0.03s  0.82%  aeshashbody
+     0.03s  0.82% 86.65%      0.03s  0.82%  github.com/rs/zerolog.(*Event).Str
+     0.03s  0.82% 87.47%      0.94s 25.61%  rgehrsitz/rex/pkg/runtime.(*Engine).ProcessFactUpdateContext
+     0.03s  0.82% 88.28%      0.06s  1.63%  runtime.mapaccess1_faststr
+     0.03s  0.82% 89.10%      0.03s  0.82%  runtime.tryDeferToSpanScan
+     0.02s  0.54% 89.65%      0.02s  0.54%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
+     0.02s  0.54% 90.19%      0.03s  0.82%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
