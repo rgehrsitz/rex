@@ -184,6 +184,24 @@ func TestSetupDependencies(t *testing.T) {
 	assert.NotNil(t, deps.Engine)
 }
 
+func TestSetupDependenciesRejectsScriptsEnabled(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	t.Cleanup(mr.Close)
+
+	config := &Config{
+		BytecodeFile:            "test.bytecode",
+		RedisAddress:            mr.Addr(),
+		ScriptsEnabled:          true,
+		MaxActionsPerEvaluation: 32,
+		MaxEventHops:            16,
+	}
+
+	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{})
+	assert.Nil(t, deps)
+	assert.ErrorContains(t, err, "scripts are no longer supported")
+}
+
 func TestRunMainLoop(t *testing.T) {
 	// Reset the flag set before each test run
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)

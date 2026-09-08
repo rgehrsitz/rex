@@ -87,7 +87,7 @@ use lint IDs and structured result fields for machine decisions.
 
 | ID | Meaning | Severity |
 | --- | --- | --- |
-| REX-L001 | Invalid source or unavailable v4 capability | Error |
+| REX-L001 | Invalid source or removed capability | Error |
 | REX-L002 | Different writers to one target; simultaneous matches could conflict | Warning |
 | REX-L003 | A sole EQ condition is reproduced by its self-write, proving recurrence if reached without conflict | Warning |
 | REX-L004 | Undefined script reference | Error |
@@ -96,7 +96,8 @@ use lint IDs and structured result fields for machine decisions.
 Lint is conservative: it does not prove arbitrary condition overlap or discover
 all multi-rule cycles. Budgets remain the runtime safeguard. Arbitrary fact keys
 are valid in v4, so lint does not require the legacy `group:key` convention.
-Scripts remain unavailable even when their references are defined.
+Scripts are removed even when their references are defined. REX-L004 remains a
+specific migration diagnostic for an undefined brace-form reference.
 
 Exit status is 0 for successful commands and lint warnings, 1 for global input,
 unsupported-contract or I/O failures, and 2 for per-scenario validation errors,

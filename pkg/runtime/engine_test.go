@@ -277,26 +277,32 @@ func TestNewEngineFromFileDoesNotConsumeEvents(t *testing.T) {
 	}
 }
 
-func TestNewEngineFromFileAcceptsUndefinedActionScript(t *testing.T) {
-	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
-		Name: "undefined_action_script",
-		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
-			Fact:     "temperature",
-			Operator: "GT",
-			Value:    30.0,
-		}}},
-		Actions: []compiler.Action{{
-			Type:   "updateStore",
-			Target: "status",
-			Value:  "{missing_script}",
-		}},
-	}}}
-	filename := t.TempDir() + "/undefined-script.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
+func TestNewEngineFromFileRejectsRetiredScriptOpcodes(t *testing.T) {
+	for _, opcode := range []compiler.Opcode{compiler.SCRIPT_DEF, compiler.SCRIPT_CALL} {
+		t.Run(opcode.String(), func(t *testing.T) {
+			artifact := mustGenerateBytecode(t, &compiler.Ruleset{Rules: []compiler.Rule{{Name: "rule"}}})
+			end := bytes.LastIndexByte(artifact.Instructions, byte(compiler.RULE_END))
+			require.GreaterOrEqual(t, end, 0)
+			artifact.Instructions = append(artifact.Instructions, 0)
+			copy(artifact.Instructions[end+1:], artifact.Instructions[end:])
+			artifact.Instructions[end] = byte(opcode)
 
-	engine, err := NewEngineFromFile(filename, &contextCaptureStore{}, 0)
-	require.NoError(t, err)
-	require.NotNil(t, engine)
+			filename := t.TempDir() + "/legacy-script.bytecode"
+			require.NoError(t, compiler.WriteBytecodeToFile(filename, artifact))
+			factStore := &contextCaptureStore{}
+			engine, err := NewEngineFromFile(filename, factStore, 0)
+			assert.Nil(t, engine)
+			assert.ErrorContains(t, err, "scripts are no longer supported")
+			assert.ErrorContains(t, err, opcode.String())
+			assert.Zero(t, factStore.publishCount)
+		})
+	}
+}
+
+func TestSetScriptsEnabledIsMigrationTripwire(t *testing.T) {
+	engine := &Engine{}
+	require.NoError(t, engine.SetScriptsEnabled(false))
+	assert.ErrorContains(t, engine.SetScriptsEnabled(true), "scripts are no longer supported")
 }
 
 func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
@@ -719,32 +725,6 @@ func TestExecutionObserverReceivesRuleAndActionOutcomes(t *testing.T) {
 	assert.Equal(t, []string{"updateStore"}, observer.actionFailures)
 }
 
-func TestScriptActionExecutesOnce(t *testing.T) {
-	factStore := &contextCaptureStore{}
-	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
-		Name: "script_rule",
-		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
-			Fact:     "temperature",
-			Operator: "GT",
-			Value:    30.0,
-		}}},
-		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "{calculate_status}"}},
-		Scripts: map[string]compiler.Script{
-			"calculate_status": {Params: []string{"temperature"}, Body: "return 'hot';"},
-		},
-	}}}
-
-	filename := t.TempDir() + "/rules.bytecode"
-	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
-	engine, err := NewEngineFromFile(filename, factStore, 0)
-	require.NoError(t, err)
-	engine.SetScriptsEnabled(true)
-
-	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
-	assert.Equal(t, 1, factStore.publishCount)
-	assert.Equal(t, "hot", engine.facts["status"])
-}
-
 func TestProcessFactUpdateContextEnforcesActionLimit(t *testing.T) {
 	factStore := &contextCaptureStore{}
 	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{{
@@ -1111,207 +1091,4 @@ func createTestEngine(t *testing.T, redisStore *store.RedisStore, jsonRuleset st
 	}
 
 	return engine
-}
-
-func TestNestedScriptCalls(t *testing.T) {
-	s, redisStore := setupMiniredis(t)
-	defer s.Close()
-
-	ruleset := &compiler.Ruleset{
-		Rules: []compiler.Rule{
-			{
-				Name: "nested_script_rule",
-				Conditions: compiler.ConditionGroup{
-					All: []*compiler.ConditionOrGroup{
-						{
-							Fact:     "temperature",
-							Operator: "GT",
-							Value:    30.0,
-						},
-					},
-				},
-				Actions: []compiler.Action{
-					{
-						Type:   "updateStore",
-						Target: "heat_index",
-						Value:  "{calculate_heat_index}",
-					},
-				},
-				Scripts: map[string]compiler.Script{
-					"calculate_heat_index": {
-						Params: []string{"temperature", "humidity"},
-						Body:   "return calculate_adjusted_index(temperature * 1.8 + 32, humidity);",
-					},
-					"calculate_adjusted_index": {
-						Params: []string{"heat_index", "humidity"},
-						Body:   "return heat_index + (humidity / 100) * 10;",
-					},
-				},
-			},
-		},
-	}
-
-	bytecodeFile := mustGenerateBytecode(t, ruleset)
-	tempFile := "temp_nested_bytecode.bin"
-	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
-	assert.NoError(t, err)
-	defer os.Remove(tempFile)
-
-	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
-	assert.NoError(t, err)
-	engine.SetScriptsEnabled(true)
-
-	// Register the nested script as a global function
-	err = engine.ScriptEngine.RegisterGlobalFunction("calculate_adjusted_index", compiler.Script{
-		Params: []string{"heat_index", "humidity"},
-		Body:   "return heat_index + (humidity / 100) * 10;",
-	})
-	assert.NoError(t, err)
-
-	// Then set the main script
-	err = engine.ScriptEngine.SetScript("calculate_heat_index", compiler.Script{
-		Params: []string{"temperature", "humidity"},
-		Body:   "return calculate_adjusted_index(temperature * 1.8 + 32, humidity);",
-	})
-	assert.NoError(t, err)
-
-	err = redisStore.SetFact("temperature", 35.0)
-	assert.NoError(t, err)
-	err = redisStore.SetFact("humidity", 60.0)
-	assert.NoError(t, err)
-	err = redisStore.SetFact("heat_index", 0.0)
-	assert.NoError(t, err)
-
-	engine.ProcessFactUpdate("temperature", 35.0)
-
-	heatIndex, exists := engine.facts["heat_index"]
-	assert.True(t, exists, "Heat index calculation result not found in engine facts")
-	if exists {
-		t.Logf("Calculated heat index: %v", heatIndex)
-		assert.InDelta(t, 101.0, heatIndex.(float64), 0.1)
-	}
-}
-
-func TestScriptErrorHandling(t *testing.T) {
-	s, redisStore := setupMiniredis(t)
-	defer s.Close()
-
-	ruleset := &compiler.Ruleset{
-		Rules: []compiler.Rule{
-			{
-				Name: "error_script_rule",
-				Conditions: compiler.ConditionGroup{
-					All: []*compiler.ConditionOrGroup{
-						{
-							Fact:     "temperature",
-							Operator: "GT",
-							Value:    30.0,
-						},
-					},
-				},
-				Actions: []compiler.Action{
-					{
-						Type:   "updateStore",
-						Target: "status",
-						Value:  "{error_script}",
-					},
-				},
-				Scripts: map[string]compiler.Script{
-					"error_script": {
-						Params: []string{"temperature"},
-						Body:   "return temperature.unknownMethod();",
-					},
-				},
-			},
-		},
-	}
-
-	bytecodeFile := mustGenerateBytecode(t, ruleset)
-	tempFile := "temp_error_bytecode.bin"
-	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
-	assert.NoError(t, err)
-	defer os.Remove(tempFile)
-
-	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
-	assert.NoError(t, err)
-	engine.SetScriptsEnabled(true)
-
-	err = engine.ScriptEngine.SetScript("error_script", compiler.Script{
-		Params: []string{"temperature"},
-		Body:   "return temperature.unknownMethod();",
-	})
-	assert.NoError(t, err)
-
-	err = redisStore.SetFact("temperature", 35.0)
-	assert.NoError(t, err)
-
-	engine.ProcessFactUpdate("temperature", 35.0)
-
-	time.Sleep(100 * time.Millisecond)
-
-	status, exists := engine.facts["status"]
-	assert.False(t, exists, "Error script execution should not result in a status fact")
-	assert.Nil(t, status)
-}
-
-func TestEdgeCases(t *testing.T) {
-	s, redisStore := setupMiniredis(t)
-	defer s.Close()
-
-	ruleset := &compiler.Ruleset{
-		Rules: []compiler.Rule{
-			{
-				Name: "edge_case_script_rule",
-				Conditions: compiler.ConditionGroup{
-					All: []*compiler.ConditionOrGroup{
-						{
-							Fact:     "temperature",
-							Operator: "GT",
-							Value:    30.0,
-						},
-					},
-				},
-				Actions: []compiler.Action{
-					{
-						Type:   "updateStore",
-						Target: "status",
-						Value:  "{edge_case_script}",
-					},
-				},
-				Scripts: map[string]compiler.Script{
-					"edge_case_script": {
-						Params: []string{"temperature"},
-						Body:   "return temperature * 2 / 0;", // Division by zero
-					},
-				},
-			},
-		},
-	}
-
-	bytecodeFile := mustGenerateBytecode(t, ruleset)
-	tempFile := "temp_edge_case_bytecode.bin"
-	err := compiler.WriteBytecodeToFile(tempFile, bytecodeFile)
-	assert.NoError(t, err)
-	defer os.Remove(tempFile)
-
-	engine, err := NewEngineFromFile(tempFile, redisStore, 0)
-	assert.NoError(t, err)
-	engine.SetScriptsEnabled(true)
-
-	err = engine.ScriptEngine.SetScript("edge_case_script", compiler.Script{
-		Params: []string{"temperature"},
-		Body:   "return temperature * 2 / 0;", // Division by zero
-	})
-	assert.NoError(t, err)
-
-	err = redisStore.SetFact("temperature", 35.0)
-	assert.NoError(t, err)
-
-	engine.ProcessFactUpdate("temperature", 35.0)
-
-	time.Sleep(100 * time.Millisecond)
-
-	status, exists := engine.facts["status"]
-	assert.False(t, exists, "Edge case script execution should not result in a status fact")
-	assert.Nil(t, status)
 }

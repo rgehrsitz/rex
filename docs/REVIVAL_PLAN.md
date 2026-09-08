@@ -66,15 +66,11 @@ the future-work ordering below, including the longer-term script direction.
 
 **Completion criteria:** corrupt or incompatible bytecode returns a clear error, never a panic; identical input produces identical output.
 
-## Script decision gate
+## Script decision gate — resolved
 
-The present Otto timeout only returns from the caller; it does not stop an infinite JavaScript execution. The VM is also shared mutable state. Before expanding scripts, choose one path:
-
-1. **Trusted scripts only (selected for the next release):** scripts are disabled by default and may be enabled with `engine.scripts_enabled` only for controlled deployments with fully trusted rulesets.
-2. **Isolated execution:** run scripts in a separate constrained process with a hard timeout and memory/CPU limits. This is necessary for untrusted rule authors.
-3. **Remove scripts:** retain a smaller, safer declarative rules engine.
-
-Do not present the current in-process execution as a security boundary.
+M6 selected removal. Source, embedded compiler inputs, legacy artifacts, and
+daemon configuration now reject script capabilities before execution. See the
+[decision record](decisions/REX-M6.md) and [migration guide](M6_SCRIPT_REMOVAL.md).
 
 ## Later: developer and operator experience
 

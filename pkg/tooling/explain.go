@@ -76,29 +76,33 @@ func Lint(source []byte, channels []string) LintReport {
 	add := func(id, severity, rule, message string) {
 		out.Diagnostics = append(out.Diagnostics, Diagnostic{id, severity, rule, message})
 	}
-	// Legacy parser recognizes script definitions, enabling a useful diagnostic
-	// before the v4 capability validator rejects them.
-	parsed, err := compiler.Parse(source)
-	if err != nil {
-		add("REX-L001", "error", "", err.Error())
-		return out
-	}
+	// Inspect the decoded shape first so undefined legacy references retain their
+	// stable, specific diagnostic after the compiler's script capability removal.
+	var inspected compiler.Ruleset
+	// Parse below remains authoritative. A failed advisory decode simply yields
+	// no specialized legacy-reference diagnostics.
+	_ = json.Unmarshal(source, &inspected)
 	undefinedScript := false
-	for _, r := range parsed.Rules {
+	for _, r := range inspected.Rules {
 		for _, a := range r.Actions {
 			if v, ok := a.Value.(string); ok && strings.HasPrefix(v, "{") && strings.HasSuffix(v, "}") {
 				name := strings.TrimSuffix(strings.TrimPrefix(v, "{"), "}")
 				if _, ok := r.Scripts[name]; !ok {
 					undefinedScript = true
-					add("REX-L004", "error", r.Name, "undefined script reference: "+name)
+					add("REX-L004", "error", r.Name, "undefined script reference: "+name+"; scripts were removed in M6, so migrate the calculation to producer facts or declarative rules")
 				}
 			}
 		}
 	}
-	if _, err := compiler.ParseBatch(source); err != nil {
-		if undefinedScript && strings.Contains(err.Error(), "script calls unavailable") {
+	parsed, err := compiler.Parse(source)
+	if err != nil {
+		if undefinedScript && strings.Contains(err.Error(), "scripts are no longer supported") {
 			return out
 		}
+		add("REX-L001", "error", "", err.Error())
+		return out
+	}
+	if _, err := compiler.ParseBatch(source); err != nil {
 		add("REX-L001", "error", "", err.Error())
 		return out
 	}

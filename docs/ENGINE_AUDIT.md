@@ -37,7 +37,7 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-003 | A group containing both `all` and `any` silently ignores `any` | Fixed and verified 2026-08-30 | P0 |
 | REX-004 | `sendMessage` compiles but fails at runtime and aborts the event | Fixed and verified 2026-08-30 | P0 |
 | REX-005 | Duplicate rule names compile but bytecode load rejects them | Fixed and verified 2026-08-30 | P0 |
-| REX-006 | Script timeout does not stop JavaScript execution | Confirmed by code inspection | P1, if scripts enabled |
+| REX-006 | Script timeout does not stop JavaScript execution | Resolved by removing scripting in M6 | Complete |
 | REX-007 | Priority has no execution-order effect; documentation disagrees | Fixed and verified 2026-08-30 | P1 |
 | REX-008 | Bytecode jump targets are not semantically validated | Fixed and verified 2026-08-30 | P1 |
 | REX-009 | Actions perform an unnecessary post-write Redis `GET` | Fixed and verified in local M1 snapshot, 2026-09-07; integration pending | P2 performance |
@@ -142,17 +142,19 @@ The regression test verifies duplicate inputs never produce a parsed ruleset.
 
 ## P1 — settle the runtime contract
 
-### REX-006: scripts are trusted-only, not time-limited or isolated
+### REX-006: scripts were not time-limited or isolated — resolved
 
 `SafeVM.RunScript` creates an Otto interrupt channel but never sends an
 interrupt. Its timeout returns to the caller while an infinite script continues
 running. The VM and script map are shared mutable state, and the timed-out
 goroutine can remain blocked on an unbuffered result channel.
 
-**Required work:** retain the existing default of scripts disabled. Before
-scripts can be enabled for anything beyond controlled trusted input, choose
-one: isolated process execution with hard CPU/memory/time limits, or remove
-scripting. Do not describe the current implementation as a sandbox.
+**Resolution (REX-M6):** general-purpose scripting was removed. Source and
+programmatic compilers reject definitions and calls, legacy v3 artifacts with
+script opcodes fail validation before engine creation, and enabling scripts in
+daemon configuration fails startup. Otto and its transitive dependencies were
+removed. See [the decision](decisions/REX-M6.md) and
+[migration guide](M6_SCRIPT_REMOVAL.md).
 
 ### REX-007: priority is a nonfunctional ordering feature
 
@@ -317,7 +319,7 @@ Do not start these before P0 and the P1 contract choices are complete:
 - Redis Streams, NATS, or another transport adapter;
 - concurrent event evaluation;
 - temporal rules, expressions, schemas/catalogs, or a new YAML dialect;
-- enabling scripts beyond trusted controlled deployments.
+- reintroducing executable extension code without a separate reviewed contract.
 
 ## Suggested execution order
 
@@ -329,8 +331,8 @@ Do not start these before P0 and the P1 contract choices are complete:
    2026-08-30. ~~REX-014 as a compiler-truthfulness follow-up.~~ Completed and
    verified 2026-08-30. ~~REX-007 as the next language-contract decision.~~
    Completed and verified 2026-08-30.
-4. Decide script and delivery semantics; complete REX-006, REX-010, and
-   REX-011 according to that decision.
+4. ~~Decide script semantics and complete REX-006.~~ Removed in M6. Complete
+   REX-010 and REX-011 according to the delivery decision.
 5. Address REX-009, REX-012, and REX-013, then add the semantics safety net.
 
 Every implementation PR must add a regression test that fails on the audited

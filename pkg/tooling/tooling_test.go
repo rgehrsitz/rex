@@ -192,6 +192,7 @@ func TestLintStableDiagnostics(t *testing.T) {
 	r = Lint([]byte(missing), nil)
 	require.Len(t, r.Diagnostics, 1)
 	require.Equal(t, "REX-L004", r.Diagnostics[0].ID)
+	require.Contains(t, r.Diagnostics[0].Message, "migrate the calculation to producer facts or declarative rules")
 	artifact, err := compiler.CompileBatch(source)
 	require.NoError(t, err)
 	explanation, err := Explain(artifact)

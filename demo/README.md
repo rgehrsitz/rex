@@ -22,4 +22,5 @@ Clean up the isolated containers and network with:
 docker compose -f demo/compose.yaml down
 ```
 
-The demo keeps scripts disabled, matching the safe default for `rexd`.
+The demo keeps the retired script flag false. Setting it true fails startup; see
+the [M6 migration guide](../docs/M6_SCRIPT_REMOVAL.md).

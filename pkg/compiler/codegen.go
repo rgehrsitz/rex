@@ -82,6 +82,9 @@ func GenerateBytecode(ruleset *Ruleset) (BytecodeFile, error) {
 }
 
 func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFile, error) {
+	if err := validateNoScriptCapabilities(ruleset); err != nil {
+		return BytecodeFile{}, err
+	}
 	var bytecode []byte
 
 	for _, rule := range ruleset.Rules {
@@ -102,27 +105,6 @@ func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFi
 		priorityBytes := make([]byte, 4)
 		binary.LittleEndian.PutUint32(priorityBytes, uint32(rule.Priority))
 		ruleBytecode = append(ruleBytecode, priorityBytes...)
-
-		// Add script definitions in name order so a map-backed scripts field
-		// produces reproducible bytecode.
-		scriptNames := make([]string, 0, len(rule.Scripts))
-		for scriptName := range rule.Scripts {
-			scriptNames = append(scriptNames, scriptName)
-		}
-		sort.Strings(scriptNames)
-		for _, scriptName := range scriptNames {
-			script := rule.Scripts[scriptName]
-			ruleBytecode = append(ruleBytecode, byte(SCRIPT_DEF))
-			ruleBytecode = append(ruleBytecode, byte(len(scriptName)))
-			ruleBytecode = append(ruleBytecode, []byte(scriptName)...)
-			ruleBytecode = append(ruleBytecode, byte(len(script.Params)))
-			for _, param := range script.Params {
-				ruleBytecode = append(ruleBytecode, byte(len(param)))
-				ruleBytecode = append(ruleBytecode, []byte(param)...)
-			}
-			ruleBytecode = append(ruleBytecode, byte(len(script.Body)))
-			ruleBytecode = append(ruleBytecode, []byte(script.Body)...)
-		}
 
 		// Convert the conditions to a Node structure
 		conditionNode := convertConditionGroupToNode(rule.Conditions)
@@ -227,22 +209,9 @@ func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFi
 						}
 					}
 
-					// Check if the fact is actually a script call
-					if script, ok := rule.Scripts[fact]; ok {
-						ruleBytecode = append(ruleBytecode, byte(SCRIPT_CALL))
-						ruleBytecode = append(ruleBytecode, byte(len(fact)))
-						ruleBytecode = append(ruleBytecode, []byte(fact)...)
-						ruleBytecode = append(ruleBytecode, byte(len(script.Params)))
-						for _, param := range script.Params {
-							ruleBytecode = append(ruleBytecode, byte(len(param)))
-							ruleBytecode = append(ruleBytecode, []byte(param)...)
-						}
-					} else {
-						// Append the separated instructions
-						ruleBytecode = append(ruleBytecode, byte(factOpcode))
-						ruleBytecode = append(ruleBytecode, byte(len(fact)))
-						ruleBytecode = append(ruleBytecode, []byte(fact)...)
-					}
+					ruleBytecode = append(ruleBytecode, byte(factOpcode))
+					ruleBytecode = append(ruleBytecode, byte(len(fact)))
+					ruleBytecode = append(ruleBytecode, []byte(fact)...)
 
 					ruleBytecode = append(ruleBytecode, byte(valueOpcode))
 					if valueOpcode == LOAD_CONST_STRING {
@@ -303,31 +272,9 @@ func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFi
 				binary.LittleEndian.PutUint64(floatBytes, math.Float64bits(v))
 				actionBytecode = append(actionBytecode, floatBytes...)
 			case string:
-				if strings.HasPrefix(v, "{") && strings.HasSuffix(v, "}") {
-					// This is a script call
-					scriptName := strings.Trim(v, "{}")
-					actionBytecode = append(actionBytecode, byte(SCRIPT_CALL))
-					actionBytecode = append(actionBytecode, byte(len(scriptName)))
-					actionBytecode = append(actionBytecode, []byte(scriptName)...)
-
-					// SCRIPT_CALL always includes a parameter count. Undefined scripts
-					// therefore encode zero parameters so the instruction stream stays
-					// aligned for the runtime to report the missing script at execution.
-					if script, ok := rule.Scripts[scriptName]; ok {
-						actionBytecode = append(actionBytecode, byte(len(script.Params)))
-						for _, param := range script.Params {
-							actionBytecode = append(actionBytecode, byte(len(param)))
-							actionBytecode = append(actionBytecode, []byte(param)...)
-						}
-					} else {
-						actionBytecode = append(actionBytecode, 0)
-					}
-				} else {
-					// This is a regular string value
-					actionBytecode = append(actionBytecode, byte(ACTION_VALUE_STRING))
-					actionBytecode = append(actionBytecode, byte(len(v)))
-					actionBytecode = append(actionBytecode, []byte(v)...)
-				}
+				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_STRING))
+				actionBytecode = append(actionBytecode, byte(len(v)))
+				actionBytecode = append(actionBytecode, []byte(v)...)
 			case bool:
 				actionBytecode = append(actionBytecode, byte(ACTION_VALUE_BOOL))
 				if v {
@@ -602,35 +549,6 @@ func collectFactsFromBytecode(bytecode []byte) []string {
 			facts[factName] = struct{}{}
 			logging.Logger.Debug().Str("fact", factName).Msg("Collected fact")
 			i += 2 + factLength
-		} else if opcode == SCRIPT_DEF {
-			// Process SCRIPT_DEF to collect script parameter facts
-			if i+1 >= len(bytecode) {
-				break
-			}
-			scriptNameLength := int(bytecode[i+1])
-			i += 2 + scriptNameLength
-
-			if i >= len(bytecode) {
-				break
-			}
-			paramsCount := int(bytecode[i])
-			i++
-
-			for j := 0; j < paramsCount; j++ {
-				if i+1 >= len(bytecode) {
-					break
-				}
-				paramLength := int(bytecode[i])
-				i++
-
-				if i+paramLength > len(bytecode) {
-					break
-				}
-				paramName := string(bytecode[i : i+paramLength])
-				facts[paramName] = struct{}{}
-				logging.Logger.Debug().Str("scriptParam", paramName).Msg("Collected script parameter as fact")
-				i += paramLength
-			}
 		} else {
 			if opcode.HasOperands() {
 				operandLength := determineOperandLength(opcode, bytecode[i+1:])
@@ -713,4 +631,21 @@ func checkedBytecodeSize(ruleSize, actionSize int) (int, error) {
 		return 0, fmt.Errorf("combined rule and action bytecode exceeds allocation limit")
 	}
 	return ruleSize + actionSize, nil
+}
+
+func validateNoScriptCapabilities(ruleset *Ruleset) error {
+	if ruleset == nil {
+		return fmt.Errorf("ruleset is required")
+	}
+	for _, rule := range ruleset.Rules {
+		if rule.Scripts != nil {
+			return fmt.Errorf("scripts are no longer supported: rule %q declares scripts", rule.Name)
+		}
+		for i, action := range rule.Actions {
+			if value, ok := action.Value.(string); ok && strings.HasPrefix(value, "{") && strings.HasSuffix(value, "}") {
+				return fmt.Errorf("scripts are no longer supported: rule %q action %d calls %q", rule.Name, i, value)
+			}
+		}
+	}
+	return nil
 }

@@ -174,6 +174,10 @@ func parseConfig(args []string) (*Config, error) {
 }
 
 func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory) (*RexDependencies, error) {
+	// Reject the retired capability before allocating a store or engine.
+	if config.ScriptsEnabled {
+		return nil, fmt.Errorf("scripts are no longer supported; migrate to declarative v4 rules")
+	}
 	store := storeFactory.NewStore(config.RedisAddress, config.RedisPassword, config.RedisDB)
 
 	engine, err := engineFactory.NewEngine(config.BytecodeFile, store, config.PriorityThreshold)
@@ -186,16 +190,15 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 		return nil, fmt.Errorf("v3 requires engine.allow_legacy_v3; recompile for v4")
 	}
 	if engine.BytecodeVersion() == 4 {
-		if config.ScriptsEnabled {
-			_ = store.Close()
-			return nil, fmt.Errorf("v4 scripts unavailable until M6")
-		}
 		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
 			_ = store.Close()
 			return nil, err
 		}
 	}
-	engine.SetScriptsEnabled(config.ScriptsEnabled)
+	if err := engine.SetScriptsEnabled(config.ScriptsEnabled); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
 	engine.SetConditionTracing(config.TraceConditions)
 	if config.MaxActionsPerEvaluation <= 0 {
 		_ = store.Close()
