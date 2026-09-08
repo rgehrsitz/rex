@@ -356,7 +356,11 @@ func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFi
 
 		lastInstruction := ruleBytecode[lastInstructionStart:]
 		logging.Logger.Debug().Msgf("Last instruction: %v", lastInstruction)
-		tempBytecode := make([]byte, 0, len(ruleBytecode)+len(actionBytecode))
+		combinedSize, err := checkedBytecodeSize(len(ruleBytecode), len(actionBytecode))
+		if err != nil {
+			return BytecodeFile{}, fmt.Errorf("generate rule %q: %w", rule.Name, err)
+		}
+		tempBytecode := make([]byte, 0, combinedSize)
 		tempBytecode = append(tempBytecode, ruleBytecode[:lastInstructionStart]...)
 		logging.Logger.Debug().Msgf("Temp bytecode: %v", tempBytecode)
 		tempBytecode = append(tempBytecode, actionBytecode...)
@@ -377,7 +381,6 @@ func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFi
 
 		ruleBytecode = append(ruleBytecode, byte(RULE_END))
 
-		var err error
 		ruleBytecode, err = resolveLabels(ruleBytecode, jumpReferences, labelOffsets)
 		if err != nil {
 			return BytecodeFile{}, fmt.Errorf("resolve labels for rule %q: %w", rule.Name, err)
@@ -701,4 +704,13 @@ func resolveLabelOffsets(bytecode []byte, jumps []jumpReference, labels map[stri
 
 	logging.Logger.Debug().Msg("Label offsets replacement completed")
 	return bytecode, nil
+}
+
+// checkedBytecodeSize rejects overflow before calculating an allocation size.
+func checkedBytecodeSize(ruleSize, actionSize int) (int, error) {
+	maxInt := int(^uint(0) >> 1)
+	if ruleSize < 0 || actionSize < 0 || ruleSize > maxInt-actionSize {
+		return 0, fmt.Errorf("combined rule and action bytecode exceeds allocation limit")
+	}
+	return ruleSize + actionSize, nil
 }

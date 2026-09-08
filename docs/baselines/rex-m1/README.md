@@ -154,3 +154,14 @@ available. Do not attribute the earlier v3 change to M1 or widen this work into
 batch semantics, scripts, delivery guarantees, or concurrency.
 
 Continue with REX-M2 in the [foundation roadmap](../../FOUNDATION_ROADMAP.md).
+
+### PR review follow-up
+
+PR #33 adds contextual errors for unmatched comparison groups, preserves churn
+in comparison output, and captures tracked and untracked changes across the
+entire fingerprinted source set. Historical measurement files remain unchanged.
+CodeQL also identified an unchecked compiler allocation-size sum; compilation
+now rejects integer overflow before allocation. Boundary tests and the full Go
+normal/race suites and vet pass, along with the Python tooling regressions
+(`python3 -m unittest discover -s scripts/baseline -p 'test_*.py'`). These review
+fixes are subsequent to the measured snapshot; no new timing claim is made.

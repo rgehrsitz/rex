@@ -28,6 +28,8 @@ def compare(before_dir, after_dir):
         raise ValueError("no candidate samples")
     records = []
     for key, new in sorted(after.items()):
+        if key not in before:
+            raise ValueError(f"candidate group has no baseline: {key}")
         old = before[key]
         if len(old) != len(new) or len(new) < 3:
             raise ValueError(f"need equal repetition counts >=3 for {key}")
@@ -46,7 +48,7 @@ def compare(before_dir, after_dir):
                 expected = {"get":c["get"], "mget":c["mget"], "set":c["set"]+c["set_publish"], "publish":c["set_publish"]}
                 if any(r["redis_commands"].get(k, 0) != v for k, v in expected.items()):
                     raise ValueError(f"Redis command mismatch for {key}")
-        record = {"mode":key[0], "logging":key[1], "fixture":key[2], "runs":len(new), "metrics":{}}
+        record = {"mode":key[0], "logging":key[1], "fixture":key[2], "churn":key[3], "runs":len(new), "metrics":{}}
         for field in ("p50_ns", "p95_ns", "events_per_second", "allocs_per_event", "bytes_per_event", "heap_before_bytes"):
             a, b = [r[field] for r in old], [r[field] for r in new]
             am, bm = statistics.median(a), statistics.median(b)
@@ -60,14 +62,14 @@ def compare(before_dir, after_dir):
         records.append(record)
     (after_dir / "comparison.json").write_text(json.dumps(records, indent=2) + "\n")
     lines = ["# REX performance comparison", "", "Matched fixtures, artifacts, action counts, sampling budgets, and environment fields were verified.", "",
-             "| Mode / logging | Fixture | Before p50 µs | After p50 µs | Speedup | GET/batch before → after | Investigation flags |",
-             "| --- | --- | ---: | ---: | ---: | --- | --- |"]
+             "| Mode / logging | Fixture | Churn keys | Before p50 µs | After p50 µs | Speedup | GET/batch before → after | Investigation flags |",
+             "| --- | --- | ---: | ---: | ---: | ---: | --- | --- |"]
     flagged = 0
     for r in records:
         m = r["metrics"]["p50_ns"]
         flags = [k for k, v in r["metrics"].items() if v.get("investigate")]
         flagged += len(flags)
-        lines.append(f'| {r["mode"]} / {r["logging"]} | {r["fixture"]} | {m["before_median"]/1000:.2f} | '
+        lines.append(f'| {r["mode"]} / {r["logging"]} | {r["fixture"]} | {r["churn"]} | {m["before_median"]/1000:.2f} | '
                      f'{m["after_median"]/1000:.2f} | {m["before_median"]/m["after_median"]:.2f}× | '
                      f'{r["get_per_batch"]["before"]:g} → {r["get_per_batch"]["after"]:g} | {", ".join(flags) or "None"} |')
     lines.extend(["", "Speedup uses medians of per-run p50 batch latencies; it is not a daemon capacity claim.",

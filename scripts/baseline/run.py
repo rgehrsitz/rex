@@ -17,6 +17,21 @@ import tempfile
 import time
 
 
+def source_patch(root, sources):
+    """Include tracked edits and new files for the entire fingerprinted source set."""
+    patch = subprocess.check_output(
+        ["git", "diff", "HEAD", "--", *sources], cwd=root)
+    untracked = subprocess.check_output(
+        ["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=root).decode().split("\0")
+    for path in sorted(set(sources).intersection(untracked)):
+        diff = subprocess.run(["git", "diff", "--no-index", "--", "/dev/null", path],
+                              cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if diff.returncode not in (0, 1):
+            raise RuntimeError(diff.stderr.decode())
+        patch += diff.stdout
+    return patch
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -59,7 +74,7 @@ def main():
     fingerprint = hashlib.sha256(manifest.encode()).hexdigest()
     source_id = revision[:12] + "+" + fingerprint
     (out / "source-manifest.sha256").write_text(manifest)
-    (out / "source.patch").write_text(capture(["git", "diff", "HEAD", "--", "pkg", "cmd", "go.mod", "go.sum", "examples/rex-rules-schema.json"]) + "\n")
+    (out / "source.patch").write_bytes(source_patch(root, sources + ["examples/rex-rules-schema.json"]))
     (out / "working-tree.txt").write_text(capture(["git", "status", "--short"]) + "\n")
     metadata = {"started_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "revision": revision, "source_id": source_id, "platform": platform.platform(),
