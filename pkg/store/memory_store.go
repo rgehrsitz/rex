@@ -1,0 +1,118 @@
+package store
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"sync"
+)
+
+// ErrMemoryStoreClosed is returned by operations after Close.
+var ErrMemoryStoreClosed = errors.New("memory store closed")
+
+// FactUpdate is a successful in-memory publication. Consumers explicitly drain
+// publications; the store does not recursively evaluate rules or route channels.
+type FactUpdate struct {
+	Key   string      `json:"key"`
+	Value interface{} `json:"value"`
+}
+
+// MemoryStore is a concurrency-safe ContextStore for JSON facts. Values are
+// copied through JSON, matching Redis numeric decoding and preventing aliases.
+// SetAndPublish is atomic here; this does not imply Redis delivery guarantees.
+type MemoryStore struct {
+	mu           sync.Mutex
+	facts        map[string]interface{}
+	publications []FactUpdate
+	closed       bool
+}
+
+var _ ContextStore = (*MemoryStore)(nil)
+
+func NewMemoryStore(initial map[string]interface{}) (*MemoryStore, error) {
+	s := &MemoryStore{facts: make(map[string]interface{})}
+	for k, v := range initial {
+		if err := s.SetFactContext(context.Background(), k, v); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+func copyJSON(value interface{}) (interface{}, error) {
+	b, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var out interface{}
+	err = json.Unmarshal(b, &out)
+	return out, err
+}
+
+func (s *MemoryStore) Close() error { s.mu.Lock(); defer s.mu.Unlock(); s.closed = true; return nil }
+func (s *MemoryStore) write(ctx context.Context, key string, value interface{}, publish bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.closed {
+		return ErrMemoryStoreClosed
+	}
+	value, err := copyJSON(value)
+	if err != nil {
+		return err
+	}
+	s.facts[key] = value
+	if publish {
+		s.publications = append(s.publications, FactUpdate{Key: key, Value: value})
+	}
+	return nil
+}
+func (s *MemoryStore) SetFactContext(ctx context.Context, key string, value interface{}) error {
+	return s.write(ctx, key, value, false)
+}
+func (s *MemoryStore) SetAndPublishFactContext(ctx context.Context, key string, value interface{}) error {
+	return s.write(ctx, key, value, true)
+}
+func (s *MemoryStore) GetFactContext(ctx context.Context, key string) (interface{}, error) {
+	values, err := s.MGetFactsContext(ctx, key)
+	return values[key], err
+}
+func (s *MemoryStore) MGetFactsContext(ctx context.Context, keys ...string) (map[string]interface{}, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.closed {
+		return nil, ErrMemoryStoreClosed
+	}
+	out := make(map[string]interface{}, len(keys))
+	for _, k := range keys {
+		out[k], _ = copyJSON(s.facts[k])
+	}
+	return out, nil
+}
+
+// Snapshot returns an independent copy, including after Close, for inspection.
+func (s *MemoryStore) Snapshot() map[string]interface{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	value, _ := copyJSON(s.facts)
+	return value.(map[string]interface{})
+}
+
+// DrainPublications returns successful publications in write order and clears
+// the queue. It remains available after Close for final inspection.
+func (s *MemoryStore) DrainPublications() []FactUpdate {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]FactUpdate, len(s.publications))
+	for i, event := range s.publications {
+		out[i].Key = event.Key
+		out[i].Value, _ = copyJSON(event.Value)
+	}
+	s.publications = nil
+	return out
+}
