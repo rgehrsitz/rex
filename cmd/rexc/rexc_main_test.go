@@ -275,6 +275,7 @@ func TestMainFunction(t *testing.T) {
 	_, err = os.Stat("output.bytecode")
 	assert.NoError(t, err, "output.bytecode file should exist")
 	defer os.Remove("output.bytecode")
+	defer os.Remove("output.bytecode.manifest.json")
 }
 
 func writeRulesFile(t *testing.T) string {

@@ -12,6 +12,10 @@ committed outputs feed bounded subsequent rounds. See the
 Scripts are unavailable in v4 until M6. Existing script examples below apply
 only to explicit legacy-v3 deployments.
 
+Use the [M5 authoring tools](docs/M5_TOOLING.md) to explain, lint, test, replay,
+and compare v4 rulesets offline. `rexd --dry-run --bundle ...` emits simulated
+results without creating Redis connections.
+
 The planning documents have distinct roles:
 
 - The [foundation roadmap](docs/FOUNDATION_ROADMAP.md) tracks the next stage of

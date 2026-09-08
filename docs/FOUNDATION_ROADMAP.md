@@ -56,8 +56,8 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M1 | Improve lookup and Redis efficiency | M0 | Complete | [Implementation and performance report](baselines/rex-m1/README.md): equivalent outputs, no budget flags, and documented map-memory tradeoff. Next: M2. |
 | REX-M2 | Establish an independent semantics safety net | M0 | Complete | [Current-v3 safety net](../internal/semantics/README.md): memory store, 12 scenarios, 128 seeds, truth tables, mutation checks, and disassembly goldens. Local validation complete; review pending. Next: M4. |
 | REX-M3 | Harden deployment and operational visibility | M0 | Planned | Fix startup errors, TLS/secrets, readiness, and latency visibility. |
-| REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Local complete; review pending | [D1–D5 contract](decisions/REX-M4.md), [migration and validation](M4_MIGRATION.md). |
-| REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Planned | Expose the scenario runner through stable CLI commands. |
+| REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Complete | [PR #35](https://github.com/rgehrsitz/rex/pull/35), `f6e036c`; [migration](M4_MIGRATION.md). |
+| REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Local complete; review pending | [M5 tooling contract](decisions/REX-M5.md), [commands and validation](M5_TOOLING.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Planned | Retain disabled default; design isolated worker lifecycle and limits. |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Planned | Design journal, commit, acknowledgement, and crash recovery together. |
 | REX-M8 | Extend the proven foundation | Capability-specific gates below | Planned | Start with ruleset reloads; split each capability into its own proposal. |
@@ -263,20 +263,20 @@ migration documentation. Keep format changes focused on the semantics they enabl
 
 **Outcome:** authors can understand and verify rule changes before deployment.
 
-- [ ] Add `rexc explain` for dependencies, priorities, bytecode/jumps, and action
+- [x] Add `rexc explain` for dependencies, priorities, bytecode/jumps, and action
   metadata; use evaluation traces to explain matches, skips, and errors.
-- [ ] Add `rexc test` for named scenarios and `rexc simulate` for ordered event
+- [x] Add `rexc test` for named scenarios and `rexc simulate` for ordered event
   replay, with stable machine-readable output and meaningful exit codes.
-- [ ] Record a replay bundle containing initial state/checkpoint, ordered inputs,
+- [x] Record a replay bundle containing initial state/checkpoint, ordered inputs,
   program/source digests, execution-contract version, configuration, and explicit
   time/function results where necessary. Never substitute today's Redis state
   for historical state without marking the result as a different simulation.
-- [ ] Compare two ruleset versions over the same replay bundle and report
+- [x] Compare two ruleset versions over the same replay bundle and report
   changed actions/facts and their causes.
-- [ ] Add `rexc lint` with stable diagnostic IDs for conflicting writers,
+- [x] Add `rexc lint` with stable diagnostic IDs for conflicting writers,
   provable cycles, undefined script references, and routing mistakes. Clearly
   separate errors from warnings and enforce schema/parser agreement in CI.
-- [ ] Add an artifact sidecar manifest for provenance and tooling, and a
+- [x] Add an artifact sidecar manifest for provenance and tooling, and a
   `rexd --dry-run` path that emits proposed results without committing them.
 
 **Acceptance criteria:** documented examples run locally and in CI without
@@ -517,3 +517,37 @@ Next concrete action:
   durable recovery. No performance speedup or transactional guarantee is claimed.
 - Next concrete action: review and integrate M4, then REX-M5. M3 remains an
   independent operational lane.
+
+
+### 2026-09-08 — REX-M5 local completion; review pending
+
+- Starting revision: `f6e036c765d57c6c352617831dfb5052c86cae2e`, merged M4
+  [PR #35](https://github.com/rgehrsitz/rex/pull/35). All seven review threads were
+  resolved and all hosted checks passed. M5 is local on `codex/rex-m5-tools`;
+  review and integration remain pending.
+- Delivered `rexc explain`, `bundle`, `test`, `simulate`, `compare`, and `lint`,
+  v4 artifact sidecars, and offline `rexd --dry-run --bundle`. The shared
+  production evaluator now exposes false/unknown rule results and failed-round
+  diagnostics while discarding staged effects. The [tooling contract](decisions/REX-M5.md)
+  defines schema/exit versions and complete historical input requirements.
+- [Documented examples](M5_TOOLING.md) run without Redis through
+  `scripts/test-m5-cli.sh`, now included in CI. Replay and dry-run byte output
+  agree; comparisons identify the authored threshold change and exit 2.
+- Tests cover digest/version/completeness failures, deterministic replay, input
+  ownership, expectations, cancellation, bounded cycles, conflict traces without
+  writes, missing/null/invalid diagnostics, lint IDs and CLI exit codes. Frozen
+  v3 and independent v4 semantic corpora remain green.
+- Normal/race suites, vet/build, offline CLI smoke, six release archive targets,
+  and a ten-second v4 decoder fuzz run (454,765 executions) pass locally.
+  `govulncheck` finds no reachable vulnerabilities; existing unreachable package/
+  module findings remain. Added a pinned test-only JSON Schema validator and
+  schema/parser agreement tests; no production dependency was upgraded.
+- V4 field-presence validation now rejects explicit empty alternate groups and
+  script fields that the published schema already prohibited; canonical v4
+  artifact meaning is unchanged. Legacy parsing is unchanged.
+- Limits: tools execute v4 only; explain describes IR rather than legacy jumps.
+  Lint proves the documented simple self-cycle, not arbitrary multi-rule cycles.
+  Offline memory outcomes do not predict Redis delivery failures. These bounds
+  are explicit in the tooling guide, rather than claiming general equivalence.
+- Next concrete action: review/integrate M5, then REX-M6. M3 remains the separate
+  operational-hardening lane; durable recovery remains M7.

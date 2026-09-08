@@ -1,8 +1,9 @@
 # REX-M4: versioned batch evaluation and commit contract
 
-Status: implemented locally; review pending, 2026-09-08. This decision implements D1–D5
-from the foundation roadmap; M7 will add durable recovery, not redefine v4
-condition or conflict semantics.
+Status: merged in [PR #35](https://github.com/rgehrsitz/rex/pull/35), revision
+`f6e036c`, 2026-09-08. This decision implements D1–D5 from the foundation
+roadmap; M7 will add durable recovery, not redefine v4 condition or conflict
+semantics.
 
 ## D1 — Snapshot and ownership
 

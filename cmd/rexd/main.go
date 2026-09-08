@@ -27,6 +27,7 @@ import (
 	"rgehrsitz/rex/pkg/observability"
 	"rgehrsitz/rex/pkg/runtime"
 	"rgehrsitz/rex/pkg/store"
+	"rgehrsitz/rex/pkg/tooling"
 )
 
 // Config represents the application configuration
@@ -73,6 +74,9 @@ type factUpdateProcessor interface {
 var messageTraceSequence atomic.Uint64
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--dry-run" {
+		os.Exit(tooling.RunCLI(context.Background(), append([]string{"simulate"}, os.Args[2:]...), os.Stdout, os.Stderr))
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

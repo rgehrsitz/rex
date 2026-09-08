@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "scenarios": [
+    {
+      "schema_version": 1,
+      "name": "temperature-rise",
+      "initial_state": {
+        "temperature": 20,
+        "alert": false
+      },
+      "events": [
+        {
+          "id": "cool",
+          "facts": {
+            "temperature": 25
+          }
+        },
+        {
+          "id": "hot",
+          "facts": {
+            "temperature": 35
+          }
+        }
+      ],
+      "expect": {
+        "final_state": {
+          "temperature": 35,
+          "alert": true
+        },
+        "actions": [
+          {
+            "rule": "hot",
+            "target": "alert",
+            "value": true
+          }
+        ]
+      }
+    }
+  ]
+}
