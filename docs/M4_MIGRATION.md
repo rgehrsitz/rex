@@ -127,3 +127,24 @@ process-crash or packet-loss simulation. Adapter tests also verify cancellation,
 missing/null/invalid representation, JSON parity, command-retry configuration,
 and event-source shutdown. Coordinator tests verify no retries and the latch.
 These checks are M4 evidence, not M7 durability or recovery evidence.
+
+### Review clarifications
+
+Run one active v4 consumer per input channel/commit domain. Coordinator locking
+serializes only one process; Pub/Sub broadcasts to every subscriber. Multiple
+daemons duplicate evaluation and notifications and may observe different
+snapshots. Running two consumers is not an HA configuration; M7 owns that design.
+
+The transport rejects raw input above 1 MiB. `engine.batch.event_bytes` may lower
+the evaluator's fact payload budget; that check happens after decoding. These
+are separate bounds on raw envelopes and decoded facts. Redis also measures the
+complete serialized output envelope against 1 MiB before performing any writes.
+Metadata overhead can therefore reject an otherwise valid staged payload.
+
+Embedded callers must carry decoded event metadata with `eventcontext.WithMetadata`.
+The v4 engine ignores `committed_output` and rejects other non-empty kinds.
+`RoundResult.commit_error` retains adapter errors per round; earlier successful
+rounds remain successful even if a later round fails. `SetMaxActionsPerEvaluation`
+now returns an error for invalid v4 limits without changing either limit field.
+Legacy v3 keeps its non-positive/unbounded behavior. Nil v4 fact state is
+intentional: Go defines iteration over a nil map, and v4 never retains facts.

@@ -51,3 +51,11 @@ func FuzzDecodeBatch(f *testing.F) {
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, data []byte) { _, _ = DecodeBatch(data) })
 }
+
+func TestBatchRejectsAmbiguousAndEmptyConditions(t *testing.T) {
+	for _, group := range []string{`{}`, `{"all":[],"any":[]}`, `{"all":[{"fact":"a","operator":"EQ","value":true}],"any":[{"fact":"b","operator":"EQ","value":true}]}`} {
+		source := `{"rules":[{"name":"r","conditions":` + group + `,"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+		_, err := CompileBatch([]byte(source))
+		require.Error(t, err)
+	}
+}

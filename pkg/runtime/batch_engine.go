@@ -77,6 +77,7 @@ func (e *Engine) SetBatchLimits(limits Limits) error {
 		return err
 	}
 	e.coordinator.limits = limits
+	e.maxActionsPerEvaluation = limits.ActionsPerRule
 	return nil
 }
 func (e *Engine) EvaluateBatch(ctx context.Context, event map[string]interface{}) (ChainResult, error) {
@@ -84,6 +85,12 @@ func (e *Engine) EvaluateBatch(ctx context.Context, event map[string]interface{}
 		return ChainResult{}, fmt.Errorf("batch evaluation requires v4 artifact")
 	}
 	metadata, _ := eventcontext.MetadataFromContext(ctx)
+	if metadata.Kind == "committed_output" {
+		return ChainResult{ChainID: metadata.TraceID}, nil
+	}
+	if metadata.Kind != "" {
+		return ChainResult{}, fmt.Errorf("unsupported event kind %q", metadata.Kind)
+	}
 	result, err := e.coordinator.Process(ctx, metadata.TraceID, event)
 	logger := traceLogger(ctx)
 	for _, round := range result.Rounds {
@@ -95,7 +102,7 @@ func (e *Engine) EvaluateBatch(ctx context.Context, event map[string]interface{}
 		}
 		for _, action := range round.Evaluation.Actions {
 			record := compiler.Action{Type: "updateStore", Target: action.Target, Value: action.Value}
-			if round.Commit.Outcome == store.Committed {
+			if round.Commit.Outcome == store.Committed && round.CommitError == "" {
 				e.recordActionSucceeded(record)
 			} else if err != nil {
 				e.recordActionFailed(record, err)

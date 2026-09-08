@@ -42,7 +42,7 @@ func LoadProgram(data []byte) (*Program, error) {
 	visit = func(ns []*compiler.ConditionOrGroup, facts map[string]bool) error {
 		for _, n := range ns {
 			nodes++
-			if nodes > 100000 {
+			if nodes > compiler.MaxConditionNodes {
 				return fmt.Errorf("program exceeds 100000 condition nodes")
 			}
 			if n.Fact != "" {
@@ -72,7 +72,7 @@ func LoadProgram(data []byte) (*Program, error) {
 		}
 		sort.Strings(p.dependencies[i])
 	}
-	if len(unique) > 65536 {
+	if len(unique) > compiler.MaxDependencies {
 		return nil, fmt.Errorf("program exceeds 65536 dependencies")
 	}
 	return p, nil
@@ -96,9 +96,10 @@ func DefaultLimits() Limits {
 func (l Limits) Validate() error {
 	max := Limits{EventBytes: 1 << 20, EventFacts: 4096, SnapshotBytes: 4 << 20, ActionsPerRule: 1024, ActionsPerRound: 4096, ChainActions: 8192, ChainWork: 1000000, Rounds: 64, StagedBytes: 4 << 20}
 	a, b := []int{l.EventBytes, l.EventFacts, l.SnapshotBytes, l.ActionsPerRule, l.ActionsPerRound, l.ChainActions, l.ChainWork, l.Rounds, l.StagedBytes}, []int{max.EventBytes, max.EventFacts, max.SnapshotBytes, max.ActionsPerRule, max.ActionsPerRound, max.ChainActions, max.ChainWork, max.Rounds, max.StagedBytes}
+	names := []string{"event_bytes", "event_facts", "snapshot_bytes", "actions_per_rule", "actions_per_round", "chain_actions", "chain_work", "rounds", "staged_bytes"}
 	for i, v := range a {
 		if v <= 0 || v > b[i] {
-			return fmt.Errorf("batch limit %d must be between 1 and %d", i, b[i])
+			return fmt.Errorf("batch limit %s must be between 1 and %d", names[i], b[i])
 		}
 	}
 	return nil
@@ -398,9 +399,10 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 }
 
 type RoundResult struct {
-	Round      int                `json:"round"`
-	Evaluation Evaluation         `json:"evaluation"`
-	Commit     store.CommitResult `json:"commit"`
+	Round       int                `json:"round"`
+	Evaluation  Evaluation         `json:"evaluation"`
+	Commit      store.CommitResult `json:"commit"`
+	CommitError string             `json:"commit_error,omitempty"`
 }
 type ChainResult struct {
 	ChainID string        `json:"chain_id"`
@@ -491,6 +493,9 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		}
 		committed, err := c.committer.Commit(ctx, store.CommitRequest{ChainID: result.ChainID, Round: round, Writes: eval.Writes})
 		rr.Commit = committed
+		if err != nil {
+			rr.CommitError = err.Error()
+		}
 		result.Rounds = append(result.Rounds, rr)
 		switch committed.Outcome {
 		case store.Committed:

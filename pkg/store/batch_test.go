@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -161,4 +162,14 @@ func TestRealRedisBatchOutcomes(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, Unknown, result.Outcome)
 	require.False(t, errors.Is(err, context.Canceled))
+}
+
+func TestRedisRejectsOversizedOutputBeforeWrites(t *testing.T) {
+	server, adapter := setupMiniredis(t)
+	defer server.Close()
+	defer adapter.Close()
+	result, err := adapter.Commit(context.Background(), CommitRequest{ChainID: "oversized", Writes: []Write{{Key: "never", Value: strings.Repeat("x", MaxEventBytes)}}})
+	require.ErrorContains(t, err, "output notification exceeds")
+	require.Equal(t, NotCommitted, result.Outcome)
+	require.False(t, server.Exists("never"))
 }

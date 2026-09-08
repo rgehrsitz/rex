@@ -13,6 +13,8 @@ import (
 const BatchVersion uint32 = 4
 const MaxProgramBytes = 8 << 20
 const MaxProgramRules = 10000
+const MaxConditionNodes = 100000
+const MaxDependencies = 65536
 const batchHeaderSize = 16
 
 // ParseBatch validates the bounded, script-free v4 source contract.
@@ -61,7 +63,7 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 	check = func(children []*ConditionOrGroup) error {
 		for _, n := range children {
 			nodes++
-			if nodes > 100000 {
+			if nodes > MaxConditionNodes {
 				return fmt.Errorf("program exceeds 100000 condition nodes")
 			}
 			if n.Fact != "" {
@@ -104,7 +106,7 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 			}
 		}
 	}
-	if len(facts) > 65536 {
+	if len(facts) > MaxDependencies {
 		return nil, fmt.Errorf("program exceeds 65536 dependencies")
 	}
 	return rules, nil

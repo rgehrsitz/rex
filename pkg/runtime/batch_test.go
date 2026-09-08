@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"rgehrsitz/rex/pkg/compiler"
+	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/store"
 )
 
@@ -29,6 +30,7 @@ const batchOne = `{"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operat
 type batchProbe struct {
 	*store.MemoryStore
 	reads, commits int
+	failAfter      int
 	failRead       bool
 	outcome        store.CommitOutcome
 	fail           error
@@ -47,7 +49,7 @@ func (s *batchProbe) ReadSnapshot(ctx context.Context, keys []string) (map[strin
 }
 func (s *batchProbe) Commit(ctx context.Context, r store.CommitRequest) (store.CommitResult, error) {
 	s.commits++
-	if s.outcome != "" {
+	if s.outcome != "" && s.commits > s.failAfter {
 		return store.CommitResult{Outcome: s.outcome}, s.fail
 	}
 	return s.MemoryStore.Commit(ctx, r)
@@ -234,4 +236,53 @@ func TestBatchInconsistentCommitRequiresReconciliation(t *testing.T) {
 	_, err = c.Process(context.Background(), "later", map[string]interface{}{"a": float64(1)})
 	require.ErrorIs(t, err, ErrReconciliationRequired)
 	require.Equal(t, 1, s.commits)
+}
+
+func TestBatchEngineReviewBoundaries(t *testing.T) {
+	s := probe(t, nil)
+	c, err := NewCoordinator(batchProgram(t, batchOne), s, s, DefaultLimits())
+	require.NoError(t, err)
+	e := &Engine{coordinator: c, maxActionsPerEvaluation: 32}
+	observer := &recordingExecutionObserver{}
+	e.SetExecutionObserver(observer)
+	event := map[string]interface{}{"a": float64(1), "b": float64(1)}
+	for _, kind := range []string{"committed_output", "unsupported"} {
+		ctx := eventcontext.WithMetadata(context.Background(), eventcontext.Metadata{Kind: kind})
+		err := e.ProcessBatchContext(ctx, event)
+		if kind == "committed_output" {
+			require.NoError(t, err)
+		} else {
+			require.ErrorContains(t, err, "unsupported event kind")
+		}
+	}
+	require.Zero(t, s.commits)
+	for _, limit := range []int{0, -1, 1025} {
+		require.ErrorContains(t, e.SetMaxActionsPerEvaluation(limit), "actions_per_rule")
+		require.Equal(t, 32, e.maxActionsPerEvaluation)
+		require.Equal(t, 32, c.limits.ActionsPerRule)
+	}
+	s.outcome, s.fail = store.Committed, errors.New("inconsistent")
+	result, err := e.EvaluateBatch(context.Background(), event)
+	require.ErrorIs(t, err, ErrReconciliationRequired)
+	require.Equal(t, "inconsistent", result.Rounds[0].CommitError)
+	require.Empty(t, observer.actionsSucceeded)
+	require.Len(t, observer.actionFailures, 1)
+}
+
+func TestBatchEarlierSuccessSurvivesLaterCommitError(t *testing.T) {
+	source := `{"rules":[{"name":"first","conditions":{"all":[{"fact":"a","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"b","value":true}]},{"name":"second","conditions":{"all":[{"fact":"b","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	s := probe(t, nil)
+	s.failAfter, s.outcome, s.fail = 1, store.Committed, errors.New("second round inconsistent")
+	c, err := NewCoordinator(batchProgram(t, source), s, s, DefaultLimits())
+	require.NoError(t, err)
+	e := &Engine{coordinator: c}
+	observer := &recordingExecutionObserver{}
+	e.SetExecutionObserver(observer)
+	result, err := e.EvaluateBatch(context.Background(), map[string]interface{}{"a": true})
+	require.ErrorIs(t, err, ErrReconciliationRequired)
+	require.Len(t, result.Rounds, 2)
+	require.Empty(t, result.Rounds[0].CommitError)
+	require.Equal(t, "second round inconsistent", result.Rounds[1].CommitError)
+	require.Len(t, observer.actionsSucceeded, 1)
+	require.Len(t, observer.actionFailures, 1)
 }

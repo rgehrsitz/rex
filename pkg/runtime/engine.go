@@ -52,11 +52,17 @@ func (e *Engine) SetScriptsEnabled(enabled bool) {
 // SetMaxActionsPerEvaluation caps actions executed for one rule evaluation.
 // A non-positive limit disables the cap only for legacy v3 embedded uses.
 // V4 limits must remain positive; use SetBatchLimits for validated configuration.
-func (e *Engine) SetMaxActionsPerEvaluation(limit int) {
-	e.maxActionsPerEvaluation = limit
-	if e.coordinator != nil && limit > 0 {
-		e.coordinator.limits.ActionsPerRule = limit
+func (e *Engine) SetMaxActionsPerEvaluation(limit int) error {
+	if e.coordinator != nil {
+		limits := e.coordinator.limits
+		limits.ActionsPerRule = limit
+		if err := limits.Validate(); err != nil {
+			return err
+		}
+		e.coordinator.limits = limits
 	}
+	e.maxActionsPerEvaluation = limit
+	return nil
 }
 
 // New method to create an engine from a file

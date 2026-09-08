@@ -78,6 +78,9 @@ func (s *RedisStore) Commit(ctx context.Context, request CommitRequest) (CommitR
 	if err != nil {
 		return result, err
 	}
+	if len(notification) > MaxEventBytes {
+		return result, fmt.Errorf("output notification exceeds %d bytes", MaxEventBytes)
+	}
 	writer := s.batchWriter()
 	for i, w := range request.Writes {
 		if err := ctx.Err(); err != nil {
