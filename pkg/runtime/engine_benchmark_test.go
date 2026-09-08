@@ -70,9 +70,9 @@ func createMockEngine(b *testing.B, redisStore *store.RedisStore) *Engine {
 
 	engine := &Engine{
 		bytecode:            bytecodeFile.Instructions,
-		ruleExecutionIndex:  bytecodeFile.RuleExecIndex,
+		ruleExecutionIndex:  make(map[string]compiler.RuleExecutionIndex),
 		factRuleIndex:       bytecodeFile.FactRuleLookupIndex,
-		factDependencyIndex: bytecodeFile.FactDependencyIndex,
+		factDependencyIndex: make(map[string][]string),
 		Facts: map[string]interface{}{
 			"temperature":        25.0,
 			"humidity":           60.0,
@@ -84,6 +84,12 @@ func createMockEngine(b *testing.B, redisStore *store.RedisStore) *Engine {
 	}
 
 	// Initialize Redis store with the same facts
+	for _, rule := range bytecodeFile.RuleExecIndex {
+		engine.ruleExecutionIndex[rule.RuleName] = rule
+	}
+	for _, dependency := range bytecodeFile.FactDependencyIndex {
+		engine.factDependencyIndex[dependency.RuleName] = dependency.Facts
+	}
 	for key, value := range engine.Facts {
 		err := redisStore.SetFact(key, value)
 		if err != nil {

@@ -9,6 +9,14 @@ import (
 	"rgehrsitz/rex/pkg/logging"
 )
 
+// SetConditionTracing controls per-condition info-level records. Loaded engines
+// enable them by default for compatibility. Candidate, action, and rule summaries,
+// warnings, and failures remain observable when this is disabled. Configure before
+// processing; like other Engine settings this is not a concurrent mutation API.
+func (e *Engine) SetConditionTracing(enabled bool) {
+	e.traceConditions = enabled
+}
+
 // WithTraceID returns a context that associates work with one event trace.
 // Callers should use one ID for every fact update decoded from the same event.
 func WithTraceID(ctx context.Context, traceID string) context.Context {

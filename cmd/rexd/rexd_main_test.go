@@ -103,6 +103,7 @@ func TestParseConfig(t *testing.T) {
 		"logging.level": "debug",
 		"logging.output": "file",
 		"logging.time_format": "RFC3339",
+		"logging.trace_conditions": false,
 		"redis.address": "localhost:6379",
 		"redis.password": "password",
 		"redis.database": 1,
@@ -127,6 +128,7 @@ func TestParseConfig(t *testing.T) {
 	assert.Equal(t, "debug", config.LogLevel)
 	assert.Equal(t, "file", config.LogDestination)
 	assert.Equal(t, "RFC3339", config.LogTimeFormat)
+	assert.False(t, config.TraceConditions)
 	assert.Equal(t, "localhost:6379", config.RedisAddress)
 	assert.Equal(t, "password", config.RedisPassword)
 	assert.Equal(t, 1, config.RedisDB)
@@ -153,6 +155,7 @@ func TestParseConfigDefaultsScriptsDisabled(t *testing.T) {
 	config, err := parseConfig([]string{"rexd", "--config", configFile.Name()})
 	require.NoError(t, err)
 	assert.False(t, config.ScriptsEnabled)
+	assert.True(t, config.TraceConditions)
 }
 
 func TestSetupDependencies(t *testing.T) {

@@ -1,0 +1,16 @@
+M README.md
+ M docs/BYTECODE_COMPATIBILITY.md
+ M docs/COMPATIBILITY.md
+ M docs/ENGINE_AUDIT.md
+ M docs/EVOLUTION_REFERENCE.md
+ M docs/REVIVAL_PLAN.md
+ M examples/rex-rules-schema.json
+ M pkg/compiler/bytecode.go
+ M pkg/compiler/parser.go
+ M pkg/compiler/parser_test.go
+ M pkg/runtime/bytecode.go
+ M pkg/runtime/engine.go
+ M pkg/runtime/engine_test.go
+?? docs/FOUNDATION_ROADMAP.md
+?? scripts/baseline/
+?? tools/rex_baseline/

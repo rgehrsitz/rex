@@ -4,6 +4,12 @@
 
 Rex has a sound compiler/runtime foundation and a healthy test suite. This plan keeps it maintainable through small, reversible changes rather than a rewrite. Update this document as milestones are completed or priorities change.
 
+The next implementation stage is tracked in the
+[foundation roadmap](FOUNDATION_ROADMAP.md). Use its stable milestone IDs,
+acceptance criteria, and evidence log for new foundation work; this document
+retains the revival history and completion checklist. The roadmap supersedes
+the future-work ordering below, including the longer-term script direction.
+
 ## Baseline assessed on 2026-08-25
 
 - `go test ./...`, `go test -race ./...`, `go vet ./...`, and all command builds pass.
@@ -56,6 +62,7 @@ Rex has a sound compiler/runtime foundation and a healthy test suite. This plan 
 - [x] Reject action types that the runtime cannot execute (REX-004).
 - [x] Reject duplicate rule names during compilation (REX-005).
 - [x] Propagate unresolved-label failures through bytecode generation and `rexc` (REX-014).
+- [x] Execute candidate rules by ascending priority with stable source-order ties, and align the documented default (REX-007).
 
 **Completion criteria:** corrupt or incompatible bytecode returns a clear error, never a panic; identical input produces identical output.
 

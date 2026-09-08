@@ -191,6 +191,50 @@ func TestParser(t *testing.T) {
 	assert.Equal(t, "High temperature and low humidity or high pressure detected", ruleset.Rules[0].Actions[0].Value)
 }
 
+func TestParseAppliesDefaultPriorityOnlyWhenOmitted(t *testing.T) {
+	tests := []struct {
+		name         string
+		priorityJSON string
+		wantPriority int
+	}{
+		{name: "omitted", wantPriority: DefaultRulePriority},
+		{name: "explicit zero", priorityJSON: `"priority": 0,`, wantPriority: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			jsonData := []byte(fmt.Sprintf(`{
+                "rules": [{
+                    "name": "rule1",
+                    %s
+                    "conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
+                    "actions": [{"type": "updateStore", "target": "status", "value": "hot"}]
+                }]
+            }`, tt.priorityJSON))
+
+			ruleset, err := Parse(jsonData)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantPriority, ruleset.Rules[0].Priority)
+		})
+	}
+}
+
+func TestParseRejectsNullPriority(t *testing.T) {
+	jsonData := []byte(`{
+        "rules": [{
+            "name": "rule1",
+            "priority": null,
+            "conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
+            "actions": [{"type": "updateStore", "target": "status", "value": "hot"}]
+        }]
+    }`)
+
+	_, err := Parse(jsonData)
+
+	assert.ErrorContains(t, err, "rules[0].priority must be an integer")
+}
+
 func TestParseInvalidJSON(t *testing.T) {
 	invalidJSON := []byte(`{"rules": [{"name": "invalid_rule",}]}`)
 	_, err := Parse(invalidJSON)
@@ -398,6 +442,21 @@ func TestInvalidPriority(t *testing.T) {
     }`)
 	_, err := Parse(jsonData)
 	assert.Error(t, err)
+}
+
+func TestPriorityAboveBytecodeLimit(t *testing.T) {
+	jsonData := []byte(`{
+        "rules": [{
+            "name": "rule1",
+            "priority": 4294967296,
+            "conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
+            "actions": [{"type": "updateStore", "target": "status", "value": "hot"}]
+        }]
+    }`)
+
+	_, err := Parse(jsonData)
+
+	assert.ErrorContains(t, err, "Rule priority exceeds the bytecode limit")
 }
 
 func TestInvalidConditionFact(t *testing.T) {

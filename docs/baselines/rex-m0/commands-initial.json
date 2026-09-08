@@ -1,0 +1,134 @@
+[
+  {
+    "check": "format",
+    "command": [
+      "gofmt",
+      "-l",
+      "."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.025
+  },
+  {
+    "check": "tidy",
+    "command": [
+      "go",
+      "mod",
+      "tidy",
+      "-diff"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.095
+  },
+  {
+    "check": "vet",
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.17
+  },
+  {
+    "check": "test",
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 5.022
+  },
+  {
+    "check": "race",
+    "command": [
+      "go",
+      "test",
+      "-race",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 12.151
+  },
+  {
+    "check": "build",
+    "command": [
+      "go",
+      "build",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.931
+  },
+  {
+    "check": "vulnerability",
+    "command": [
+      "/private/tmp/rex-m0/govulncheck",
+      "-show",
+      "verbose",
+      "./..."
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 2.691
+  },
+  {
+    "check": "archives",
+    "command": [
+      "bash",
+      "scripts/release/build-archives.sh"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 14.482
+  },
+  {
+    "check": "harness-build",
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-vn2ebuvj/rex_baseline",
+      "./tools/rex_baseline"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.447
+  },
+  {
+    "check": "memory",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-vn2ebuvj/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+1a45712c4496a481c6a8b62ef2622ff28349c5d460ec6c215ffeef7fa30a057d",
+      "-runs",
+      "5",
+      "-warmup",
+      "100",
+      "-events",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 71.892
+  },
+  {
+    "check": "redis",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-vn2ebuvj/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+1a45712c4496a481c6a8b62ef2622ff28349c5d460ec6c215ffeef7fa30a057d",
+      "-runs",
+      "5",
+      "-warmup",
+      "100",
+      "-mode",
+      "redis",
+      "-redis",
+      "127.0.0.1:53910",
+      "-events",
+      "200"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 211.443
+  }
+]

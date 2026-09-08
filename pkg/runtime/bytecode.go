@@ -17,6 +17,11 @@ type bytecodeHeader struct {
 	factDepIndexOffset  uint32
 }
 
+type ruleMetadata struct {
+	name     string
+	priority uint32
+}
+
 // validateBytecode verifies that a compiled artifact can be decoded safely by
 // the runtime before any execution or unchecked slice access occurs.
 func validateBytecode(data []byte) error {
@@ -82,8 +87,8 @@ func readBytecodeHeader(data []byte) (bytecodeHeader, error) {
 	}, nil
 }
 
-func validateInstructions(data []byte) (map[int]string, error) {
-	ruleStarts := make(map[int]string)
+func validateInstructions(data []byte) (map[int]ruleMetadata, error) {
+	ruleStarts := make(map[int]ruleMetadata)
 	instructionBoundaries := make(map[int]struct{})
 	labelTargets := make(map[int]int)
 	type jumpReference struct {
@@ -94,29 +99,44 @@ func validateInstructions(data []byte) (map[int]string, error) {
 	}
 	var jumps []jumpReference
 	currentRuleStart := -1
+	expectingPriority := false
 
 	for offset := 0; offset < len(data); {
 		start := offset
 		instructionBoundaries[start] = struct{}{}
 		opcode := compiler.Opcode(data[offset])
 		offset++
+		if expectingPriority && opcode != compiler.PRIORITY {
+			return nil, fmt.Errorf("rule at instruction-section offset %d is missing its priority instruction", currentRuleStart)
+		}
 
 		var err error
 		switch opcode {
 		case compiler.RULE_START:
 			currentRuleStart = start
+			expectingPriority = true
 			var name string
 			name, offset, err = readByteString(data, offset)
 			if err == nil {
 				if _, exists := ruleStarts[start]; exists {
 					err = fmt.Errorf("duplicate rule start at instruction-section offset %d", start)
 				} else {
-					ruleStarts[start] = name
+					ruleStarts[start] = ruleMetadata{name: name}
 				}
 			}
 
 		case compiler.PRIORITY:
+			if !expectingPriority || currentRuleStart < 0 {
+				return nil, fmt.Errorf("unexpected priority instruction at instruction-section offset %d", start)
+			}
+			operandStart := offset
 			offset, err = consumeFixed(data, offset, 4)
+			if err == nil {
+				metadata := ruleStarts[currentRuleStart]
+				metadata.priority = binary.LittleEndian.Uint32(data[operandStart:offset])
+				ruleStarts[currentRuleStart] = metadata
+				expectingPriority = false
+			}
 
 		case compiler.JUMP_IF_TRUE, compiler.JUMP_IF_FALSE:
 			operandStart := offset
@@ -171,6 +191,9 @@ func validateInstructions(data []byte) (map[int]string, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid opcode %d at instruction-section offset %d: %w", opcode, start, err)
 		}
+	}
+	if expectingPriority {
+		return nil, fmt.Errorf("rule at instruction-section offset %d is missing its priority instruction", currentRuleStart)
 	}
 
 	for _, jump := range jumps {
@@ -232,7 +255,7 @@ func validateScriptCall(data []byte, offset int) (int, error) {
 	return offset, nil
 }
 
-func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]string) (map[string]struct{}, error) {
+func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]ruleMetadata) (map[string]struct{}, error) {
 	offset := 0
 	ruleNames := make(map[string]struct{}, count)
 	for i := uint32(0); i < count; i++ {
@@ -241,15 +264,20 @@ func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]st
 			return nil, fmt.Errorf("invalid rule execution index entry %d: %w", i, err)
 		}
 		offset = nextOffset
-		if offset+4 > len(data) {
+		if offset+8 > len(data) {
 			return nil, fmt.Errorf("truncated rule execution index offset for %q", name)
 		}
 		instructionOffset := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
 		offset += 4
+		priority := binary.LittleEndian.Uint32(data[offset : offset+4])
+		offset += 4
 
-		actualName, ok := ruleStarts[instructionOffset]
-		if !ok || actualName != name {
+		metadata, ok := ruleStarts[instructionOffset]
+		if !ok || metadata.name != name {
 			return nil, fmt.Errorf("rule execution index for %q points to invalid instruction-section offset %d", name, instructionOffset)
+		}
+		if metadata.priority != priority {
+			return nil, fmt.Errorf("rule execution index priority %d for %q does not match instruction priority %d", priority, name, metadata.priority)
 		}
 		if _, exists := ruleNames[name]; exists {
 			return nil, fmt.Errorf("duplicate rule execution index entry for %q", name)

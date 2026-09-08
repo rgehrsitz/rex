@@ -7,7 +7,10 @@ REX currently uses Redis as its fact store and event transport: it receives fact
 
 The planning documents have distinct roles:
 
-- The [revival plan](docs/REVIVAL_PLAN.md) tracks committed milestones.
+- The [foundation roadmap](docs/FOUNDATION_ROADMAP.md) tracks the next stage of
+  architecture, performance, reliability, and tooling work, with milestone
+  checklists and acceptance criteria.
+- The [revival plan](docs/REVIVAL_PLAN.md) preserves the earlier revival milestones.
 - The [engine semantics audit](docs/ENGINE_AUDIT.md) is the source of truth for
   verified findings and their remediation status.
 - The [evolution reference](docs/EVOLUTION_REFERENCE.md) preserves longer-term
@@ -113,7 +116,8 @@ The configuration file is in JSON format and supports the following options:
   "logging": {
     "level": "debug",
     "output": "console",
-    "time_format": "unixnano"
+    "time_format": "unixnano",
+    "trace_conditions": true
   },
   "redis": {
     "address": "localhost:6379",
@@ -133,6 +137,10 @@ The configuration file is in JSON format and supports the following options:
   }
 }
 ```
+
+`engine.priority_threshold` only controls the additional high-priority
+diagnostic emitted after a matching rule. It does not filter candidates or
+change their execution order.
 
 Example:
 
@@ -159,6 +167,14 @@ During migration, `rexd` also accepts the legacy `key=value` form. Its value is 
 `rexd` assigns each incoming event a `trace_id`. A JSON event with several facts keeps that ID for every fact update it contains. At the configured `info` level, the runtime emits structured records for `fact_event_received`, `fact_event_decoded`, `rule_evaluation_candidates`, `rule_condition_evaluated`, `action_completed` (or `action_skipped` / `action_failed`), and `rule_evaluation_completed`. Filter by `trace_id` to follow an event from Redis ingress through its rule and action outcomes.
 
 These trace records identify facts, rules, action types, and targets, but deliberately omit arbitrary fact and action values. Other diagnostic records—including the existing high-priority rule message—may contain values, so use those logs only while investigating a trusted deployment.
+
+Set `logging.trace_conditions` to `false` to omit the per-condition
+`rule_condition_evaluated` records. It defaults to `true` for compatibility.
+Candidate, action, and rule-completion summaries, warnings, and failures remain
+enabled at their configured log levels. Embedded callers can use
+`Engine.SetConditionTracing(false)` before processing events. Successful Redis
+publication diagnostics now use the configured structured logger at `debug`;
+they no longer write event payloads through the standard-library logger.
 
 ### Health and Metrics
 
@@ -307,7 +323,8 @@ The rules are defined in a JSON file with the following structure:
 A rule object has the following properties:
 
 - name: a unique string identifying the rule
-- priority: optional integer indicating the rule's priority (default: 10)
+- priority: optional non-negative integer indicating execution priority. Lower
+  numbers execute first; omitted priorities default to 10.
 - conditions: an object containing a single property:
 - ANY or ALL: an array of condition groups
 - actions: an array of action objects
@@ -492,7 +509,9 @@ Facts are strings. Values can be strings surrounded by quotation marks (e.g. "fa
 
 ### Priority Ties
 
-Due to concurrent evaluations and other factors, no guarantees can be made regarding how priority ties are resolved. The engine will do its best to resolve all higher priority rules before lower ones, but no precedence can be guaranteed beyond that.
+Candidate rules execute in ascending priority order, so lower numbers run
+first. Rules with the same priority execute in their original ruleset order.
+Rule evaluation is sequential for each fact update.
 
 ## Testing
 

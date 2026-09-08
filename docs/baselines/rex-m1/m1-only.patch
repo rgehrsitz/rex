@@ -1,0 +1,640 @@
+--- a/pkg/runtime/engine.go
++++ b/pkg/runtime/engine.go
+@@ -24,14 +24,15 @@
+ 
+ type Engine struct {
+ 	bytecode                []byte
+-	ruleExecutionIndex      []compiler.RuleExecutionIndex
++	ruleExecutionIndex      map[string]compiler.RuleExecutionIndex
+ 	factRuleIndex           map[string][]string
+-	factDependencyIndex     []compiler.FactDependencyIndex
++	factDependencyIndex     map[string][]string
+ 	Facts                   map[string]interface{}
+ 	store                   store.ContextStore
+ 	priorityThreshold       int
+ 	maxActionsPerEvaluation int
+ 	scriptsEnabled          bool
++	traceConditions         bool
+ 	ScriptEngine            *scripting.SafeVM
+ 	executionObserver       ExecutionObserver
+ }
+@@ -66,9 +67,10 @@
+ 
+ 	engine := &Engine{
+ 		bytecode:                bytecode,
+-		ruleExecutionIndex:      make([]compiler.RuleExecutionIndex, 0),
++		ruleExecutionIndex:      make(map[string]compiler.RuleExecutionIndex),
+ 		factRuleIndex:           make(map[string][]string),
+-		factDependencyIndex:     make([]compiler.FactDependencyIndex, 0),
++		factDependencyIndex:     make(map[string][]string),
++		traceConditions:         true,
+ 		Facts:                   make(map[string]interface{}),
+ 		store:                   store,
+ 		priorityThreshold:       priorityThreshold,
+@@ -126,11 +128,11 @@
+ 		// Adjust the byte offset by adding the size of the header
+ 		adjustedByteOffset := byteOffset + compiler.HeaderSize
+ 
+-		engine.ruleExecutionIndex = append(engine.ruleExecutionIndex, compiler.RuleExecutionIndex{
++		engine.ruleExecutionIndex[name] = compiler.RuleExecutionIndex{
+ 			RuleName:   name,
+ 			ByteOffset: adjustedByteOffset,
+ 			Priority:   priority,
+-		})
++		}
+ 		logging.Logger.Debug().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Int("priority", priority).Msg("Read rule execution index entry")
+ 	}
+ 
+@@ -155,13 +157,9 @@
+ 		logging.Logger.Debug().Str("fact", fact).Strs("rules", rules).Msg("Read fact rule index entry")
+ 	}
+ 
+-	priorities := make(map[string]int, len(engine.ruleExecutionIndex))
+-	for _, rule := range engine.ruleExecutionIndex {
+-		priorities[rule.RuleName] = rule.Priority
+-	}
+ 	for fact, rules := range engine.factRuleIndex {
+ 		sort.SliceStable(rules, func(i, j int) bool {
+-			return priorities[rules[i]] < priorities[rules[j]]
++			return engine.ruleExecutionIndex[rules[i]].Priority < engine.ruleExecutionIndex[rules[j]].Priority
+ 		})
+ 		engine.factRuleIndex[fact] = rules
+ 	}
+@@ -183,10 +181,12 @@
+ 			offset += factLen
+ 			facts = append(facts, fact)
+ 		}
+-		engine.factDependencyIndex = append(engine.factDependencyIndex, compiler.FactDependencyIndex{
+-			RuleName: rule,
+-			Facts:    facts,
+-		})
++		// The decoder permits repeated dependency records. Preserve the union
++		// previously visited by the slice scan rather than keeping only the last.
++		if existing, ok := engine.factDependencyIndex[rule]; ok {
++			facts = append(existing, facts...)
++		}
++		engine.factDependencyIndex[rule] = facts
+ 		logging.Logger.Debug().Str("rule", rule).Strs("facts", facts).Msg("Read fact dependency index entry")
+ 	}
+ 
+@@ -241,19 +241,15 @@
+ 	// Create a set of all facts that need to be queried (excluding the fact that triggered the update)
+ 	factsToQuery := make(map[string]struct{})
+ 	for _, ruleName := range ruleNames {
+-		for _, dep := range e.factDependencyIndex {
+-			if dep.RuleName == ruleName {
+-				for _, fact := range dep.Facts {
+-					if fact != factName {
+-						factsToQuery[fact] = struct{}{}
+-					}
+-				}
++		for _, fact := range e.factDependencyIndex[ruleName] {
++			if fact != factName {
++				factsToQuery[fact] = struct{}{}
+ 			}
+ 		}
+ 	}
+ 
+ 	// Convert the set to a slice
+-	var factKeys []string
++	factKeys := make([]string, 0, len(factsToQuery))
+ 	for fact := range factsToQuery {
+ 		factKeys = append(factKeys, fact)
+ 	}
+@@ -275,7 +271,7 @@
+ 	}
+ 
+ 	// Update local fact store with retrieved facts
+-	var missingFacts []string
++	var missingFacts map[string]struct{}
+ 	for fact, value := range factValues {
+ 		if value != nil {
+ 			e.Facts[fact] = value
+@@ -283,36 +279,28 @@
+ 			// Fact does not exist in the store
+ 			logger.Warn().Str("fact", fact).Msg("Fact not found in store")
+ 			delete(e.Facts, fact)
+-			missingFacts = append(missingFacts, fact)
++			if missingFacts == nil {
++				missingFacts = make(map[string]struct{})
++			}
++			missingFacts[fact] = struct{}{}
+ 		}
+ 	}
+ 	if len(missingFacts) > 0 {
+-		// Filtering must not mutate the persistent index's backing array.
+-		ruleNames = append([]string(nil), indexedRuleNames...)
+-	}
+-
+-	// Remove rules that depend on missing facts from ruleNames
+-	for _, missingFact := range missingFacts {
+-		for i := 0; i < len(ruleNames); i++ {
+-			ruleName := ruleNames[i]
+-			for _, dep := range e.factDependencyIndex {
+-				if dep.RuleName == ruleName {
+-					for _, fact := range dep.Facts {
+-						if fact == missingFact {
+-							// Remove the rule from ruleNames
+-							ruleNames = append(ruleNames[:i], ruleNames[i+1:]...)
+-							i--
+-							logger.Warn().
+-								Str("ruleName", ruleName).
+-								Str("missingFact", missingFact).
+-								Msg("Removing rule due to missing fact")
+-							break
+-						}
+-					}
+-					if len(ruleNames) == 0 {
+-						break
+-					}
++		// Never reuse the persistent candidate slice's backing array. Filter
++		// once in priority/source order, looking only at each candidate's facts.
++		ruleNames = make([]string, 0, len(indexedRuleNames))
++		for _, ruleName := range indexedRuleNames {
++			missing := false
++			for _, fact := range e.factDependencyIndex[ruleName] {
++				if _, absent := missingFacts[fact]; absent {
++					missing = true
++					logger.Warn().Str("ruleName", ruleName).Str("missingFact", fact).
++						Msg("Removing rule due to missing fact")
++					break
+ 				}
++			}
++			if !missing {
++				ruleNames = append(ruleNames, ruleName)
+ 			}
+ 		}
+ 	}
+@@ -349,21 +337,11 @@
+ 		Interface("facts", e.Facts).
+ 		Msg("Current facts")
+ 
+-	var ruleOffset int
+-	var rulePriority int
+-	found := false
+-	for _, r := range e.ruleExecutionIndex {
+-		if r.RuleName == ruleName {
+-			ruleOffset = r.ByteOffset
+-			rulePriority = r.Priority
+-			found = true
+-			break
+-		}
+-	}
+-
++	rule, found := e.ruleExecutionIndex[ruleName]
+ 	if !found {
+ 		return logging.NewError(logging.ErrorTypeRuntime, "Rule not found in ruleExecutionIndex", nil, map[string]interface{}{"ruleName": ruleName})
+ 	}
++	ruleOffset, rulePriority := rule.ByteOffset, rule.Priority
+ 
+ 	logger.Debug().Str("ruleName", ruleName).Int("offset", ruleOffset).Int("priority", rulePriority).Msg("Found rule in ruleExecutionIndex")
+ 
+@@ -460,12 +438,14 @@
+ 			if comparisonResult {
+ 				ruleTriggered = true
+ 			}
+-			logger.Info().
+-				Str("event", "rule_condition_evaluated").
+-				Str("rule_name", ruleName).
+-				Str("fact_name", comparisonFactName).
+-				Bool("matched", comparisonResult).
+-				Msg("Evaluated rule condition")
++			if e.traceConditions {
++				logger.Info().
++					Str("event", "rule_condition_evaluated").
++					Str("rule_name", ruleName).
++					Str("fact_name", comparisonFactName).
++					Bool("matched", comparisonResult).
++					Msg("Evaluated rule condition")
++			}
+ 
+ 		case compiler.JUMP_IF_FALSE:
+ 			jumpOffset := int(binary.LittleEndian.Uint32(e.bytecode[offset : offset+4]))
+@@ -793,14 +773,6 @@
+ 
+ 		logger.Debug().Str("factName", factName).Interface("factValue", factValue).Msg("Updated fact in Redis store")
+ 
+-		// Verify the fact was stored correctly
+-		storedValue, err := e.store.GetFactContext(ctx, factName)
+-		if err != nil {
+-			logger.Error().Err(err).Str("factName", factName).Msg("Failed to retrieve fact from Redis store")
+-		} else {
+-			logger.Debug().Str("factName", factName).Interface("storedValue", storedValue).Msg("Retrieved fact from Redis store")
+-		}
+-
+ 		logger.Info().
+ 			Str("event", "action_completed").
+ 			Str("outcome", "succeeded").
+--- a/pkg/runtime/trace.go
++++ b/pkg/runtime/trace.go
+@@ -8,6 +8,14 @@
+ 	"rgehrsitz/rex/pkg/eventcontext"
+ 	"rgehrsitz/rex/pkg/logging"
+ )
++
++// SetConditionTracing controls per-condition info-level records. Loaded engines
++// enable them by default for compatibility. Candidate, action, and rule summaries,
++// warnings, and failures remain observable when this is disabled. Configure before
++// processing; like other Engine settings this is not a concurrent mutation API.
++func (e *Engine) SetConditionTracing(enabled bool) {
++	e.traceConditions = enabled
++}
+ 
+ // WithTraceID returns a context that associates work with one event trace.
+ // Callers should use one ID for every fact update decoded from the same event.
+--- a/pkg/runtime/engine_test.go
++++ b/pkg/runtime/engine_test.go
+@@ -476,7 +476,7 @@
+ 	})
+ 	require.NoError(t, err)
+ 	assert.Same(t, ctx, store.setAndPublishContext)
+-	assert.Same(t, ctx, store.getContext)
++	assert.Nil(t, store.getContext, "successful actions must not perform a diagnostic read")
+ }
+ 
+ func TestProcessFactUpdateContextHonorsCancellation(t *testing.T) {
+@@ -492,13 +492,10 @@
+ func TestProcessFactUpdateContextReturnsStoreError(t *testing.T) {
+ 	storeErr := errors.New("store unavailable")
+ 	engine := &Engine{
+-		Facts:         make(map[string]interface{}),
+-		store:         &contextCaptureStore{mGetErr: storeErr},
+-		factRuleIndex: map[string][]string{"temperature": {"temperature_rule"}},
+-		factDependencyIndex: []compiler.FactDependencyIndex{{
+-			RuleName: "temperature_rule",
+-			Facts:    []string{"temperature", "humidity"},
+-		}},
++		Facts:               make(map[string]interface{}),
++		store:               &contextCaptureStore{mGetErr: storeErr},
++		factRuleIndex:       map[string][]string{"temperature": {"temperature_rule"}},
++		factDependencyIndex: map[string][]string{"temperature_rule": {"temperature", "humidity"}},
+ 	}
+ 
+ 	err := engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0)
+@@ -580,10 +577,10 @@
+ 	wantOrder := []string{"priority_one_first", "priority_one_second", "priority_five", "priority_ten"}
+ 	require.Len(t, engine.ruleExecutionIndex, 4)
+ 	assert.Equal(t, []int{10, 1, 5, 1}, []int{
+-		engine.ruleExecutionIndex[0].Priority,
+-		engine.ruleExecutionIndex[1].Priority,
+-		engine.ruleExecutionIndex[2].Priority,
+-		engine.ruleExecutionIndex[3].Priority,
++		engine.ruleExecutionIndex["priority_ten"].Priority,
++		engine.ruleExecutionIndex["priority_one_first"].Priority,
++		engine.ruleExecutionIndex["priority_five"].Priority,
++		engine.ruleExecutionIndex["priority_one_second"].Priority,
+ 	})
+ 	assert.Equal(t, wantOrder, engine.factRuleIndex["temperature"])
+ 	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+--- a/pkg/runtime/engine_benchmark_test.go
++++ b/pkg/runtime/engine_benchmark_test.go
+@@ -70,9 +70,9 @@
+ 
+ 	engine := &Engine{
+ 		bytecode:            bytecodeFile.Instructions,
+-		ruleExecutionIndex:  bytecodeFile.RuleExecIndex,
++		ruleExecutionIndex:  make(map[string]compiler.RuleExecutionIndex),
+ 		factRuleIndex:       bytecodeFile.FactRuleLookupIndex,
+-		factDependencyIndex: bytecodeFile.FactDependencyIndex,
++		factDependencyIndex: make(map[string][]string),
+ 		Facts: map[string]interface{}{
+ 			"temperature":        25.0,
+ 			"humidity":           60.0,
+@@ -84,6 +84,12 @@
+ 	}
+ 
+ 	// Initialize Redis store with the same facts
++	for _, rule := range bytecodeFile.RuleExecIndex {
++		engine.ruleExecutionIndex[rule.RuleName] = rule
++	}
++	for _, dependency := range bytecodeFile.FactDependencyIndex {
++		engine.factDependencyIndex[dependency.RuleName] = dependency.Facts
++	}
+ 	for key, value := range engine.Facts {
+ 		err := redisStore.SetFact(key, value)
+ 		if err != nil {
+--- a/pkg/runtime/m1_test.go
++++ b/pkg/runtime/m1_test.go
+@@ -0,0 +1,157 @@
++package runtime
++
++import (
++	"context"
++	"errors"
++	"fmt"
++	"io"
++	"testing"
++
++	"github.com/rs/zerolog"
++	"github.com/stretchr/testify/assert"
++	"github.com/stretchr/testify/require"
++	"rgehrsitz/rex/pkg/compiler"
++	"rgehrsitz/rex/pkg/logging"
++)
++
++func TestRepeatedDependencyRecordsRetainAllDependencies(t *testing.T) {
++	rules := &compiler.Ruleset{Rules: []compiler.Rule{{Name: "r", Priority: 10,
++		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{
++			{Fact: "a", Operator: "GT", Value: 0.0}, {Fact: "b", Operator: "GT", Value: 0.0},
++		}}, Actions: []compiler.Action{{Type: "updateStore", Target: "out", Value: true}},
++	}}}
++	artifact := mustGenerateBytecode(t, rules)
++	artifact.FactDependencyIndex = append(artifact.FactDependencyIndex, compiler.FactDependencyIndex{RuleName: "r", Facts: []string{"extra"}})
++	path := t.TempDir() + "/repeated.bytecode"
++	require.NoError(t, compiler.WriteBytecodeToFile(path, artifact))
++	s := &contextCaptureStore{mGetValues: map[string]interface{}{"extra": 1.0}}
++	e, err := NewEngineFromFile(path, s, 0)
++	require.NoError(t, err)
++	require.NoError(t, e.ProcessFactUpdateContext(context.Background(), "a", 1.0))
++	assert.ElementsMatch(t, []string{"b", "extra"}, s.mGetKeys)
++	assert.Zero(t, s.publishCount)
++	s.mGetValues["b"] = 1.0
++	require.NoError(t, e.ProcessFactUpdateContext(context.Background(), "a", 1.0))
++	assert.Equal(t, 1, s.publishCount)
++}
++
++func TestMissingDependenciesPreservePriorityAndRecoverAcrossUpdates(t *testing.T) {
++	rules := &compiler.Ruleset{Rules: []compiler.Rule{
++		{Name: "last", Priority: 10}, {Name: "first", Priority: 1},
++		{Name: "second", Priority: 1}, {Name: "middle", Priority: 5},
++	}}
++	for i := range rules.Rules {
++		r := &rules.Rules[i]
++		r.Conditions.All = []*compiler.ConditionOrGroup{
++			{Fact: "a", Operator: "GT", Value: 0.0},
++			{Fact: r.Name, Operator: "GT", Value: 0.0},
++			{Fact: "shared", Operator: "GT", Value: 0.0},
++		}
++		r.Actions = []compiler.Action{{Type: "updateStore", Target: "out:" + r.Name, Value: true}}
++	}
++	path := t.TempDir() + "/filter.bytecode"
++	require.NoError(t, compiler.WriteBytecodeToFile(path, mustGenerateBytecode(t, rules)))
++	s := &contextCaptureStore{mGetValues: map[string]interface{}{"shared": 1.0, "last": 1.0, "second": 1.0}}
++	e, err := NewEngineFromFile(path, s, 0)
++	require.NoError(t, err)
++	observer := &recordingExecutionObserver{}
++	e.SetExecutionObserver(observer)
++	all := []string{"first", "second", "middle", "last"}
++	for _, round := range []struct {
++		values map[string]interface{}
++		want   []string
++	}{
++		{s.mGetValues, []string{"second", "last"}},
++		{map[string]interface{}{"shared": 1.0, "last": 1.0, "first": 1.0, "second": 1.0, "middle": 1.0}, all},
++		{map[string]interface{}{}, nil},
++		{s.mGetValues, []string{"second", "last"}},
++	} {
++		s.mGetValues = round.values
++		observer.rulesFired = nil
++		require.NoError(t, e.ProcessFactUpdateContext(context.Background(), "a", 1.0))
++		assert.Equal(t, round.want, observer.rulesFired)
++		assert.Equal(t, all, e.factRuleIndex["a"])
++		assert.ElementsMatch(t, []string{"first", "second", "middle", "last", "shared"}, s.mGetKeys)
++	}
++}
++
++func TestConditionTracingCanBeDisabledWithoutHidingSummariesOrFailures(t *testing.T) {
++	output := captureStructuredLogs(t)
++	s := &contextCaptureStore{}
++	rules := &compiler.Ruleset{Rules: []compiler.Rule{{Name: "r", Priority: 10,
++		Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{Fact: "a", Operator: "GT", Value: 0.0}}},
++		Actions:    []compiler.Action{{Type: "updateStore", Target: "out", Value: true}},
++	}}}
++	path := t.TempDir() + "/trace.bytecode"
++	require.NoError(t, compiler.WriteBytecodeToFile(path, mustGenerateBytecode(t, rules)))
++	e, err := NewEngineFromFile(path, s, 0)
++	require.NoError(t, err)
++	ctx := WithTraceID(context.Background(), "m1-event")
++	e.SetConditionTracing(false)
++	output.Reset()
++	require.NoError(t, e.ProcessFactUpdateContext(ctx, "a", 1.0))
++	events := structuredLogEvents(t, output)
++	assert.Nil(t, findStructuredEvent(events, "rule_condition_evaluated"))
++	for _, name := range []string{"rule_evaluation_candidates", "action_completed", "rule_evaluation_completed"} {
++		event := findStructuredEvent(events, name)
++		require.NotNil(t, event, name)
++		assert.Equal(t, "m1-event", event["trace_id"])
++	}
++	output.Reset()
++	s.setAndPublishErr = errors.New("write failed")
++	require.ErrorIs(t, e.ProcessFactUpdateContext(ctx, "a", 1.0), s.setAndPublishErr)
++	events = structuredLogEvents(t, output)
++	assert.NotNil(t, findStructuredEvent(events, "action_failed"))
++	assert.NotNil(t, findStructuredEvent(events, "rule_evaluation_failed"))
++	assert.Nil(t, findStructuredEvent(events, "rule_condition_evaluated"))
++	s.setAndPublishErr = nil
++	e.SetConditionTracing(true)
++	output.Reset()
++	require.NoError(t, e.ProcessFactUpdateContext(ctx, "a", 1.0))
++	assert.NotNil(t, findStructuredEvent(structuredLogEvents(t, output), "rule_condition_evaluated"))
++}
++
++// Profile the CPU path after the changes without Redis or compiler/setup time.
++// The full cross-version performance comparison uses the unchanged M0 harness.
++func BenchmarkM1DenseEvaluation(b *testing.B) {
++	for _, tc := range []struct {
++		name       string
++		level      zerolog.Level
++		conditions bool
++	}{
++		{"disabled", zerolog.Disabled, true},
++		{"info-conditions", zerolog.InfoLevel, true},
++		{"info-summary", zerolog.InfoLevel, false},
++	} {
++		b.Run(tc.name, func(b *testing.B) { benchmarkM1Dense(b, tc.level, tc.conditions) })
++	}
++}
++
++func benchmarkM1Dense(b *testing.B, level zerolog.Level, conditions bool) {
++	oldLogger, oldLevel := logging.Logger, zerolog.GlobalLevel()
++	logging.Logger = zerolog.New(io.Discard)
++	zerolog.SetGlobalLevel(level)
++	b.Cleanup(func() { logging.Logger = oldLogger; zerolog.SetGlobalLevel(oldLevel) })
++	rules := &compiler.Ruleset{}
++	for i := 0; i < 1000; i++ {
++		rules.Rules = append(rules.Rules, compiler.Rule{Name: fmt.Sprintf("r%d", i), Priority: 10,
++			Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{
++				{Fact: "a", Operator: "GT", Value: 0.0}, {Fact: "b", Operator: "GT", Value: 0.0},
++			}}, Actions: []compiler.Action{{Type: "updateStore", Target: "out", Value: true}},
++		})
++	}
++	path := b.TempDir() + "/profile.bytecode"
++	require.NoError(b, compiler.WriteBytecodeToFile(path, mustGenerateBytecode(b, rules)))
++	s := &contextCaptureStore{mGetValues: map[string]interface{}{"b": 1.0}}
++	e, err := NewEngineFromFile(path, s, 0)
++	require.NoError(b, err)
++	e.SetConditionTracing(conditions)
++	ctx := context.Background()
++	b.ReportAllocs()
++	b.ResetTimer()
++	for i := 0; i < b.N; i++ {
++		if err := e.ProcessFactUpdateContext(ctx, "a", 1.0); err != nil {
++			b.Fatal(err)
++		}
++	}
++}
+--- a/pkg/store/redis_store.go
++++ b/pkg/store/redis_store.go
+@@ -6,7 +6,6 @@
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
+-	"log"
+ 	"rgehrsitz/rex/pkg/eventcontext"
+ 	"rgehrsitz/rex/pkg/logging"
+ 	"strings"
+@@ -168,6 +167,6 @@
+ 		logging.Logger.Error().Err(err).Str("group", group).Str("key", key).Str("event", string(event)).Msg("Failed to publish fact update")
+ 		return err
+ 	}
+-	log.Printf("Published update to group %s: %s", group, string(event))
++	logging.Logger.Debug().Str("event", "fact_published").Str("channel", group).Str("fact_name", key).Msg("Published fact update")
+ 	return nil
+ }
+--- a/pkg/store/store_test.go
++++ b/pkg/store/store_test.go
+@@ -3,17 +3,45 @@
+ package store
+ 
+ import (
++	"bytes"
+ 	"context"
+ 	"encoding/json"
+ 	"fmt"
++	"log"
+ 	"testing"
+ 
+ 	"github.com/alicebob/miniredis/v2"
++	"github.com/rs/zerolog"
+ 	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+ 	"rgehrsitz/rex/pkg/eventcontext"
++	"rgehrsitz/rex/pkg/logging"
+ )
++
++func TestPublicationDiagnosticsUseConfiguredDebugLogger(t *testing.T) {
++	server, s := setupMiniredis(t)
++	defer server.Close()
++	defer s.Close()
++	var structured, standard bytes.Buffer
++	oldLogger, oldLevel, oldWriter := logging.Logger, zerolog.GlobalLevel(), log.Writer()
++	t.Cleanup(func() { logging.Logger = oldLogger; zerolog.SetGlobalLevel(oldLevel); log.SetOutput(oldWriter) })
++	logging.Logger = zerolog.New(&structured)
++	log.SetOutput(&standard)
++	zerolog.SetGlobalLevel(zerolog.InfoLevel)
++	require.NoError(t, s.SetAndPublishFactContext(context.Background(), "weather:status", "private-value"))
++	assert.Empty(t, standard.String(), "publication must not bypass configured logging")
++	assert.Empty(t, structured.String(), "successful publication diagnostics belong at debug")
++	zerolog.SetGlobalLevel(zerolog.DebugLevel)
++	require.NoError(t, s.SetAndPublishFactContext(context.Background(), "weather:status", "private-value"))
++	var event map[string]interface{}
++	require.NoError(t, json.Unmarshal(structured.Bytes(), &event))
++	assert.Equal(t, "fact_published", event["event"])
++	assert.Equal(t, "weather", event["channel"])
++	assert.Equal(t, "weather:status", event["fact_name"])
++	assert.NotContains(t, structured.String(), "private-value")
++	assert.Empty(t, standard.String())
++}
+ 
+ func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *RedisStore) {
+ 	s, err := miniredis.Run()
+--- a/cmd/rexd/main.go
++++ b/cmd/rexd/main.go
+@@ -34,6 +34,7 @@
+ 	LogLevel                string
+ 	LogDestination          string
+ 	LogTimeFormat           string
++	TraceConditions         bool
+ 	RedisAddress            string
+ 	RedisPassword           string
+ 	RedisDB                 int
+@@ -107,6 +108,7 @@
+ 	viper.SetDefault("logging.level", "info")
+ 	viper.SetDefault("logging.output", "console")
+ 	viper.SetDefault("logging.time_format", "unixnano")
++	viper.SetDefault("logging.trace_conditions", true)
+ 	viper.SetDefault("redis.address", "localhost:6379")
+ 	viper.SetDefault("redis.database", 0)
+ 	viper.SetDefault("redis.channels", []string{"rex_updates"})
+@@ -138,6 +140,7 @@
+ 		LogLevel:                viper.GetString("logging.level"),
+ 		LogDestination:          viper.GetString("logging.output"),
+ 		LogTimeFormat:           viper.GetString("logging.time_format"),
++		TraceConditions:         viper.GetBool("logging.trace_conditions"),
+ 		RedisAddress:            viper.GetString("redis.address"),
+ 		RedisPassword:           viper.GetString("redis.password"),
+ 		RedisDB:                 viper.GetInt("redis.database"),
+@@ -160,6 +163,7 @@
+ 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
+ 	}
+ 	engine.SetScriptsEnabled(config.ScriptsEnabled)
++	engine.SetConditionTracing(config.TraceConditions)
+ 	if config.MaxActionsPerEvaluation <= 0 {
+ 		_ = store.Close()
+ 		return nil, fmt.Errorf("engine.max_actions_per_evaluation must be greater than zero")
+--- a/cmd/rexd/rexd_main_test.go
++++ b/cmd/rexd/rexd_main_test.go
+@@ -103,6 +103,7 @@
+ 		"logging.level": "debug",
+ 		"logging.output": "file",
+ 		"logging.time_format": "RFC3339",
++		"logging.trace_conditions": false,
+ 		"redis.address": "localhost:6379",
+ 		"redis.password": "password",
+ 		"redis.database": 1,
+@@ -127,6 +128,7 @@
+ 	assert.Equal(t, "debug", config.LogLevel)
+ 	assert.Equal(t, "file", config.LogDestination)
+ 	assert.Equal(t, "RFC3339", config.LogTimeFormat)
++	assert.False(t, config.TraceConditions)
+ 	assert.Equal(t, "localhost:6379", config.RedisAddress)
+ 	assert.Equal(t, "password", config.RedisPassword)
+ 	assert.Equal(t, 1, config.RedisDB)
+@@ -153,6 +155,7 @@
+ 	config, err := parseConfig([]string{"rexd", "--config", configFile.Name()})
+ 	require.NoError(t, err)
+ 	assert.False(t, config.ScriptsEnabled)
++	assert.True(t, config.TraceConditions)
+ }
+ 
+ func TestSetupDependencies(t *testing.T) {
+--- a/cmd/rexd/rex_config.json
++++ b/cmd/rexd/rex_config.json
+@@ -3,7 +3,8 @@
+   "logging": {
+     "level": "info",
+     "output": "console",
+-    "time_format": "unixnano"
++    "time_format": "unixnano",
++    "trace_conditions": true
+   },
+   "redis": {
+     "address": "localhost:6379",
+--- a/README.md
++++ b/README.md
+@@ -116,7 +116,8 @@
+   "logging": {
+     "level": "debug",
+     "output": "console",
+-    "time_format": "unixnano"
++    "time_format": "unixnano",
++    "trace_conditions": true
+   },
+   "redis": {
+     "address": "localhost:6379",
+@@ -166,6 +167,14 @@
+ `rexd` assigns each incoming event a `trace_id`. A JSON event with several facts keeps that ID for every fact update it contains. At the configured `info` level, the runtime emits structured records for `fact_event_received`, `fact_event_decoded`, `rule_evaluation_candidates`, `rule_condition_evaluated`, `action_completed` (or `action_skipped` / `action_failed`), and `rule_evaluation_completed`. Filter by `trace_id` to follow an event from Redis ingress through its rule and action outcomes.
+ 
+ These trace records identify facts, rules, action types, and targets, but deliberately omit arbitrary fact and action values. Other diagnostic records—including the existing high-priority rule message—may contain values, so use those logs only while investigating a trusted deployment.
++
++Set `logging.trace_conditions` to `false` to omit the per-condition
++`rule_condition_evaluated` records. It defaults to `true` for compatibility.
++Candidate, action, and rule-completion summaries, warnings, and failures remain
++enabled at their configured log levels. Embedded callers can use
++`Engine.SetConditionTracing(false)` before processing events. Successful Redis
++publication diagnostics now use the configured structured logger at `debug`;
++they no longer write event payloads through the standard-library logger.
+ 
+ ### Health and Metrics
+ 

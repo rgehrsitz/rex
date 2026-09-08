@@ -11,7 +11,7 @@ turn an upstream dependency's broad compatibility claim into a Rex guarantee.
 | Source build toolchain | Go `1.26.6` | CI uses the toolchain pinned by `go.mod` | The `go` directive is `1.26.0`; the toolchain directive selects `1.26.6`. |
 | Redis transport | Redis Pub/Sub through `github.com/redis/go-redis/v9` | Unit and integration-style tests use `miniredis` | Validate a production Redis version and deployment topology in staging before treating it as supported for your environment. |
 | Rules source | JSON rulesets accepted by the current `rexc` | Parser, compiler, and fuzz tests | Preserve the source ruleset with every deployed bytecode artifact. |
-| Bytecode | Format version 2 only | Compiler and runtime validation tests | `rexd` rejects format-version 1 and all unknown versions. See [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
+| Bytecode | Format version 3 only | Compiler and runtime validation tests | `rexd` rejects versions 1, 2, and all unknown versions. Recompile retained JSON rulesets with the current `rexc`; see [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
 | Scripts | Otto JavaScript, disabled by default | Runtime tests cover enabled and disabled behavior | Enable only for rulesets from trusted authors; scripts are not sandboxed. |
 
 The upstream `go-redis` project publishes its own supported Redis versions.
@@ -21,6 +21,11 @@ update this matrix rather than silently extending Rex's support statement.
 Ruleset parsing is strict: unknown fields are rejected. The 2026-08-30
 compiler-truthfulness milestone deliberately narrowed source compatibility by
 rejecting hybrid or dual-mode condition groups, duplicate rule names, and
-actions other than `updateStore`. Bytecode format 2 did not change, but
-recompiling source that relied on those previously accepted-invalid shapes now
-returns a compile error instead of producing an unexecutable artifact.
+actions other than `updateStore`. Bytecode format 2 did not change during that
+milestone, but recompiling source that relied on those previously
+accepted-invalid shapes now returns a compile error instead of producing an
+unexecutable artifact.
+
+Bytecode format 3 makes priority ordering deterministic and stores priority in
+the rule execution index. Version-2 artifacts are not accepted because they
+were compiled under source-order execution semantics.

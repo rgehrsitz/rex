@@ -1,0 +1,22 @@
+{
+  "started_utc": "2026-09-08T02:48:13Z",
+  "revision": "dddcdbac40af6a0265fb7c38c748e3ac196f2385",
+  "source_id": "dddcdbac40af+920e6d2895128602badec1a8be184f54d3c8bb4bd1641d353bd31fae7d7196a1",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "go": "go version go1.26.6 darwin/arm64",
+  "gomaxprocs": 2,
+  "redis_binary": "Redis server v=7.4.2 sha=00000000:1 malloc=libc bits=64 build=287d35cfdef6effb",
+  "govulncheck_binary": "/private/tmp/rex-m0/govulncheck: go1.26.6\n\tpath\tgolang.org/x/vuln/cmd/govulncheck\n\tmod\tgolang.org/x/vuln\tv1.1.4\th1:Ju8QsuyhX3Hk8ma3CesTbO8vfJD9EvUBgHvkxHBzj0I=\n\tdep\tgolang.org/x/mod\tv0.22.0\th1:D4nJWe9zXqHOmWqj4VMOJhvzj7bEZg4wEYa759z1pH4=\n\tdep\tgolang.org/x/sync\tv0.10.0\th1:3NQrjDixjgGwUOCaF8w2+VYHv0Ve/vGYSbdkTa98gmQ=\n\tdep\tgolang.org/x/telemetry\tv0.0.0-20240522233618-39ace7a40ae7\th1:FemxDzfMUcK2f3YY4H+05K9CDzbSVr2+q/JKN45pey0=\n\tdep\tgolang.org/x/tools\tv0.29.0\th1:Xx0h3TtM9rzQpQuR4dKLrdglAmCEN5Oi+P74JdhdzXE=\n\tbuild\t-buildmode=exe\n\tbuild\t-compiler=gc\n\tbuild\t-ldflags=-extldflags=-mmacosx-version-min=26.0\n\tbuild\tDefaultGODEBUG=asynctimerchan=1,containermaxprocs=0,cryptocustomrand=1,decoratemappings=0,gotestjsonbuildtext=1,gotypesalias=1,httpcookiemaxnum=0,httpservecontentkeepheaders=1,multipathtcp=0,randseednop=0,rsa1024min=0,tls3des=1,tlsmlkem=0,tlssecpmlkem=0,tlssha1=1,updatemaxprocs=0,urlmaxqueryparams=0,urlstrictcolons=0,winreadlinkvolume=0,winsymlink=0,x509keypairleaf=0,x509negativeserial=1,x509rsacrt=0,x509sha256skid=0,x509usepolicies=0\n\tbuild\tCGO_ENABLED=1\n\tbuild\tCGO_CFLAGS=\n\tbuild\tCGO_CPPFLAGS=\n\tbuild\tCGO_CXXFLAGS=\n\tbuild\tCGO_LDFLAGS=\n\tbuild\tGOARCH=arm64\n\tbuild\tGOOS=darwin\n\tbuild\tGOARM64=v8.0",
+  "runs": 5,
+  "memory_events": 1000,
+  "redis_events": 200,
+  "checks_skipped": false,
+  "measurements": [
+    "memory"
+  ],
+  "warmup": 100,
+  "logging": "disabled and info, both to io.Discard; standard logger to io.Discard",
+  "redis_topology": "single disposable process, TCP IPv4 loopback, persistence disabled, no subscribers",
+  "scope": "synchronous engine API batches; excludes ingress, JSON decoding, and derived-event consumption",
+  "finished_utc": "2026-09-08T02:48:58Z"
+}

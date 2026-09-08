@@ -3,17 +3,45 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"testing"
 
 	"github.com/alicebob/miniredis/v2"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"rgehrsitz/rex/pkg/eventcontext"
+	"rgehrsitz/rex/pkg/logging"
 )
+
+func TestPublicationDiagnosticsUseConfiguredDebugLogger(t *testing.T) {
+	server, s := setupMiniredis(t)
+	defer server.Close()
+	defer s.Close()
+	var structured, standard bytes.Buffer
+	oldLogger, oldLevel, oldWriter := logging.Logger, zerolog.GlobalLevel(), log.Writer()
+	t.Cleanup(func() { logging.Logger = oldLogger; zerolog.SetGlobalLevel(oldLevel); log.SetOutput(oldWriter) })
+	logging.Logger = zerolog.New(&structured)
+	log.SetOutput(&standard)
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	require.NoError(t, s.SetAndPublishFactContext(context.Background(), "weather:status", "private-value"))
+	assert.Empty(t, standard.String(), "publication must not bypass configured logging")
+	assert.Empty(t, structured.String(), "successful publication diagnostics belong at debug")
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	require.NoError(t, s.SetAndPublishFactContext(context.Background(), "weather:status", "private-value"))
+	var event map[string]interface{}
+	require.NoError(t, json.Unmarshal(structured.Bytes(), &event))
+	assert.Equal(t, "fact_published", event["event"])
+	assert.Equal(t, "weather", event["channel"])
+	assert.Equal(t, "weather:status", event["fact_name"])
+	assert.NotContains(t, structured.String(), "private-value")
+	assert.Empty(t, standard.String())
+}
 
 func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *RedisStore) {
 	s, err := miniredis.Run()

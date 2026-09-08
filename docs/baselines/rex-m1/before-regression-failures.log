@@ -1,0 +1,25 @@
+{"level":"info","event":"action_completed","outcome":"succeeded","action_type":"updateStore","action_target":"status","time":"2026-09-07T22:48:12-04:00","message":"Completed action"}
+--- FAIL: TestExecuteActionContextPassesContextToStore (0.00s)
+    engine_test.go:479: 
+        	Error Trace:	/private/tmp/rex-m1/before/pkg/runtime/engine_test.go:479
+        	Error:      	Expected nil, but got: &context.cancelCtx{Context:context.backgroundCtx{emptyCtx:context.emptyCtx{}}, mu:sync.Mutex{_:sync.noCopy{}, mu:sync.Mutex{state:0, sema:0x0}}, done:atomic.Value{v:interface {}(nil)}, children:map[context.canceler]struct {}(nil), err:atomic.Value{v:interface {}(nil)}, cause:error(nil)}
+        	Test:       	TestExecuteActionContextPassesContextToStore
+        	Messages:   	successful actions must not perform a diagnostic read
+FAIL
+FAIL	rgehrsitz/rex/pkg/runtime	0.333s
+{"level":"info","addr":"127.0.0.1:54951","db":0,"time":"2026-09-07T22:48:13-04:00","message":"Connecting to Redis"}
+{"level":"info","time":"2026-09-07T22:48:13-04:00","message":"Successfully connected to Redis"}
+--- FAIL: TestPublicationDiagnosticsUseConfiguredDebugLogger (0.00s)
+    store_test.go:33: 
+        	Error Trace:	/private/tmp/rex-m1/before/pkg/store/store_test.go:33
+        	Error:      	Should be empty, but was 2026/09/07 22:48:13 Published update to group weather: {"weather:status":"private-value"}
+        	Test:       	TestPublicationDiagnosticsUseConfiguredDebugLogger
+        	Messages:   	publication must not bypass configured logging
+    store_test.go:38: 
+        	Error Trace:	/private/tmp/rex-m1/before/pkg/store/store_test.go:38
+        	Error:      	Received unexpected error:
+        	            	unexpected end of JSON input
+        	Test:       	TestPublicationDiagnosticsUseConfiguredDebugLogger
+FAIL
+FAIL	rgehrsitz/rex/pkg/store	0.498s
+FAIL

@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/logging"
 	"strings"
@@ -168,6 +167,6 @@ func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, v
 		logging.Logger.Error().Err(err).Str("group", group).Str("key", key).Str("event", string(event)).Msg("Failed to publish fact update")
 		return err
 	}
-	log.Printf("Published update to group %s: %s", group, string(event))
+	logging.Logger.Debug().Str("event", "fact_published").Str("channel", group).Str("fact_name", key).Msg("Published fact update")
 	return nil
 }

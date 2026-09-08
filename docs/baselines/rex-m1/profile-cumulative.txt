@@ -1,0 +1,28 @@
+File: profile.test
+Type: cpu
+Time: 2026-09-07 22:57:10 EDT
+Duration: 3.82s, Total samples = 3.67s (95.99%)
+Showing nodes accounting for 1.62s, 44.14% of 3.67s total
+Dropped 38 nodes (cum <= 0.02s)
+Showing top 20 nodes out of 104
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      2.31s 62.94%  runtime.systemstack
+         0     0%     0%      1.46s 39.78%  runtime.gcStart.func4
+     1.46s 39.78% 39.78%      1.46s 39.78%  runtime.kevent
+         0     0% 39.78%      1.46s 39.78%  runtime.netpoll
+         0     0% 39.78%      1.46s 39.78%  runtime.startTheWorldWithSema
+     0.03s  0.82% 40.60%      0.94s 25.61%  rgehrsitz/rex/pkg/runtime.(*Engine).ProcessFactUpdateContext
+         0     0% 40.60%      0.94s 25.61%  rgehrsitz/rex/pkg/runtime.BenchmarkM1DenseEvaluation.func1
+         0     0% 40.60%      0.94s 25.61%  rgehrsitz/rex/pkg/runtime.benchmarkM1Dense
+         0     0% 40.60%      0.94s 25.61%  testing.(*B).launch
+         0     0% 40.60%      0.94s 25.61%  testing.(*B).runN
+     0.12s  3.27% 43.87%      0.83s 22.62%  rgehrsitz/rex/pkg/runtime.(*Engine).evaluateRuleContext
+     0.01s  0.27% 44.14%      0.45s 12.26%  runtime.newstack
+         0     0% 44.14%      0.44s 11.99%  runtime.gopreempt_m (inline)
+         0     0% 44.14%      0.44s 11.99%  runtime.goschedImpl
+         0     0% 44.14%      0.44s 11.99%  runtime.morestack
+         0     0% 44.14%      0.40s 10.90%  runtime.lock (inline)
+         0     0% 44.14%      0.40s 10.90%  runtime.lock2
+         0     0% 44.14%      0.40s 10.90%  runtime.lockWithRank (inline)
+         0     0% 44.14%      0.39s 10.63%  runtime.forEachPInternal
+         0     0% 44.14%      0.38s 10.35%  runtime.osyield (inline)

@@ -1,0 +1,21 @@
+goos: darwin
+goarch: arm64
+pkg: rgehrsitz/rex/pkg/runtime
+cpu: Apple M4
+BenchmarkM1DenseEvaluation/disabled-2         	    1389	    996868 ns/op	  352420 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/disabled-2         	    1280	    873097 ns/op	  352416 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/disabled-2         	    1312	   1075375 ns/op	  352416 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/disabled-2         	    2401	    468659 ns/op	  352416 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/disabled-2         	    2840	    457964 ns/op	  352416 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-conditions-2  	    1360	    852933 ns/op	  353552 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-conditions-2  	    1372	    829555 ns/op	  353393 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-conditions-2  	    1585	    756137 ns/op	  353460 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-conditions-2  	    1584	    755161 ns/op	  353522 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-conditions-2  	    1588	    752652 ns/op	  353454 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-summary-2     	    2034	    573754 ns/op	  353521 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-summary-2     	    2101	    570715 ns/op	  353517 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-summary-2     	    2102	    571811 ns/op	  353452 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-summary-2     	    2088	    572724 ns/op	  353264 B/op	    4005 allocs/op
+BenchmarkM1DenseEvaluation/info-summary-2     	    2133	    571225 ns/op	  353404 B/op	    4005 allocs/op
+PASS
+ok  	rgehrsitz/rex/pkg/runtime	20.780s

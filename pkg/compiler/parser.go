@@ -15,6 +15,11 @@ import (
 
 const exclusiveConditionGroupError = "condition group must contain exactly one of all or any"
 
+// DefaultRulePriority is applied when a JSON rule omits its priority.
+const DefaultRulePriority = 10
+
+const maxRulePriority = int64(1<<32 - 1)
+
 // Parse parses the provided JSON data and returns a pointer to a Ruleset and an error.
 func Parse(jsonData []byte) (*Ruleset, error) {
 	var ruleset Ruleset
@@ -30,6 +35,9 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 			err = errors.New("multiple JSON values")
 		}
 		return nil, logging.NewError(logging.ErrorTypeParse, jsonErrorMessage(jsonData, err), err, nil)
+	}
+	if err := applyRuleDefaults(jsonData, &ruleset); err != nil {
+		return nil, logging.NewError(logging.ErrorTypeParse, fmt.Sprintf("Failed to apply rule defaults: %v", err), err, nil)
 	}
 	if len(ruleset.Rules) == 0 {
 		return nil, logging.NewError(logging.ErrorTypeParse, "Missing rules field", nil, nil)
@@ -68,6 +76,29 @@ func Parse(jsonData []byte) (*Ruleset, error) {
 
 	logging.Logger.Debug().Interface("ruleset", ruleset).Msg("Parsed JSON data")
 	return &ruleset, nil
+}
+
+func applyRuleDefaults(jsonData []byte, ruleset *Ruleset) error {
+	var rawRuleset struct {
+		Rules []map[string]json.RawMessage `json:"rules"`
+	}
+	if err := json.Unmarshal(jsonData, &rawRuleset); err != nil {
+		return err
+	}
+	if len(rawRuleset.Rules) != len(ruleset.Rules) {
+		return fmt.Errorf("decoded rule count changed while applying defaults")
+	}
+	for i, fields := range rawRuleset.Rules {
+		rawPriority, present := fields["priority"]
+		if !present {
+			ruleset.Rules[i].Priority = DefaultRulePriority
+			continue
+		}
+		if bytes.Equal(bytes.TrimSpace(rawPriority), []byte("null")) {
+			return fmt.Errorf("rules[%d].priority must be an integer", i)
+		}
+	}
+	return nil
 }
 
 func jsonErrorMessage(data []byte, err error) string {
@@ -119,6 +150,9 @@ func validateRule(rule *Rule) error {
 	}
 	if rule.Priority < 0 {
 		return logging.NewError(logging.ErrorTypeCompile, "Rule priority must be non-negative", nil, map[string]interface{}{"rule_name": rule.Name})
+	}
+	if int64(rule.Priority) > maxRulePriority {
+		return logging.NewError(logging.ErrorTypeCompile, "Rule priority exceeds the bytecode limit", nil, map[string]interface{}{"rule_name": rule.Name})
 	}
 	if err := validateAndOrderConditionGroup(&rule.Conditions); err != nil {
 		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid condition group: %v", err), err, map[string]interface{}{"rule_name": rule.Name})

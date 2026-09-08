@@ -1,0 +1,14 @@
+ok  	rgehrsitz/rex/cmd/rexc	0.282s
+ok  	rgehrsitz/rex/cmd/rexd	3.193s
+ok  	rgehrsitz/rex/pkg	0.494s
+ok  	rgehrsitz/rex/pkg/compiler	0.216s
+ok  	rgehrsitz/rex/pkg/eventcontext	0.159s
+ok  	rgehrsitz/rex/pkg/logging	0.181s
+ok  	rgehrsitz/rex/pkg/observability	0.187s
+ok  	rgehrsitz/rex/pkg/runtime	0.711s
+ok  	rgehrsitz/rex/pkg/scripting	0.333s
+ok  	rgehrsitz/rex/pkg/store	0.213s
+ok  	rgehrsitz/rex/tools/redis_setup	0.197s
+ok  	rgehrsitz/rex/tools/rex_baseline	0.266s
+?   	rgehrsitz/rex/tools/rex_stressor	[no test files]
+ok  	rgehrsitz/rex/tools/rule_gen	0.210s

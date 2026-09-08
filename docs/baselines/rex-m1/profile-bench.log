@@ -1,0 +1,7 @@
+goos: darwin
+goarch: arm64
+pkg: rgehrsitz/rex/pkg/runtime
+cpu: Apple M4
+BenchmarkM1DenseEvaluation/disabled-2         	    9538	    376450 ns/op	  352418 B/op	    4005 allocs/op
+PASS
+ok  	rgehrsitz/rex/pkg/runtime	4.153s

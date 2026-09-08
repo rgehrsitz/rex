@@ -1,0 +1,1710 @@
+[
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "actions-8",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 48167,
+        "min": 48083,
+        "max": 50459,
+        "investigate_above": 52835
+      },
+      "p95_ns": {
+        "median": 52917,
+        "min": 51542,
+        "max": 55375,
+        "investigate_above": 59208
+      },
+      "p99_ns": {
+        "median": 60542,
+        "min": 60208,
+        "max": 64708
+      },
+      "events_per_second": {
+        "median": 20289.18870493561,
+        "min": 19797.03094028473,
+        "max": 20321.778288911144
+      },
+      "allocs_per_event": {
+        "median": 317,
+        "min": 317,
+        "max": 317.001,
+        "investigate_above": 317.00199999999995
+      },
+      "bytes_per_event": {
+        "median": 8504.032,
+        "min": 8504.016,
+        "max": 8504.144,
+        "investigate_above": 8504.272
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": 96
+      },
+      "facts_retained": {
+        "median": 85,
+        "min": 85,
+        "max": 85
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 80.0,
+      "set": 0.0,
+      "set_publish": 80.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "batch-8",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 365542,
+        "min": 364000,
+        "max": 371334,
+        "investigate_above": 378668
+      },
+      "p95_ns": {
+        "median": 422792,
+        "min": 413209,
+        "max": 437417,
+        "investigate_above": 461625
+      },
+      "p99_ns": {
+        "median": 496917,
+        "min": 470208,
+        "max": 519625
+      },
+      "events_per_second": {
+        "median": 2680.423493509857,
+        "min": 2634.2669394889126,
+        "max": 2696.389565649714
+      },
+      "allocs_per_event": {
+        "median": 1712,
+        "min": 1712,
+        "max": 1712,
+        "investigate_above": 1712
+      },
+      "bytes_per_event": {
+        "median": 108736.256,
+        "min": 108736.176,
+        "max": 108736.304,
+        "investigate_above": 108736.432
+      },
+      "retained_delta_bytes": {
+        "median": -128,
+        "min": -128,
+        "max": -128
+      },
+      "facts_retained": {
+        "median": 22,
+        "min": 22,
+        "max": 22
+      }
+    },
+    "calls_per_event": {
+      "mget": 8.0,
+      "dependency_keys": 88.0,
+      "get": 80.0,
+      "set": 0.0,
+      "set_publish": 80.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "dense-1000",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 3165917,
+        "min": 3163000,
+        "max": 3176292,
+        "investigate_above": 3189584
+      },
+      "p95_ns": {
+        "median": 3314541,
+        "min": 3299250,
+        "max": 3340041,
+        "investigate_above": 3380832
+      },
+      "p99_ns": {
+        "median": 3398583,
+        "min": 3348833,
+        "max": 3597250
+      },
+      "events_per_second": {
+        "median": 313.38466286841845,
+        "min": 310.91079240684223,
+        "max": 313.7469808061366
+      },
+      "allocs_per_event": {
+        "median": 10007.002,
+        "min": 10007,
+        "max": 10007.022,
+        "investigate_above": 10007.044000000002
+      },
+      "bytes_per_event": {
+        "median": 464505.328,
+        "min": 464504.848,
+        "max": 464507.584,
+        "investigate_above": 464510.31999999995
+      },
+      "retained_delta_bytes": {
+        "median": 208,
+        "min": -16,
+        "max": 2448
+      },
+      "facts_retained": {
+        "median": 1005,
+        "min": 1005,
+        "max": 1005
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 1000.0,
+      "set": 0.0,
+      "set_publish": 1000.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "dependencies-32",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 67833,
+        "min": 67250,
+        "max": 68416,
+        "investigate_above": 69582
+      },
+      "p95_ns": {
+        "median": 90833,
+        "min": 89583,
+        "max": 100292,
+        "investigate_above": 111001
+      },
+      "p99_ns": {
+        "median": 127292,
+        "min": 121750,
+        "max": 131083
+      },
+      "events_per_second": {
+        "median": 14082.325273549168,
+        "min": 13798.583293933778,
+        "max": 14255.031958569973
+      },
+      "allocs_per_event": {
+        "median": 469.001,
+        "min": 469,
+        "max": 469.002,
+        "investigate_above": 469.004
+      },
+      "bytes_per_event": {
+        "median": 57144.24,
+        "min": 57144.112,
+        "max": 57144.336,
+        "investigate_above": 57144.560000000005
+      },
+      "retained_delta_bytes": {
+        "median": 96,
+        "min": -16,
+        "max": 208
+      },
+      "facts_retained": {
+        "median": 43,
+        "min": 43,
+        "max": 43
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 32.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "match-half",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 39250,
+        "min": 38667,
+        "max": 39625,
+        "investigate_above": 40583
+      },
+      "p95_ns": {
+        "median": 42250,
+        "min": 41958,
+        "max": 42500,
+        "investigate_above": 43042
+      },
+      "p99_ns": {
+        "median": 45291,
+        "min": 43750,
+        "max": 49916
+      },
+      "events_per_second": {
+        "median": 25715.066570650037,
+        "min": 25611.418840845625,
+        "max": 26218.79098652501
+      },
+      "allocs_per_event": {
+        "median": 82,
+        "min": 82,
+        "max": 82,
+        "investigate_above": 82
+      },
+      "bytes_per_event": {
+        "median": 4664.016,
+        "min": 4664.016,
+        "max": 4664.016,
+        "investigate_above": 4664.016
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 5.0,
+      "set": 0.0,
+      "set_publish": 5.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "match-none",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 36167,
+        "min": 35833,
+        "max": 36208,
+        "investigate_above": 36583
+      },
+      "p95_ns": {
+        "median": 40792,
+        "min": 38542,
+        "max": 43500,
+        "investigate_above": 48458
+      },
+      "p99_ns": {
+        "median": 44541,
+        "min": 41042,
+        "max": 60541
+      },
+      "events_per_second": {
+        "median": 27059.266314511962,
+        "min": 26479.22342157217,
+        "max": 27385.192782446222
+      },
+      "allocs_per_event": {
+        "median": 47,
+        "min": 47,
+        "max": 47,
+        "investigate_above": 47
+      },
+      "bytes_per_event": {
+        "median": 4104,
+        "min": 4104,
+        "max": 4104.016,
+        "investigate_above": 4104.031999999999
+      },
+      "retained_delta_bytes": {
+        "median": -32,
+        "min": -32,
+        "max": -32
+      },
+      "facts_retained": {
+        "median": 5,
+        "min": 5,
+        "max": 5
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 0.0,
+      "set": 0.0,
+      "set_publish": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "missing-half",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 7917875,
+        "min": 7740042,
+        "max": 7942583,
+        "investigate_above": 8145124
+      },
+      "p95_ns": {
+        "median": 8114209,
+        "min": 7891000,
+        "max": 8168958,
+        "investigate_above": 8446916
+      },
+      "p99_ns": {
+        "median": 8289958,
+        "min": 8072208,
+        "max": 8546375
+      },
+      "events_per_second": {
+        "median": 126.11690510565215,
+        "min": 125.15448299681056,
+        "max": 128.8909423180871
+      },
+      "allocs_per_event": {
+        "median": 535,
+        "min": 535,
+        "max": 535,
+        "investigate_above": 535
+      },
+      "bytes_per_event": {
+        "median": 91336.16,
+        "min": 91336.08,
+        "max": 91336.224,
+        "investigate_above": 91336.368
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 401,
+        "min": 401,
+        "max": 401
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 400.0,
+      "get": 50.0,
+      "set": 0.0,
+      "set_publish": 50.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "shared-100",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 377625,
+        "min": 377083,
+        "max": 378959,
+        "investigate_above": 380835
+      },
+      "p95_ns": {
+        "median": 402959,
+        "min": 398042,
+        "max": 410375,
+        "investigate_above": 422708
+      },
+      "p99_ns": {
+        "median": 454417,
+        "min": 444458,
+        "max": 472167
+      },
+      "events_per_second": {
+        "median": 2614.79523048276,
+        "min": 2609.522473696829,
+        "max": 2619.9772125385957
+      },
+      "allocs_per_event": {
+        "median": 1007,
+        "min": 1007,
+        "max": 1007.002,
+        "investigate_above": 1007.0039999999999
+      },
+      "bytes_per_event": {
+        "median": 46904.128,
+        "min": 46904.112,
+        "max": 46904.32,
+        "investigate_above": 46904.528
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": 208
+      },
+      "facts_retained": {
+        "median": 105,
+        "min": 105,
+        "max": 105
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 100.0,
+      "set": 0.0,
+      "set_publish": 100.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-100",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 10833,
+        "min": 9167,
+        "max": 17583,
+        "investigate_above": 25999
+      },
+      "p95_ns": {
+        "median": 11875,
+        "min": 10125,
+        "max": 21166,
+        "investigate_above": 32207
+      },
+      "p99_ns": {
+        "median": 16917,
+        "min": 12709,
+        "max": 25292
+      },
+      "events_per_second": {
+        "median": 89271.7655723436,
+        "min": 56314.496641037375,
+        "max": 106019.24249251239
+      },
+      "allocs_per_event": {
+        "median": 107,
+        "min": 107,
+        "max": 107,
+        "investigate_above": 107
+      },
+      "bytes_per_event": {
+        "median": 5144.016,
+        "min": 5144,
+        "max": 5144.016,
+        "investigate_above": 5144.031999999999
+      },
+      "retained_delta_bytes": {
+        "median": -33664,
+        "min": -33664,
+        "max": -33664
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-100",
+    "churn": 1,
+    "runs": 3,
+    "events_per_run": 10000,
+    "metrics": {
+      "p50_ns": {
+        "median": 83,
+        "min": 83,
+        "max": 83,
+        "investigate_above": 83
+      },
+      "p95_ns": {
+        "median": 125,
+        "min": 84,
+        "max": 125,
+        "investigate_above": 166
+      },
+      "p99_ns": {
+        "median": 125,
+        "min": 125,
+        "max": 125
+      },
+      "events_per_second": {
+        "median": 8713647.750789674,
+        "min": 8476372.112735748,
+        "max": 8844665.561083471
+      },
+      "allocs_per_event": {
+        "median": 2.0001,
+        "min": 2.0001,
+        "max": 2.0001,
+        "investigate_above": 2.0001
+      },
+      "bytes_per_event": {
+        "median": 32.0264,
+        "min": 32.0264,
+        "max": 32.0264,
+        "investigate_above": 32.0264
+      },
+      "retained_delta_bytes": {
+        "median": -33120,
+        "min": -33120,
+        "max": -33120
+      },
+      "facts_retained": {
+        "median": 16,
+        "min": 16,
+        "max": 16
+      }
+    },
+    "calls_per_event": {
+      "mget": 0.0,
+      "dependency_keys": 0.0,
+      "get": 0.0,
+      "set": 0.0,
+      "set_publish": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-100",
+    "churn": 1000,
+    "runs": 3,
+    "events_per_run": 10000,
+    "metrics": {
+      "p50_ns": {
+        "median": 83,
+        "min": 83,
+        "max": 84,
+        "investigate_above": 85
+      },
+      "p95_ns": {
+        "median": 125,
+        "min": 125,
+        "max": 125,
+        "investigate_above": 125
+      },
+      "p99_ns": {
+        "median": 125,
+        "min": 125,
+        "max": 125
+      },
+      "events_per_second": {
+        "median": 7769253.180538021,
+        "min": 7691319.653552198,
+        "max": 7850834.1511285575
+      },
+      "allocs_per_event": {
+        "median": 2.7456,
+        "min": 2.7456,
+        "max": 2.7459,
+        "investigate_above": 2.7461999999999995
+      },
+      "bytes_per_event": {
+        "median": 53.7976,
+        "min": 53.7976,
+        "max": 53.8232,
+        "investigate_above": 53.8488
+      },
+      "retained_delta_bytes": {
+        "median": 85616,
+        "min": 85616,
+        "max": 90936
+      },
+      "facts_retained": {
+        "median": 1015,
+        "min": 1015,
+        "max": 1015
+      }
+    },
+    "calls_per_event": {
+      "mget": 0.0,
+      "dependency_keys": 0.0,
+      "get": 0.0,
+      "set": 0.0,
+      "set_publish": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-100",
+    "churn": 10000,
+    "runs": 3,
+    "events_per_run": 10000,
+    "metrics": {
+      "p50_ns": {
+        "median": 84,
+        "min": 84,
+        "max": 84,
+        "investigate_above": 84
+      },
+      "p95_ns": {
+        "median": 125,
+        "min": 125,
+        "max": 125,
+        "investigate_above": 125
+      },
+      "p99_ns": {
+        "median": 167,
+        "min": 167,
+        "max": 167
+      },
+      "events_per_second": {
+        "median": 6643785.469509675,
+        "min": 6388584.366367426,
+        "max": 6687473.626275887
+      },
+      "allocs_per_event": {
+        "median": 2.9822,
+        "min": 2.9819,
+        "max": 2.9822,
+        "investigate_above": 2.9825000000000004
+      },
+      "bytes_per_event": {
+        "median": 170.4664,
+        "min": 170.4408,
+        "max": 170.4664,
+        "investigate_above": 170.492
+      },
+      "retained_delta_bytes": {
+        "median": 1019600,
+        "min": 1019600,
+        "max": 1019600
+      },
+      "facts_retained": {
+        "median": 10015,
+        "min": 10015,
+        "max": 10015
+      }
+    },
+    "calls_per_event": {
+      "mget": 0.0,
+      "dependency_keys": 0.0,
+      "get": 0.0,
+      "set": 0.0,
+      "set_publish": 0.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-1000",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 38917,
+        "min": 38792,
+        "max": 38959,
+        "investigate_above": 39126
+      },
+      "p95_ns": {
+        "median": 42375,
+        "min": 42000,
+        "max": 45750,
+        "investigate_above": 49500
+      },
+      "p99_ns": {
+        "median": 49708,
+        "min": 48708,
+        "max": 51834
+      },
+      "events_per_second": {
+        "median": 25173.64528783093,
+        "min": 24575.660064751457,
+        "max": 25341.90474266905
+      },
+      "allocs_per_event": {
+        "median": 107,
+        "min": 107,
+        "max": 107.001,
+        "investigate_above": 107.00200000000001
+      },
+      "bytes_per_event": {
+        "median": 5144.016,
+        "min": 5144.016,
+        "max": 5144.128,
+        "investigate_above": 5144.24
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": 96
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "sparse-10000",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 332750,
+        "min": 331750,
+        "max": 333750,
+        "investigate_above": 335750
+      },
+      "p95_ns": {
+        "median": 350625,
+        "min": 348833,
+        "max": 357209,
+        "investigate_above": 365585
+      },
+      "p99_ns": {
+        "median": 379917,
+        "min": 368209,
+        "max": 398959
+      },
+      "events_per_second": {
+        "median": 2970.4867261617333,
+        "min": 2955.5314433448634,
+        "max": 2988.7075480953804
+      },
+      "allocs_per_event": {
+        "median": 107,
+        "min": 107,
+        "max": 107,
+        "investigate_above": 107
+      },
+      "bytes_per_event": {
+        "median": 5144.016,
+        "min": 5144.016,
+        "max": 5144.016,
+        "investigate_above": 5144.016
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "disabled-discard",
+    "fixture": "unique-100",
+    "churn": 0,
+    "runs": 5,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 403209,
+        "min": 402958,
+        "max": 403792,
+        "investigate_above": 404626
+      },
+      "p95_ns": {
+        "median": 470375,
+        "min": 464583,
+        "max": 494834,
+        "investigate_above": 525085
+      },
+      "p99_ns": {
+        "median": 540583,
+        "min": 528750,
+        "max": 555459
+      },
+      "events_per_second": {
+        "median": 2424.9218902953844,
+        "min": 2421.6947543946,
+        "max": 2428.576329091521
+      },
+      "allocs_per_event": {
+        "median": 1029,
+        "min": 1029,
+        "max": 1029.001,
+        "investigate_above": 1029.002
+      },
+      "bytes_per_event": {
+        "median": 110632.32,
+        "min": 110632.288,
+        "max": 110632.464,
+        "investigate_above": 110632.64000000001
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": 96
+      },
+      "facts_retained": {
+        "median": 501,
+        "min": 501,
+        "max": 501
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 400.0,
+      "get": 100.0,
+      "set": 0.0,
+      "set_publish": 100.0
+    }
+  },
+  {
+    "mode": "memory",
+    "logging": "info-discard",
+    "fixture": "shared-100",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 1000,
+    "metrics": {
+      "p50_ns": {
+        "median": 475625,
+        "min": 475000,
+        "max": 477583,
+        "investigate_above": 480166
+      },
+      "p95_ns": {
+        "median": 491375,
+        "min": 488250,
+        "max": 492709,
+        "investigate_above": 497168
+      },
+      "p99_ns": {
+        "median": 594125,
+        "min": 590791,
+        "max": 599084
+      },
+      "events_per_second": {
+        "median": 2087.7516813619436,
+        "min": 2080.270533690992,
+        "max": 2089.673096764925
+      },
+      "allocs_per_event": {
+        "median": 1007.056,
+        "min": 1007.053,
+        "max": 1007.06,
+        "investigate_above": 1007.0669999999999
+      },
+      "bytes_per_event": {
+        "median": 46920.2,
+        "min": 46919.464,
+        "max": 46929.544,
+        "investigate_above": 46939.624
+      },
+      "retained_delta_bytes": {
+        "median": 432,
+        "min": -1504,
+        "max": 544
+      },
+      "facts_retained": {
+        "median": 105,
+        "min": 105,
+        "max": 105
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 100.0,
+      "set": 0.0,
+      "set_publish": 100.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "actions-8",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 18167750,
+        "min": 18099333,
+        "max": 18187000,
+        "investigate_above": 18274667
+      },
+      "p95_ns": {
+        "median": 18729167,
+        "min": 18411375,
+        "max": 19017000,
+        "investigate_above": 19622625
+      },
+      "p99_ns": {
+        "median": 19034708,
+        "min": 18691500,
+        "max": 19147458
+      },
+      "events_per_second": {
+        "median": 54.94559836306073,
+        "min": 54.50547107604823,
+        "max": 55.24072943173586
+      },
+      "allocs_per_event": {
+        "median": 3391.24,
+        "min": 3391.24,
+        "max": 3391.24,
+        "investigate_above": 3391.24
+      },
+      "bytes_per_event": {
+        "median": 130646.4,
+        "min": 130646.08,
+        "max": 130646.4,
+        "investigate_above": 130646.71999999999
+      },
+      "retained_delta_bytes": {
+        "median": -192,
+        "min": -208,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 85,
+        "min": 85,
+        "max": 85
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 80.0,
+      "set": 0.0,
+      "set_publish": 80.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "batch-8",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 19011041,
+        "min": 18875125,
+        "max": 19082709,
+        "investigate_above": 19290293
+      },
+      "p95_ns": {
+        "median": 19678875,
+        "min": 19300708,
+        "max": 19908958,
+        "investigate_above": 20517208
+      },
+      "p99_ns": {
+        "median": 19929458,
+        "min": 19360875,
+        "max": 20166250
+      },
+      "events_per_second": {
+        "median": 52.49507332818151,
+        "min": 52.3169749488013,
+        "max": 52.54425984547202
+      },
+      "allocs_per_event": {
+        "median": 5424.32,
+        "min": 5424.24,
+        "max": 5424.44,
+        "investigate_above": 5424.639999999999
+      },
+      "bytes_per_event": {
+        "median": 254945.44,
+        "min": 254941.44,
+        "max": 254950.72,
+        "investigate_above": 254960.0
+      },
+      "retained_delta_bytes": {
+        "median": -80,
+        "min": -240,
+        "max": -80
+      },
+      "facts_retained": {
+        "median": 22,
+        "min": 22,
+        "max": 22
+      }
+    },
+    "calls_per_event": {
+      "mget": 8.0,
+      "dependency_keys": 88.0,
+      "get": 80.0,
+      "set": 0.0,
+      "set_publish": 80.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "dense-1000",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 228114333,
+        "min": 226162916,
+        "max": 232229208,
+        "investigate_above": 238295500
+      },
+      "p95_ns": {
+        "median": 238251292,
+        "min": 232222000,
+        "max": 243904000,
+        "investigate_above": 255586000
+      },
+      "p99_ns": {
+        "median": 240678625,
+        "min": 238058583,
+        "max": 266518250
+      },
+      "events_per_second": {
+        "median": 4.315235420040857,
+        "min": 4.295655283500549,
+        "max": 4.40617572300015
+      },
+      "allocs_per_event": {
+        "median": 48044.2,
+        "min": 48044.05,
+        "max": 48044.32,
+        "investigate_above": 48044.59
+      },
+      "bytes_per_event": {
+        "median": 1977982.08,
+        "min": 1977977.52,
+        "max": 1977987.2,
+        "investigate_above": 1977996.88
+      },
+      "retained_delta_bytes": {
+        "median": -32,
+        "min": -48,
+        "max": 160
+      },
+      "facts_retained": {
+        "median": 1005,
+        "min": 1005,
+        "max": 1005
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 1000.0,
+      "set": 0.0,
+      "set_publish": 1000.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "dependencies-32",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 2425416,
+        "min": 2403916,
+        "max": 2533625,
+        "investigate_above": 2663334
+      },
+      "p95_ns": {
+        "median": 2551292,
+        "min": 2509792,
+        "max": 4177125,
+        "investigate_above": 5844458
+      },
+      "p99_ns": {
+        "median": 2728958,
+        "min": 2549542,
+        "max": 6354292
+      },
+      "events_per_second": {
+        "median": 414.94651109176715,
+        "min": 365.87301188035406,
+        "max": 416.43755313587013
+      },
+      "allocs_per_event": {
+        "median": 1084.12,
+        "min": 1084.08,
+        "max": 1084.12,
+        "investigate_above": 1084.1599999999999
+      },
+      "bytes_per_event": {
+        "median": 82372.64,
+        "min": 82371.04,
+        "max": 82372.96,
+        "investigate_above": 82374.88000000002
+      },
+      "retained_delta_bytes": {
+        "median": -208,
+        "min": -208,
+        "max": -192
+      },
+      "facts_retained": {
+        "median": 43,
+        "min": 43,
+        "max": 43
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 32.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "match-half",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 125083,
+        "min": 125042,
+        "max": 125292,
+        "investigate_above": 125542
+      },
+      "p95_ns": {
+        "median": 2454041,
+        "min": 2414041,
+        "max": 2456666,
+        "investigate_above": 2499291
+      },
+      "p99_ns": {
+        "median": 2491250,
+        "min": 2459292,
+        "max": 2495708
+      },
+      "events_per_second": {
+        "median": 799.9429352707696,
+        "min": 795.8712871748892,
+        "max": 804.9736617850193
+      },
+      "allocs_per_event": {
+        "median": 306.02,
+        "min": 306.02,
+        "max": 306.02,
+        "investigate_above": 306.02
+      },
+      "bytes_per_event": {
+        "median": 13386.64,
+        "min": 13386.64,
+        "max": 13386.64,
+        "investigate_above": 13386.64
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -192,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 5.0,
+      "set": 0.0,
+      "set_publish": 5.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "match-none",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 114459,
+        "min": 114083,
+        "max": 115166,
+        "investigate_above": 116249
+      },
+      "p95_ns": {
+        "median": 122417,
+        "min": 121875,
+        "max": 127208,
+        "investigate_above": 132541
+      },
+      "p99_ns": {
+        "median": 125917,
+        "min": 124958,
+        "max": 130167
+      },
+      "events_per_second": {
+        "median": 8655.229991964485,
+        "min": 8601.102867814123,
+        "max": 8693.982929190639
+      },
+      "allocs_per_event": {
+        "median": 81,
+        "min": 81,
+        "max": 81,
+        "investigate_above": 81
+      },
+      "bytes_per_event": {
+        "median": 5264,
+        "min": 5264,
+        "max": 5264,
+        "investigate_above": 5264
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 5,
+        "min": 5,
+        "max": 5
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 0.0,
+      "set": 0.0,
+      "set_publish": 0.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "missing-half",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 19175459,
+        "min": 19096958,
+        "max": 19337375,
+        "investigate_above": 19577792
+      },
+      "p95_ns": {
+        "median": 19430666,
+        "min": 19379041,
+        "max": 19986167,
+        "investigate_above": 20593293
+      },
+      "p99_ns": {
+        "median": 19542459,
+        "min": 19492917,
+        "max": 20061958
+      },
+      "events_per_second": {
+        "median": 52.08617048331649,
+        "min": 51.47166275167023,
+        "max": 52.2675207826286
+      },
+      "allocs_per_event": {
+        "median": 4952.52,
+        "min": 4952.48,
+        "max": 4952.58,
+        "investigate_above": 4952.68
+      },
+      "bytes_per_event": {
+        "median": 273749.12,
+        "min": 273747.36,
+        "max": 273753.04,
+        "investigate_above": 273758.72
+      },
+      "retained_delta_bytes": {
+        "median": -32,
+        "min": -208,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 401,
+        "min": 401,
+        "max": 401
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 400.0,
+      "get": 50.0,
+      "set": 0.0,
+      "set_publish": 50.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "shared-100",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 22681209,
+        "min": 22657416,
+        "max": 22731125,
+        "investigate_above": 22804834
+      },
+      "p95_ns": {
+        "median": 23168334,
+        "min": 23142708,
+        "max": 23181042,
+        "investigate_above": 23219376
+      },
+      "p99_ns": {
+        "median": 23256542,
+        "min": 23213625,
+        "max": 23370792
+      },
+      "events_per_second": {
+        "median": 44.050165295580236,
+        "min": 43.97416034364047,
+        "max": 44.05685991734217
+      },
+      "allocs_per_event": {
+        "median": 4841.28,
+        "min": 4841.25,
+        "max": 4841.32,
+        "investigate_above": 4841.389999999999
+      },
+      "bytes_per_event": {
+        "median": 199291.52,
+        "min": 199291.2,
+        "max": 199293.92,
+        "investigate_above": 199296.64
+      },
+      "retained_delta_bytes": {
+        "median": -32,
+        "min": -48,
+        "max": -16
+      },
+      "facts_retained": {
+        "median": 105,
+        "min": 105,
+        "max": 105
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 100.0,
+      "set": 0.0,
+      "set_publish": 100.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "sparse-100",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 2285125,
+        "min": 2279208,
+        "max": 2285167,
+        "investigate_above": 2291126
+      },
+      "p95_ns": {
+        "median": 2342500,
+        "min": 2321542,
+        "max": 2365667,
+        "investigate_above": 2409792
+      },
+      "p99_ns": {
+        "median": 2376583,
+        "min": 2339375,
+        "max": 2524542
+      },
+      "events_per_second": {
+        "median": 436.1387479999604,
+        "min": 435.30197315767845,
+        "max": 438.18433273846307
+      },
+      "allocs_per_event": {
+        "median": 521.02,
+        "min": 521.02,
+        "max": 521.03,
+        "investigate_above": 521.04
+      },
+      "bytes_per_event": {
+        "median": 21426.8,
+        "min": 21426.8,
+        "max": 21427.6,
+        "investigate_above": 21428.399999999998
+      },
+      "retained_delta_bytes": {
+        "median": -176,
+        "min": -176,
+        "max": -32
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "sparse-1000",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 2327958,
+        "min": 2326125,
+        "max": 2328833,
+        "investigate_above": 2331541
+      },
+      "p95_ns": {
+        "median": 2436125,
+        "min": 2404250,
+        "max": 2461375,
+        "investigate_above": 2518500
+      },
+      "p99_ns": {
+        "median": 2519875,
+        "min": 2445375,
+        "max": 2603333
+      },
+      "events_per_second": {
+        "median": 427.41039814359937,
+        "min": 426.48075835887255,
+        "max": 428.1946166970286
+      },
+      "allocs_per_event": {
+        "median": 521.12,
+        "min": 521.04,
+        "max": 521.12,
+        "investigate_above": 521.2
+      },
+      "bytes_per_event": {
+        "median": 21433.12,
+        "min": 21429.44,
+        "max": 21433.28,
+        "investigate_above": 21437.12
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -16,
+        "max": 160
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "sparse-10000",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 2672042,
+        "min": 2663709,
+        "max": 2688292,
+        "investigate_above": 2712875
+      },
+      "p95_ns": {
+        "median": 2732583,
+        "min": 2703625,
+        "max": 2754333,
+        "investigate_above": 2805041
+      },
+      "p99_ns": {
+        "median": 2752750,
+        "min": 2719583,
+        "max": 2799834
+      },
+      "events_per_second": {
+        "median": 373.56638157487527,
+        "min": 371.4971307994923,
+        "max": 375.26514828133253
+      },
+      "allocs_per_event": {
+        "median": 521.06,
+        "min": 521.02,
+        "max": 521.07,
+        "investigate_above": 521.1200000000001
+      },
+      "bytes_per_event": {
+        "median": 21428.56,
+        "min": 21426.64,
+        "max": 21429.84,
+        "investigate_above": 21433.04
+      },
+      "retained_delta_bytes": {
+        "median": 0,
+        "min": -32,
+        "max": 48
+      },
+      "facts_retained": {
+        "median": 15,
+        "min": 15,
+        "max": 15
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 4.0,
+      "get": 10.0,
+      "set": 0.0,
+      "set_publish": 10.0
+    }
+  },
+  {
+    "mode": "redis",
+    "logging": "disabled-discard",
+    "fixture": "unique-100",
+    "churn": 0,
+    "runs": 3,
+    "events_per_run": 100,
+    "metrics": {
+      "p50_ns": {
+        "median": 22916625,
+        "min": 22822792,
+        "max": 22939917,
+        "investigate_above": 23057042
+      },
+      "p95_ns": {
+        "median": 23172375,
+        "min": 23151500,
+        "max": 23349208,
+        "investigate_above": 23546916
+      },
+      "p99_ns": {
+        "median": 23268458,
+        "min": 23241458,
+        "max": 23430417
+      },
+      "events_per_second": {
+        "median": 43.647314357090764,
+        "min": 43.62278981045789,
+        "max": 43.79300563750383
+      },
+      "allocs_per_event": {
+        "median": 7646.64,
+        "min": 7646.56,
+        "max": 7646.64,
+        "investigate_above": 7646.72
+      },
+      "bytes_per_event": {
+        "median": 378421.6,
+        "min": 378419.36,
+        "max": 378422.4,
+        "investigate_above": 378425.44000000006
+      },
+      "retained_delta_bytes": {
+        "median": -16,
+        "min": -192,
+        "max": 160
+      },
+      "facts_retained": {
+        "median": 501,
+        "min": 501,
+        "max": 501
+      }
+    },
+    "calls_per_event": {
+      "mget": 1.0,
+      "dependency_keys": 400.0,
+      "get": 100.0,
+      "set": 0.0,
+      "set_publish": 100.0
+    }
+  }
+]

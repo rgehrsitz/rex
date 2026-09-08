@@ -774,3 +774,22 @@ func TestGenerateBytecodeIsConcurrentSafe(t *testing.T) {
 		assert.Equal(t, expected, result.instructions)
 	}
 }
+
+func TestCheckedBytecodeSize(t *testing.T) {
+	maxInt := int(^uint(0) >> 1)
+	for _, tc := range []struct {
+		a, b, want int
+		invalid    bool
+	}{
+		{0, 0, 0, false}, {12, 34, 46, false}, {maxInt - 1, 1, maxInt, false},
+		{maxInt, 1, 0, true}, {1, maxInt, 0, true}, {-1, 0, 0, true}, {0, -1, 0, true},
+	} {
+		got, err := checkedBytecodeSize(tc.a, tc.b)
+		if tc.invalid {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		}
+	}
+}

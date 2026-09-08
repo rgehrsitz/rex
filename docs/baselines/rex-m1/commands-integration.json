@@ -1,0 +1,54 @@
+[
+  {
+    "check": "harness-build",
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-4q0yt0u9/rex_baseline",
+      "./tools/rex_baseline"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.424
+  },
+  {
+    "check": "redis",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-4q0yt0u9/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+920e6d2895128602badec1a8be184f54d3c8bb4bd1641d353bd31fae7d7196a1",
+      "-runs",
+      "3",
+      "-warmup",
+      "100",
+      "-mode",
+      "redis",
+      "-redis",
+      "127.0.0.1:55166",
+      "-events",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 135.649
+  },
+  {
+    "check": "logging-info",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-4q0yt0u9/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+920e6d2895128602badec1a8be184f54d3c8bb4bd1641d353bd31fae7d7196a1",
+      "-runs",
+      "3",
+      "-warmup",
+      "100",
+      "-fixture",
+      "shared-100",
+      "-events",
+      "1000",
+      "-log-level",
+      "info"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.572
+  }
+]

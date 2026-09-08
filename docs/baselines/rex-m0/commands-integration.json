@@ -1,0 +1,114 @@
+[
+  {
+    "check": "harness-build",
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-0qj65rw0/rex_baseline",
+      "./tools/rex_baseline"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.069
+  },
+  {
+    "check": "redis",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-0qj65rw0/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+6c7b2197f7dfcdf92561317d97e401a41f6abb17d0466390888bcf720e246d25",
+      "-runs",
+      "3",
+      "-warmup",
+      "100",
+      "-mode",
+      "redis",
+      "-redis",
+      "127.0.0.1:54020",
+      "-events",
+      "100"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 207.264
+  },
+  {
+    "check": "logging-info",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-0qj65rw0/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+6c7b2197f7dfcdf92561317d97e401a41f6abb17d0466390888bcf720e246d25",
+      "-runs",
+      "3",
+      "-warmup",
+      "100",
+      "-fixture",
+      "shared-100",
+      "-events",
+      "1000",
+      "-log-level",
+      "info"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 1.615
+  },
+  {
+    "check": "churn-1",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-0qj65rw0/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+6c7b2197f7dfcdf92561317d97e401a41f6abb17d0466390888bcf720e246d25",
+      "-runs",
+      "3",
+      "-warmup",
+      "100",
+      "-fixture",
+      "sparse-100",
+      "-events",
+      "10000",
+      "-churn",
+      "1"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.017
+  },
+  {
+    "check": "churn-1000",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-0qj65rw0/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+6c7b2197f7dfcdf92561317d97e401a41f6abb17d0466390888bcf720e246d25",
+      "-runs",
+      "3",
+      "-warmup",
+      "100",
+      "-fixture",
+      "sparse-100",
+      "-events",
+      "10000",
+      "-churn",
+      "1000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.017
+  },
+  {
+    "check": "churn-10000",
+    "command": [
+      "/var/folders/x5/9x56n5rs6fl4mnwn5b289h_r0000gn/T/rex-m0-0qj65rw0/rex_baseline",
+      "-source-id",
+      "dddcdbac40af+6c7b2197f7dfcdf92561317d97e401a41f6abb17d0466390888bcf720e246d25",
+      "-runs",
+      "3",
+      "-warmup",
+      "100",
+      "-fixture",
+      "sparse-100",
+      "-events",
+      "10000",
+      "-churn",
+      "10000"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.018
+  }
+]
