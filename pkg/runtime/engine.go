@@ -11,6 +11,7 @@ import (
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/scripting"
 	"rgehrsitz/rex/pkg/store"
+	"sort"
 	"strings"
 	"time"
 
@@ -112,12 +113,14 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		}
 		nameLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
-		if offset+nameLen+4 > len(bytecode) {
+		if offset+nameLen+8 > len(bytecode) {
 			return nil, logging.NewError(logging.ErrorTypeRuntime, "Unexpected end of bytecode while reading rule name", nil, nil)
 		}
 		name := string(bytecode[offset : offset+nameLen])
 		offset += nameLen
 		byteOffset := int(binary.LittleEndian.Uint32(bytecode[offset:]))
+		offset += 4
+		priority := int(binary.LittleEndian.Uint32(bytecode[offset:]))
 		offset += 4
 
 		// Adjust the byte offset by adding the size of the header
@@ -126,8 +129,9 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		engine.ruleExecutionIndex = append(engine.ruleExecutionIndex, compiler.RuleExecutionIndex{
 			RuleName:   name,
 			ByteOffset: adjustedByteOffset,
+			Priority:   priority,
 		})
-		logging.Logger.Debug().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Msg("Read rule execution index entry")
+		logging.Logger.Debug().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Int("priority", priority).Msg("Read rule execution index entry")
 	}
 
 	// Read fact rule index
@@ -149,6 +153,17 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 		}
 		engine.factRuleIndex[fact] = rules
 		logging.Logger.Debug().Str("fact", fact).Strs("rules", rules).Msg("Read fact rule index entry")
+	}
+
+	priorities := make(map[string]int, len(engine.ruleExecutionIndex))
+	for _, rule := range engine.ruleExecutionIndex {
+		priorities[rule.RuleName] = rule.Priority
+	}
+	for fact, rules := range engine.factRuleIndex {
+		sort.SliceStable(rules, func(i, j int) bool {
+			return priorities[rules[i]] < priorities[rules[j]]
+		})
+		engine.factRuleIndex[fact] = rules
 	}
 
 	// Read fact dependency index

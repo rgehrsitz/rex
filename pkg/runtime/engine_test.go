@@ -314,6 +314,15 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 			},
 		},
 		{
+			name: "previous version",
+			mutate: func(data []byte) []byte {
+				binary.LittleEndian.PutUint32(data[0:4], compiler.Version-1)
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "unsupported bytecode version",
+		},
+		{
 			name: "unsupported version",
 			mutate: func(data []byte) []byte {
 				binary.LittleEndian.PutUint32(data[0:4], compiler.Version+1)
@@ -341,12 +350,37 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 			recalculateChecksum: true,
 		},
 		{
+			name: "rule index priority disagrees with instructions",
+			mutate: func(data []byte) []byte {
+				offset := int(binary.LittleEndian.Uint32(data[16:20]))
+				nameLength := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+				priorityOffset := offset + 4 + nameLength + 4
+				priority := binary.LittleEndian.Uint32(data[priorityOffset : priorityOffset+4])
+				binary.LittleEndian.PutUint32(data[priorityOffset:priorityOffset+4], priority+1)
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "does not match instruction priority",
+		},
+		{
 			name: "unknown instruction opcode",
 			mutate: func(data []byte) []byte {
 				data[compiler.HeaderSize] = 0xff
 				return data
 			},
 			recalculateChecksum: true,
+		},
+		{
+			name: "missing rule priority instruction",
+			mutate: func(data []byte) []byte {
+				ruleStart := compiler.HeaderSize
+				nameLength := int(data[ruleStart+1])
+				priorityOffset := ruleStart + 2 + nameLength
+				data[priorityOffset] = byte(compiler.ACTION_START)
+				return data
+			},
+			recalculateChecksum: true,
+			wantError:           "missing its priority instruction",
 		},
 		{
 			name: "zero offset conditional jump",
@@ -518,6 +552,42 @@ func TestProcessFactUpdateContextDoesNotMutateCandidateIndexWhenDependencyIsMiss
 	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
 	assert.Equal(t, wantCandidates, engine.factRuleIndex["temperature"])
 	assert.Equal(t, wantCandidates, observer.rulesFired)
+}
+
+func TestProcessFactUpdateContextOrdersRulesByPriorityThenSourceOrder(t *testing.T) {
+	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{
+		{Name: "priority_ten", Priority: 10},
+		{Name: "priority_one_first", Priority: 1},
+		{Name: "priority_five", Priority: 5},
+		{Name: "priority_one_second", Priority: 1},
+	}}
+	for i := range ruleset.Rules {
+		ruleset.Rules[i].Conditions = compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
+			Fact: "temperature", Operator: "GT", Value: 30.0,
+		}}}
+		ruleset.Rules[i].Actions = []compiler.Action{{
+			Type: "updateStore", Target: ruleset.Rules[i].Name, Value: true,
+		}}
+	}
+
+	filename := t.TempDir() + "/priority.bytecode"
+	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
+	engine, err := NewEngineFromFile(filename, &contextCaptureStore{}, 0)
+	require.NoError(t, err)
+	observer := &recordingExecutionObserver{}
+	engine.SetExecutionObserver(observer)
+
+	wantOrder := []string{"priority_one_first", "priority_one_second", "priority_five", "priority_ten"}
+	require.Len(t, engine.ruleExecutionIndex, 4)
+	assert.Equal(t, []int{10, 1, 5, 1}, []int{
+		engine.ruleExecutionIndex[0].Priority,
+		engine.ruleExecutionIndex[1].Priority,
+		engine.ruleExecutionIndex[2].Priority,
+		engine.ruleExecutionIndex[3].Priority,
+	})
+	assert.Equal(t, wantOrder, engine.factRuleIndex["temperature"])
+	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
+	assert.Equal(t, wantOrder, observer.rulesFired)
 }
 
 func TestProcessFactUpdateContextEmitsCorrelatedRuleAndActionTrace(t *testing.T) {

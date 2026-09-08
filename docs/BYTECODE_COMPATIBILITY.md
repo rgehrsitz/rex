@@ -7,25 +7,24 @@ changes.
 
 ## Current support
 
-The compiler writes **format version 2**. The runtime accepts **only version
-2** and rejects every other version before it attempts to decode or execute an
-artifact. In particular, version-1 artifacts must be recompiled from their
-source ruleset; Rex does not provide a version-1 reader or an in-place
-migrator.
+The compiler writes **format version 3**. The runtime accepts **only version
+3** and rejects every other version before it attempts to decode or execute an
+artifact. Version-1 and version-2 artifacts must be recompiled from their
+source ruleset; Rex does not provide legacy readers or an in-place migrator.
 
 The version is the first little-endian `uint32` in the file. There is
 currently no magic-number prefix, so tools should use the version together
 with successful structural validation and checksum verification to recognize a
 Rex artifact.
 
-## Version-2 format
+## Version-3 format
 
 All multi-byte integers are unsigned, little-endian 32-bit values unless a
 section says otherwise. The fixed header is 28 bytes:
 
 | Offset | Field | Meaning |
 | ---: | --- | --- |
-| 0 | `version` | Format version; currently `2`. |
+| 0 | `version` | Format version; currently `3`. |
 | 4 | `checksum` | IEEE CRC-32 of the entire artifact with bytes 4–7 treated as zero. |
 | 8 | `constPoolSize` | Constant-pool size; currently `0`. |
 | 12 | `numRules` | Number of rule starts and rule-execution-index entries. |
@@ -40,7 +39,7 @@ The sections following the header are, in order:
 2. The rule execution index, from `ruleExecIndexOffset` to
    `factRuleIndexOffset`. It contains exactly `numRules` entries, each encoded
    as a length-prefixed rule name followed by an instruction-stream byte
-   offset.
+   offset and the rule priority.
 3. The fact-to-rule lookup index, from `factRuleIndexOffset` to
    `factDepIndexOffset`. Each entry contains a fact name, a rule count, and
    that many rule names.
@@ -62,14 +61,22 @@ instruction to the start of the `LABEL`; because both instructions occupy five
 bytes, the runtime's end-of-jump-relative calculation resumes immediately
 after that label. A jump and its destination must also belong to the same rule.
 
-The v2 checksum detects accidental corruption; it is not a signature or an
+The v3 checksum detects accidental corruption; it is not a signature or an
 authenticity mechanism. Do not treat an artifact as trusted merely because its
 CRC matches.
+
+### Version-2 migration
+
+Version 3 adds priority to each rule-execution-index entry and defines candidate
+execution order as ascending priority with stable ruleset order for ties.
+Version 2 did not honor priority when selecting candidate order. Retain the JSON
+ruleset and recompile it with the current `rexc`; do not rewrite the version
+field or attempt an in-place index conversion.
 
 ## Compatibility contract
 
 Within a format version, Rex preserves the meaning and binary layout of all
-documented fields and opcodes. A current compiler produces deterministic v2
+documented fields and opcodes. A current compiler produces deterministic v3
 artifacts for the same parsed ruleset: map-derived index and script data are
 sorted before serialization. This reproducibility is useful for review and
 deployment, but it is not a promise that a future *format version* will be
@@ -88,8 +95,7 @@ existing deployed artifacts is a release requirement.
 
 `compiler.GenerateBytecode` returns an error that callers must check. Label
 resolution is an internal compiler step, so unresolved control-flow labels
-cannot be reported as successfully compiled artifacts. This source API does not
-change the version-2 layout or the bytes produced for a valid ruleset.
+cannot be reported as successfully compiled artifacts.
 
 ## Changing the format
 
@@ -118,4 +124,4 @@ For every new format version:
   protects against accidental corruption.
 - A future format can add a magic prefix, generator metadata, and a signed
   artifact manifest. Those additions require a new version; they cannot be
-  inferred safely by a v2 runtime.
+  inferred safely by a v3 runtime.

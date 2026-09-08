@@ -16,8 +16,9 @@ import (
 
 // Header information.
 const (
-	// Version 2 adds CRC-32 integrity verification for the complete artifact.
-	Version        = 2
+	// Version 3 makes rule priority part of the execution index and execution
+	// order contract. Version 2 artifacts must be recompiled.
+	Version        = 3
 	ConstPoolSize  = 0
 	HeaderSize     = 28
 	ChecksumOffset = 4
@@ -249,6 +250,9 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
 			return err
 		}
 		if err := binary.Write(buf, binary.LittleEndian, uint32(idx.ByteOffset)); err != nil {
+			return err
+		}
+		if err := binary.Write(buf, binary.LittleEndian, uint32(idx.Priority)); err != nil {
 			return err
 		}
 	}
