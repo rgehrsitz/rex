@@ -1,0 +1,14 @@
+[
+  {"name":"sparse-100","rules":100,"affected":10,"dependencies":4,"shared":4,"batch":1,"match_percent":100,"actions":1},
+  {"name":"sparse-1000","rules":1000,"affected":10,"dependencies":4,"shared":4,"batch":1,"match_percent":100,"actions":1},
+  {"name":"sparse-10000","rules":10000,"affected":10,"dependencies":4,"shared":4,"batch":1,"match_percent":100,"actions":1},
+  {"name":"dense-1000","rules":1000,"affected":1000,"dependencies":4,"shared":4,"batch":1,"match_percent":100,"actions":1},
+  {"name":"shared-100","rules":1000,"affected":100,"dependencies":4,"shared":4,"batch":1,"match_percent":100,"actions":1},
+  {"name":"unique-100","rules":1000,"affected":100,"dependencies":4,"shared":0,"batch":1,"match_percent":100,"actions":1},
+  {"name":"missing-half","rules":1000,"affected":100,"dependencies":4,"shared":0,"missing_every":2,"batch":1,"match_percent":100,"actions":1},
+  {"name":"batch-8","rules":1000,"affected":10,"dependencies":4,"shared":4,"batch":8,"match_percent":100,"actions":1},
+  {"name":"match-none","rules":1000,"affected":10,"dependencies":4,"shared":4,"batch":1,"match_percent":0,"actions":1},
+  {"name":"match-half","rules":1000,"affected":10,"dependencies":4,"shared":4,"batch":1,"match_percent":50,"actions":1},
+  {"name":"actions-8","rules":1000,"affected":10,"dependencies":4,"shared":4,"batch":1,"match_percent":100,"actions":8},
+  {"name":"dependencies-32","rules":1000,"affected":10,"dependencies":32,"shared":32,"batch":1,"match_percent":100,"actions":1}
+]

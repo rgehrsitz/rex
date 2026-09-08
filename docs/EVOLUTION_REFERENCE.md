@@ -10,6 +10,12 @@ Last reviewed: 2026-08-29.
 For a verified, prioritized list of engine findings discovered immediately
 after this review, see [ENGINE_AUDIT.md](ENGINE_AUDIT.md).
 
+The [foundation roadmap](FOUNDATION_ROADMAP.md), created 2026-09-07, now owns
+the accepted implementation sequence, milestone status, and acceptance criteria.
+Use it when resuming work. Proposals and suggested ordering below are historical
+design context; current artifact compatibility is defined in
+[BYTECODE_COMPATIBILITY.md](BYTECODE_COMPATIBILITY.md).
+
 ## Current position
 
 Rex is a compact, event-driven rules engine: JSON rulesets compile into
@@ -21,7 +27,7 @@ The maintenance and delivery baseline is in place:
 
 - Go `1.26.6`, current direct dependencies, Dependabot, CI, CodeQL, and tagged
   release archives are configured.
-- Bytecode version 2 is deterministic, CRC-checked, structurally validated,
+- Bytecode version 3 is deterministic, CRC-checked, structurally validated,
   fuzz-tested, and documented.
 - `rexd` owns subscription lifecycle, supports graceful shutdown, traces,
   health and Prometheus-style metrics, bounded action execution, and bounded

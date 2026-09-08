@@ -1,0 +1,460 @@
+diff --git a/examples/rex-rules-schema.json b/examples/rex-rules-schema.json
+index 1921cea..a5f1678 100644
+--- a/examples/rex-rules-schema.json
++++ b/examples/rex-rules-schema.json
+@@ -20,7 +20,8 @@
+               "priority": {
+                 "type": "integer",
+                 "description": "The priority of the rule.  The lower the number, the higher the priority.  Defaults to 10.",
+-                "minimum": 1,
++                "minimum": 0,
++                "maximum": 4294967295,
+                 "default": 10
+               },
+               "conditions": {
+diff --git a/pkg/compiler/bytecode.go b/pkg/compiler/bytecode.go
+index dc8af03..2a61d08 100644
+--- a/pkg/compiler/bytecode.go
++++ b/pkg/compiler/bytecode.go
+@@ -16,8 +16,9 @@ import (
+ 
+ // Header information.
+ const (
+-	// Version 2 adds CRC-32 integrity verification for the complete artifact.
+-	Version        = 2
++	// Version 3 makes rule priority part of the execution index and execution
++	// order contract. Version 2 artifacts must be recompiled.
++	Version        = 3
+ 	ConstPoolSize  = 0
+ 	HeaderSize     = 28
+ 	ChecksumOffset = 4
+@@ -251,6 +252,9 @@ func WriteBytecodeToFile(filename string, bytecodeFile BytecodeFile) error {
+ 		if err := binary.Write(buf, binary.LittleEndian, uint32(idx.ByteOffset)); err != nil {
+ 			return err
+ 		}
++		if err := binary.Write(buf, binary.LittleEndian, uint32(idx.Priority)); err != nil {
++			return err
++		}
+ 	}
+ 
+ 	// Calculate and write the Fact Rule Lookup Index
+diff --git a/pkg/compiler/parser.go b/pkg/compiler/parser.go
+index 749e605..1d6e092 100644
+--- a/pkg/compiler/parser.go
++++ b/pkg/compiler/parser.go
+@@ -15,6 +15,11 @@ import (
+ 
+ const exclusiveConditionGroupError = "condition group must contain exactly one of all or any"
+ 
++// DefaultRulePriority is applied when a JSON rule omits its priority.
++const DefaultRulePriority = 10
++
++const maxRulePriority = int64(1<<32 - 1)
++
+ // Parse parses the provided JSON data and returns a pointer to a Ruleset and an error.
+ func Parse(jsonData []byte) (*Ruleset, error) {
+ 	var ruleset Ruleset
+@@ -31,6 +36,9 @@ func Parse(jsonData []byte) (*Ruleset, error) {
+ 		}
+ 		return nil, logging.NewError(logging.ErrorTypeParse, jsonErrorMessage(jsonData, err), err, nil)
+ 	}
++	if err := applyRuleDefaults(jsonData, &ruleset); err != nil {
++		return nil, logging.NewError(logging.ErrorTypeParse, fmt.Sprintf("Failed to apply rule defaults: %v", err), err, nil)
++	}
+ 	if len(ruleset.Rules) == 0 {
+ 		return nil, logging.NewError(logging.ErrorTypeParse, "Missing rules field", nil, nil)
+ 	}
+@@ -70,6 +78,29 @@ func Parse(jsonData []byte) (*Ruleset, error) {
+ 	return &ruleset, nil
+ }
+ 
++func applyRuleDefaults(jsonData []byte, ruleset *Ruleset) error {
++	var rawRuleset struct {
++		Rules []map[string]json.RawMessage `json:"rules"`
++	}
++	if err := json.Unmarshal(jsonData, &rawRuleset); err != nil {
++		return err
++	}
++	if len(rawRuleset.Rules) != len(ruleset.Rules) {
++		return fmt.Errorf("decoded rule count changed while applying defaults")
++	}
++	for i, fields := range rawRuleset.Rules {
++		rawPriority, present := fields["priority"]
++		if !present {
++			ruleset.Rules[i].Priority = DefaultRulePriority
++			continue
++		}
++		if bytes.Equal(bytes.TrimSpace(rawPriority), []byte("null")) {
++			return fmt.Errorf("rules[%d].priority must be an integer", i)
++		}
++	}
++	return nil
++}
++
+ func jsonErrorMessage(data []byte, err error) string {
+ 	offset := int64(0)
+ 	var syntaxErr *json.SyntaxError
+@@ -120,6 +151,9 @@ func validateRule(rule *Rule) error {
+ 	if rule.Priority < 0 {
+ 		return logging.NewError(logging.ErrorTypeCompile, "Rule priority must be non-negative", nil, map[string]interface{}{"rule_name": rule.Name})
+ 	}
++	if int64(rule.Priority) > maxRulePriority {
++		return logging.NewError(logging.ErrorTypeCompile, "Rule priority exceeds the bytecode limit", nil, map[string]interface{}{"rule_name": rule.Name})
++	}
+ 	if err := validateAndOrderConditionGroup(&rule.Conditions); err != nil {
+ 		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid condition group: %v", err), err, map[string]interface{}{"rule_name": rule.Name})
+ 	}
+diff --git a/pkg/compiler/parser_test.go b/pkg/compiler/parser_test.go
+index ab1c79f..52de8a3 100644
+--- a/pkg/compiler/parser_test.go
++++ b/pkg/compiler/parser_test.go
+@@ -191,6 +191,50 @@ func TestParser(t *testing.T) {
+ 	assert.Equal(t, "High temperature and low humidity or high pressure detected", ruleset.Rules[0].Actions[0].Value)
+ }
+ 
++func TestParseAppliesDefaultPriorityOnlyWhenOmitted(t *testing.T) {
++	tests := []struct {
++		name         string
++		priorityJSON string
++		wantPriority int
++	}{
++		{name: "omitted", wantPriority: DefaultRulePriority},
++		{name: "explicit zero", priorityJSON: `"priority": 0,`, wantPriority: 0},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			jsonData := []byte(fmt.Sprintf(`{
++                "rules": [{
++                    "name": "rule1",
++                    %s
++                    "conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
++                    "actions": [{"type": "updateStore", "target": "status", "value": "hot"}]
++                }]
++            }`, tt.priorityJSON))
++
++			ruleset, err := Parse(jsonData)
++
++			assert.NoError(t, err)
++			assert.Equal(t, tt.wantPriority, ruleset.Rules[0].Priority)
++		})
++	}
++}
++
++func TestParseRejectsNullPriority(t *testing.T) {
++	jsonData := []byte(`{
++        "rules": [{
++            "name": "rule1",
++            "priority": null,
++            "conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
++            "actions": [{"type": "updateStore", "target": "status", "value": "hot"}]
++        }]
++    }`)
++
++	_, err := Parse(jsonData)
++
++	assert.ErrorContains(t, err, "rules[0].priority must be an integer")
++}
++
+ func TestParseInvalidJSON(t *testing.T) {
+ 	invalidJSON := []byte(`{"rules": [{"name": "invalid_rule",}]}`)
+ 	_, err := Parse(invalidJSON)
+@@ -400,6 +444,21 @@ func TestInvalidPriority(t *testing.T) {
+ 	assert.Error(t, err)
+ }
+ 
++func TestPriorityAboveBytecodeLimit(t *testing.T) {
++	jsonData := []byte(`{
++        "rules": [{
++            "name": "rule1",
++            "priority": 4294967296,
++            "conditions": {"all": [{"fact": "temperature", "operator": "GT", "value": 30}]},
++            "actions": [{"type": "updateStore", "target": "status", "value": "hot"}]
++        }]
++    }`)
++
++	_, err := Parse(jsonData)
++
++	assert.ErrorContains(t, err, "Rule priority exceeds the bytecode limit")
++}
++
+ func TestInvalidConditionFact(t *testing.T) {
+ 	jsonData := []byte(`{
+         "rules": [
+diff --git a/pkg/runtime/bytecode.go b/pkg/runtime/bytecode.go
+index 4baf770..a7b8d95 100644
+--- a/pkg/runtime/bytecode.go
++++ b/pkg/runtime/bytecode.go
+@@ -17,6 +17,11 @@ type bytecodeHeader struct {
+ 	factDepIndexOffset  uint32
+ }
+ 
++type ruleMetadata struct {
++	name     string
++	priority uint32
++}
++
+ // validateBytecode verifies that a compiled artifact can be decoded safely by
+ // the runtime before any execution or unchecked slice access occurs.
+ func validateBytecode(data []byte) error {
+@@ -82,8 +87,8 @@ func readBytecodeHeader(data []byte) (bytecodeHeader, error) {
+ 	}, nil
+ }
+ 
+-func validateInstructions(data []byte) (map[int]string, error) {
+-	ruleStarts := make(map[int]string)
++func validateInstructions(data []byte) (map[int]ruleMetadata, error) {
++	ruleStarts := make(map[int]ruleMetadata)
+ 	instructionBoundaries := make(map[int]struct{})
+ 	labelTargets := make(map[int]int)
+ 	type jumpReference struct {
+@@ -94,29 +99,44 @@ func validateInstructions(data []byte) (map[int]string, error) {
+ 	}
+ 	var jumps []jumpReference
+ 	currentRuleStart := -1
++	expectingPriority := false
+ 
+ 	for offset := 0; offset < len(data); {
+ 		start := offset
+ 		instructionBoundaries[start] = struct{}{}
+ 		opcode := compiler.Opcode(data[offset])
+ 		offset++
++		if expectingPriority && opcode != compiler.PRIORITY {
++			return nil, fmt.Errorf("rule at instruction-section offset %d is missing its priority instruction", currentRuleStart)
++		}
+ 
+ 		var err error
+ 		switch opcode {
+ 		case compiler.RULE_START:
+ 			currentRuleStart = start
++			expectingPriority = true
+ 			var name string
+ 			name, offset, err = readByteString(data, offset)
+ 			if err == nil {
+ 				if _, exists := ruleStarts[start]; exists {
+ 					err = fmt.Errorf("duplicate rule start at instruction-section offset %d", start)
+ 				} else {
+-					ruleStarts[start] = name
++					ruleStarts[start] = ruleMetadata{name: name}
+ 				}
+ 			}
+ 
+ 		case compiler.PRIORITY:
++			if !expectingPriority || currentRuleStart < 0 {
++				return nil, fmt.Errorf("unexpected priority instruction at instruction-section offset %d", start)
++			}
++			operandStart := offset
+ 			offset, err = consumeFixed(data, offset, 4)
++			if err == nil {
++				metadata := ruleStarts[currentRuleStart]
++				metadata.priority = binary.LittleEndian.Uint32(data[operandStart:offset])
++				ruleStarts[currentRuleStart] = metadata
++				expectingPriority = false
++			}
+ 
+ 		case compiler.JUMP_IF_TRUE, compiler.JUMP_IF_FALSE:
+ 			operandStart := offset
+@@ -172,6 +192,9 @@ func validateInstructions(data []byte) (map[int]string, error) {
+ 			return nil, fmt.Errorf("invalid opcode %d at instruction-section offset %d: %w", opcode, start, err)
+ 		}
+ 	}
++	if expectingPriority {
++		return nil, fmt.Errorf("rule at instruction-section offset %d is missing its priority instruction", currentRuleStart)
++	}
+ 
+ 	for _, jump := range jumps {
+ 		if jump.target >= uint64(len(data)) {
+@@ -232,7 +255,7 @@ func validateScriptCall(data []byte, offset int) (int, error) {
+ 	return offset, nil
+ }
+ 
+-func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]string) (map[string]struct{}, error) {
++func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]ruleMetadata) (map[string]struct{}, error) {
+ 	offset := 0
+ 	ruleNames := make(map[string]struct{}, count)
+ 	for i := uint32(0); i < count; i++ {
+@@ -241,16 +264,21 @@ func validateRuleExecutionIndex(data []byte, count uint32, ruleStarts map[int]st
+ 			return nil, fmt.Errorf("invalid rule execution index entry %d: %w", i, err)
+ 		}
+ 		offset = nextOffset
+-		if offset+4 > len(data) {
++		if offset+8 > len(data) {
+ 			return nil, fmt.Errorf("truncated rule execution index offset for %q", name)
+ 		}
+ 		instructionOffset := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
+ 		offset += 4
++		priority := binary.LittleEndian.Uint32(data[offset : offset+4])
++		offset += 4
+ 
+-		actualName, ok := ruleStarts[instructionOffset]
+-		if !ok || actualName != name {
++		metadata, ok := ruleStarts[instructionOffset]
++		if !ok || metadata.name != name {
+ 			return nil, fmt.Errorf("rule execution index for %q points to invalid instruction-section offset %d", name, instructionOffset)
+ 		}
++		if metadata.priority != priority {
++			return nil, fmt.Errorf("rule execution index priority %d for %q does not match instruction priority %d", priority, name, metadata.priority)
++		}
+ 		if _, exists := ruleNames[name]; exists {
+ 			return nil, fmt.Errorf("duplicate rule execution index entry for %q", name)
+ 		}
+diff --git a/pkg/runtime/engine.go b/pkg/runtime/engine.go
+index 6a0316a..e340012 100644
+--- a/pkg/runtime/engine.go
++++ b/pkg/runtime/engine.go
+@@ -11,6 +11,7 @@ import (
+ 	"rgehrsitz/rex/pkg/compiler"
+ 	"rgehrsitz/rex/pkg/scripting"
+ 	"rgehrsitz/rex/pkg/store"
++	"sort"
+ 	"strings"
+ 	"time"
+ 
+@@ -112,13 +113,15 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
+ 		}
+ 		nameLen := int(binary.LittleEndian.Uint32(bytecode[offset:]))
+ 		offset += 4
+-		if offset+nameLen+4 > len(bytecode) {
++		if offset+nameLen+8 > len(bytecode) {
+ 			return nil, logging.NewError(logging.ErrorTypeRuntime, "Unexpected end of bytecode while reading rule name", nil, nil)
+ 		}
+ 		name := string(bytecode[offset : offset+nameLen])
+ 		offset += nameLen
+ 		byteOffset := int(binary.LittleEndian.Uint32(bytecode[offset:]))
+ 		offset += 4
++		priority := int(binary.LittleEndian.Uint32(bytecode[offset:]))
++		offset += 4
+ 
+ 		// Adjust the byte offset by adding the size of the header
+ 		adjustedByteOffset := byteOffset + compiler.HeaderSize
+@@ -126,8 +129,9 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
+ 		engine.ruleExecutionIndex = append(engine.ruleExecutionIndex, compiler.RuleExecutionIndex{
+ 			RuleName:   name,
+ 			ByteOffset: adjustedByteOffset,
++			Priority:   priority,
+ 		})
+-		logging.Logger.Debug().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Msg("Read rule execution index entry")
++		logging.Logger.Debug().Str("ruleName", name).Int("byteOffset", adjustedByteOffset).Int("priority", priority).Msg("Read rule execution index entry")
+ 	}
+ 
+ 	// Read fact rule index
+@@ -151,6 +155,17 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
+ 		logging.Logger.Debug().Str("fact", fact).Strs("rules", rules).Msg("Read fact rule index entry")
+ 	}
+ 
++	priorities := make(map[string]int, len(engine.ruleExecutionIndex))
++	for _, rule := range engine.ruleExecutionIndex {
++		priorities[rule.RuleName] = rule.Priority
++	}
++	for fact, rules := range engine.factRuleIndex {
++		sort.SliceStable(rules, func(i, j int) bool {
++			return priorities[rules[i]] < priorities[rules[j]]
++		})
++		engine.factRuleIndex[fact] = rules
++	}
++
+ 	// Read fact dependency index
+ 	offset = int(factDepIndexOffset)
+ 	for offset < len(bytecode) {
+diff --git a/pkg/runtime/engine_test.go b/pkg/runtime/engine_test.go
+index 5caafb6..ca2f4a4 100644
+--- a/pkg/runtime/engine_test.go
++++ b/pkg/runtime/engine_test.go
+@@ -313,6 +313,15 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
+ 				return data[:compiler.HeaderSize-1]
+ 			},
+ 		},
++		{
++			name: "previous version",
++			mutate: func(data []byte) []byte {
++				binary.LittleEndian.PutUint32(data[0:4], compiler.Version-1)
++				return data
++			},
++			recalculateChecksum: true,
++			wantError:           "unsupported bytecode version",
++		},
+ 		{
+ 			name: "unsupported version",
+ 			mutate: func(data []byte) []byte {
+@@ -340,6 +349,19 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
+ 			},
+ 			recalculateChecksum: true,
+ 		},
++		{
++			name: "rule index priority disagrees with instructions",
++			mutate: func(data []byte) []byte {
++				offset := int(binary.LittleEndian.Uint32(data[16:20]))
++				nameLength := int(binary.LittleEndian.Uint32(data[offset : offset+4]))
++				priorityOffset := offset + 4 + nameLength + 4
++				priority := binary.LittleEndian.Uint32(data[priorityOffset : priorityOffset+4])
++				binary.LittleEndian.PutUint32(data[priorityOffset:priorityOffset+4], priority+1)
++				return data
++			},
++			recalculateChecksum: true,
++			wantError:           "does not match instruction priority",
++		},
+ 		{
+ 			name: "unknown instruction opcode",
+ 			mutate: func(data []byte) []byte {
+@@ -348,6 +370,18 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
+ 			},
+ 			recalculateChecksum: true,
+ 		},
++		{
++			name: "missing rule priority instruction",
++			mutate: func(data []byte) []byte {
++				ruleStart := compiler.HeaderSize
++				nameLength := int(data[ruleStart+1])
++				priorityOffset := ruleStart + 2 + nameLength
++				data[priorityOffset] = byte(compiler.ACTION_START)
++				return data
++			},
++			recalculateChecksum: true,
++			wantError:           "missing its priority instruction",
++		},
+ 		{
+ 			name: "zero offset conditional jump",
+ 			mutate: func(data []byte) []byte {
+@@ -520,6 +554,42 @@ func TestProcessFactUpdateContextDoesNotMutateCandidateIndexWhenDependencyIsMiss
+ 	assert.Equal(t, wantCandidates, observer.rulesFired)
+ }
+ 
++func TestProcessFactUpdateContextOrdersRulesByPriorityThenSourceOrder(t *testing.T) {
++	ruleset := &compiler.Ruleset{Rules: []compiler.Rule{
++		{Name: "priority_ten", Priority: 10},
++		{Name: "priority_one_first", Priority: 1},
++		{Name: "priority_five", Priority: 5},
++		{Name: "priority_one_second", Priority: 1},
++	}}
++	for i := range ruleset.Rules {
++		ruleset.Rules[i].Conditions = compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{{
++			Fact: "temperature", Operator: "GT", Value: 30.0,
++		}}}
++		ruleset.Rules[i].Actions = []compiler.Action{{
++			Type: "updateStore", Target: ruleset.Rules[i].Name, Value: true,
++		}}
++	}
++
++	filename := t.TempDir() + "/priority.bytecode"
++	require.NoError(t, compiler.WriteBytecodeToFile(filename, mustGenerateBytecode(t, ruleset)))
++	engine, err := NewEngineFromFile(filename, &contextCaptureStore{}, 0)
++	require.NoError(t, err)
++	observer := &recordingExecutionObserver{}
++	engine.SetExecutionObserver(observer)
++
++	wantOrder := []string{"priority_one_first", "priority_one_second", "priority_five", "priority_ten"}
++	require.Len(t, engine.ruleExecutionIndex, 4)
++	assert.Equal(t, []int{10, 1, 5, 1}, []int{
++		engine.ruleExecutionIndex[0].Priority,
++		engine.ruleExecutionIndex[1].Priority,
++		engine.ruleExecutionIndex[2].Priority,
++		engine.ruleExecutionIndex[3].Priority,
++	})
++	assert.Equal(t, wantOrder, engine.factRuleIndex["temperature"])
++	require.NoError(t, engine.ProcessFactUpdateContext(context.Background(), "temperature", 35.0))
++	assert.Equal(t, wantOrder, observer.rulesFired)
++}
++
+ func TestProcessFactUpdateContextEmitsCorrelatedRuleAndActionTrace(t *testing.T) {
+ 	output := captureStructuredLogs(t)
+ 	factStore := &contextCaptureStore{}
