@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -41,6 +42,8 @@ type Config struct {
 	RedisChannels           []string
 	PriorityThreshold       int
 	ScriptsEnabled          bool
+	AllowLegacyV3           bool
+	BatchLimits             runtime.Limits
 	MaxActionsPerEvaluation int
 	MaxEventHops            int
 	ObservabilityEnabled    bool
@@ -114,6 +117,16 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
 	viper.SetDefault("engine.priority_threshold", 1)
 	viper.SetDefault("engine.scripts_enabled", false)
+	viper.SetDefault("engine.allow_legacy_v3", false)
+	defaults := runtime.DefaultLimits()
+	viper.SetDefault("engine.batch.event_bytes", defaults.EventBytes)
+	viper.SetDefault("engine.batch.event_facts", defaults.EventFacts)
+	viper.SetDefault("engine.batch.snapshot_bytes", defaults.SnapshotBytes)
+	viper.SetDefault("engine.batch.actions_per_round", defaults.ActionsPerRound)
+	viper.SetDefault("engine.batch.chain_actions", defaults.ChainActions)
+	viper.SetDefault("engine.batch.chain_work", defaults.ChainWork)
+	viper.SetDefault("engine.batch.rounds", defaults.Rounds)
+	viper.SetDefault("engine.batch.staged_bytes", defaults.StagedBytes)
 	viper.SetDefault("engine.max_actions_per_evaluation", runtime.DefaultMaxActionsPerEvaluation)
 	viper.SetDefault("engine.max_event_hops", 16)
 	viper.SetDefault("observability.enabled", false)
@@ -147,6 +160,8 @@ func parseConfig(args []string) (*Config, error) {
 		RedisChannels:           viper.GetStringSlice("redis.channels"),
 		PriorityThreshold:       viper.GetInt("engine.priority_threshold"),
 		ScriptsEnabled:          viper.GetBool("engine.scripts_enabled"),
+		AllowLegacyV3:           viper.GetBool("engine.allow_legacy_v3"),
+		BatchLimits:             runtime.Limits{EventBytes: viper.GetInt("engine.batch.event_bytes"), EventFacts: viper.GetInt("engine.batch.event_facts"), SnapshotBytes: viper.GetInt("engine.batch.snapshot_bytes"), ActionsPerRule: viper.GetInt("engine.max_actions_per_evaluation"), ActionsPerRound: viper.GetInt("engine.batch.actions_per_round"), ChainActions: viper.GetInt("engine.batch.chain_actions"), ChainWork: viper.GetInt("engine.batch.chain_work"), Rounds: viper.GetInt("engine.batch.rounds"), StagedBytes: viper.GetInt("engine.batch.staged_bytes")},
 		MaxActionsPerEvaluation: viper.GetInt("engine.max_actions_per_evaluation"),
 		MaxEventHops:            viper.GetInt("engine.max_event_hops"),
 		ObservabilityEnabled:    viper.GetBool("observability.enabled"),
@@ -161,6 +176,20 @@ func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory 
 	if err != nil {
 		_ = store.Close()
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
+	}
+	if engine.BytecodeVersion() == 3 && !config.AllowLegacyV3 {
+		_ = store.Close()
+		return nil, fmt.Errorf("v3 requires engine.allow_legacy_v3; recompile for v4")
+	}
+	if engine.BytecodeVersion() == 4 {
+		if config.ScriptsEnabled {
+			_ = store.Close()
+			return nil, fmt.Errorf("v4 scripts unavailable until M6")
+		}
+		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
+			_ = store.Close()
+			return nil, err
+		}
 	}
 	engine.SetScriptsEnabled(config.ScriptsEnabled)
 	engine.SetConditionTracing(config.TraceConditions)
@@ -200,16 +229,15 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 		defer shutdownObservabilityServer(server)
 	}
 
-	redisStore, ok := deps.Store.(*store.RedisStore)
+	subscriber, ok := deps.Store.(store.EventSubscriber)
 	if !ok {
-		return fmt.Errorf("store is not a RedisStore")
+		return fmt.Errorf("store does not provide an EventSubscriber")
 	}
-
-	pubsub, err := redisStore.Subscribe(ctx, config.RedisChannels...)
+	source, err := subscriber.OpenEvents(ctx, config.RedisChannels...)
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to Redis channels: %w", err)
 	}
-	defer pubsub.Close()
+	defer source.Close()
 	metrics.SetReady(true)
 	defer metrics.SetReady(false)
 
@@ -218,7 +246,7 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 	defer signal.Stop(sigChan)
 
 	logging.Logger.Info().Msg("REX runtime engine started")
-	return consumeMessagesWithOptions(ctx, deps.Engine, pubsub.Channel(), sigChan, metrics, config.MaxEventHops)
+	return consumeEvents(ctx, deps.Engine, source.Events(), sigChan, metrics, config.MaxEventHops)
 }
 
 func startObservabilityServer(config *Config, metrics *observability.Metrics) (*http.Server, error) {
@@ -294,12 +322,21 @@ func processMessage(ctx context.Context, engine factUpdateProcessor, msg *redis.
 }
 
 func processMessageWithMaxEventHops(ctx context.Context, engine factUpdateProcessor, msg *redis.Message, maxEventHops int) error {
+	if len(msg.Payload) > store.MaxEventBytes {
+		return fmt.Errorf("event exceeds byte limit")
+	}
 	facts, metadata, enveloped, err := eventcontext.DecodeFactEvent([]byte(msg.Payload))
 	if err != nil {
 		if json.Valid([]byte(msg.Payload)) {
 			return fmt.Errorf("invalid JSON fact event: %w", err)
 		}
 		return processLegacyMessage(ctx, engine, msg)
+	}
+	if batch, ok := engine.(*runtime.Engine); ok && batch.BytecodeVersion() == 4 && metadata.Kind == "committed_output" {
+		return nil
+	}
+	if metadata.Kind != "" {
+		return fmt.Errorf("unsupported event kind %q", metadata.Kind)
 	}
 	if !enveloped {
 		metadata = eventcontext.Metadata{TraceID: nextMessageTraceID()}
@@ -330,6 +367,11 @@ func processMessageWithMaxEventHops(ctx context.Context, engine factUpdateProces
 		Strs("fact_names", keys).
 		Msg("Decoded fact event")
 
+	if batch, ok := engine.(interface {
+		ProcessBatchContext(context.Context, map[string]interface{}) error
+	}); ok {
+		return batch.ProcessBatchContext(ctx, facts)
+	}
 	for _, key := range keys {
 		if err := engine.ProcessFactUpdateContext(ctx, key, facts[key]); err != nil {
 			logging.Logger.Error().
@@ -418,4 +460,33 @@ type RealEngineFactory struct{}
 
 func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.ContextStore, priorityThreshold int) (*runtime.Engine, error) {
 	return runtime.NewEngineFromFile(bytecodeFile, store, priorityThreshold)
+}
+
+func consumeEvents(ctx context.Context, engine *runtime.Engine, events <-chan store.Event, signals <-chan os.Signal, metrics *observability.Metrics, maxHops int) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-signals:
+			return nil
+		case event, ok := <-events:
+			if !ok {
+				return nil
+			}
+			started := time.Now()
+			err := event.Err
+			if err == nil {
+				err = processMessageWithMaxEventHops(ctx, engine, &redis.Message{Channel: event.Channel, Payload: event.Payload}, maxHops)
+			}
+			if metrics != nil {
+				metrics.RecordEvent(time.Since(started), err)
+			}
+			if err != nil {
+				logging.Logger.Error().Err(err).Msg("Failed to process event")
+			}
+			if errors.Is(err, runtime.ErrReconciliationRequired) {
+				return err
+			}
+		}
+	}
 }

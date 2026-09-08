@@ -5,6 +5,13 @@
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
 REX currently uses Redis as its fact store and event transport: it receives fact updates, evaluates applicable rules, and publishes resulting updates.
 
+The default v4 execution contract evaluates each affected rule once per batch,
+against the same snapshot. Outputs are staged, conflicts reject the round, and
+committed outputs feed bounded subsequent rounds. See the
+[M4 migration guide](docs/M4_MIGRATION.md) before recompiling v3 rulesets.
+Scripts are unavailable in v4 until M6. Existing script examples below apply
+only to explicit legacy-v3 deployments.
+
 The planning documents have distinct roles:
 
 - The [foundation roadmap](docs/FOUNDATION_ROADMAP.md) tracks the next stage of
@@ -138,7 +145,7 @@ The configuration file is in JSON format and supports the following options:
 }
 ```
 
-`engine.priority_threshold` only controls the additional high-priority
+In legacy v3, `engine.priority_threshold` only controls the additional high-priority
 diagnostic emitted after a matching rule. It does not filter candidates or
 change their execution order.
 
@@ -519,6 +526,8 @@ The [current-v3 semantics safety net](internal/semantics/README.md) runs authore
 scenarios and seeded differential checks against an independent AST interpreter.
 Embedded tools can use `store.NewMemoryStore(initial)` for JSON facts without a
 Redis service; snapshots and ordered publications are available for inspection.
+The [batch-v4 corpus](internal/semantics/testdata/batch-v4.json) independently
+checks the new contract while retaining current-v3 expectations.
 
 To run the tests:
 

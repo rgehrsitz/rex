@@ -9,12 +9,15 @@ import (
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/logging"
 	"strings"
+	"sync"
 
 	"github.com/redis/go-redis/v9"
 )
 
 type RedisStore struct {
-	client *redis.Client
+	client      *redis.Client
+	batchOnce   sync.Once
+	batchClient *redis.Client
 }
 
 // NewRedisStore creates a new instance of RedisStore with the given address, password, and database number.
@@ -40,6 +43,9 @@ func NewRedisStore(addr, password string, db int) *RedisStore {
 
 // Close releases the Redis client resources held by the store.
 func (s *RedisStore) Close() error {
+	if s.batchClient != nil {
+		_ = s.batchClient.Close()
+	}
 	return s.client.Close()
 }
 

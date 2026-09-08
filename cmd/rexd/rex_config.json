@@ -26,7 +26,18 @@
     "priority_threshold": 1,
     "scripts_enabled": false,
     "max_actions_per_evaluation": 32,
-    "max_event_hops": 16
+    "max_event_hops": 16,
+    "allow_legacy_v3": false,
+    "batch": {
+      "event_bytes": 1048576,
+      "event_facts": 256,
+      "snapshot_bytes": 4194304,
+      "actions_per_round": 256,
+      "chain_actions": 1024,
+      "chain_work": 100000,
+      "rounds": 16,
+      "staged_bytes": 1048576
+    }
   },
   "observability": {
     "enabled": false,

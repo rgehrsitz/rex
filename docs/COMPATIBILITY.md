@@ -11,8 +11,8 @@ turn an upstream dependency's broad compatibility claim into a Rex guarantee.
 | Source build toolchain | Go `1.26.6` | CI uses the toolchain pinned by `go.mod` | The `go` directive is `1.26.0`; the toolchain directive selects `1.26.6`. |
 | Redis transport | Redis Pub/Sub through `github.com/redis/go-redis/v9` | Unit and integration-style tests use `miniredis` | Validate a production Redis version and deployment topology in staging before treating it as supported for your environment. |
 | Rules source | JSON rulesets accepted by the current `rexc` | Parser, compiler, and fuzz tests | Preserve the source ruleset with every deployed bytecode artifact. |
-| Bytecode | Format version 3 only | Compiler and runtime validation tests | `rexd` rejects versions 1, 2, and all unknown versions. Recompile retained JSON rulesets with the current `rexc`; see [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
-| Scripts | Otto JavaScript, disabled by default | Runtime tests cover enabled and disabled behavior | Enable only for rulesets from trusted authors; scripts are not sandboxed. |
+| Bytecode | V4 default; v3 explicit compatibility | Compiler and runtime validation tests | `rexd` rejects versions 1, 2, and all unknown versions. Recompile retained JSON rulesets with the current `rexc`; see [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
+| Scripts | Rejected in v4; legacy Otto disabled by default | Legacy integration tests remain separate | V4 awaits M6. Legacy scripts are not sandboxed. |
 
 The upstream `go-redis` project publishes its own supported Redis versions.
 When its compatibility policy changes, reassess the pinned dependency and
@@ -29,3 +29,8 @@ unexecutable artifact.
 Bytecode format 3 makes priority ordering deterministic and stores priority in
 the rule execution index. Version-2 artifacts are not accepted because they
 were compiled under source-order execution semantics.
+
+V4 batch semantics and adapter limits are documented in the
+[M4 migration guide](M4_MIGRATION.md). The Redis commit domain is a standalone
+server; sequential writes may have partial/unknown outcomes. No automatic
+retry, transaction, durable recovery, or exactly-once delivery is claimed.

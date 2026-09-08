@@ -56,7 +56,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M1 | Improve lookup and Redis efficiency | M0 | Complete | [Implementation and performance report](baselines/rex-m1/README.md): equivalent outputs, no budget flags, and documented map-memory tradeoff. Next: M2. |
 | REX-M2 | Establish an independent semantics safety net | M0 | Complete | [Current-v3 safety net](../internal/semantics/README.md): memory store, 12 scenarios, 128 seeds, truth tables, mutation checks, and disassembly goldens. Local validation complete; review pending. Next: M4. |
 | REX-M3 | Harden deployment and operational visibility | M0 | Planned | Fix startup errors, TLS/secrets, readiness, and latency visibility. |
-| REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Planned | Record state/commit semantics before changing execution behavior. |
+| REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Local complete; review pending | [D1–D5 contract](decisions/REX-M4.md), [migration and validation](M4_MIGRATION.md). |
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Planned | Expose the scenario runner through stable CLI commands. |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Planned | Retain disabled default; design isolated worker lifecycle and limits. |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Planned | Design journal, commit, acknowledgement, and crash recovery together. |
@@ -220,22 +220,22 @@ and script/function inputs must be explicit when used. Transport interfaces
 must not require Redis message types. Keep interfaces small and driven by the
 in-memory and Redis implementations.
 
-- [ ] Record decisions D1–D5 below, including failure examples and truth tables.
-- [ ] Extract an immutable loaded program and private, bounded evaluation state.
+- [x] Record decisions D1–D5 below, including failure examples and truth tables.
+- [x] Extract an immutable loaded program and private, bounded evaluation state.
   Replace public mutable `Engine.Facts` with read-only inspection/snapshot APIs
   and document Go API migration.
-- [ ] Load the union of required dependencies once, overlay all event facts,
+- [x] Load the union of required dependencies once, overlay all event facts,
   deduplicate affected rules, and evaluate against the same snapshot.
-- [ ] Stage actions in deterministic rule/action order. Resolve write conflicts
+- [x] Stage actions in deterministic rule/action order. Resolve write conflicts
   before persistence; a rejected evaluation must not mutate authoritative state.
-- [ ] Separate event source, snapshot access, and commit responsibilities. Keep
+- [x] Separate event source, snapshot access, and commit responsibilities. Keep
   Pub/Sub operational during this migration and add adapter contract tests.
-- [ ] Treat derived changes as subsequent bounded rounds. Apply per-rule,
+- [x] Treat derived changes as subsequent bounded rounds. Apply per-rule,
   per-event, and chain-wide work limits with explicit failure behavior; a hop
   limit alone does not bound branching fan-out.
-- [ ] Bound event bytes/facts, staged outputs, and retained state. Irrelevant
+- [x] Bound event bytes/facts, staged outputs, and retained state. Irrelevant
   dynamic fact names must not grow an engine-global map indefinitely.
-- [ ] Version changed artifact meaning and update source/schema/CLI/runtime
+- [x] Version changed artifact meaning and update source/schema/CLI/runtime
   compatibility together, following [BYTECODE_COMPATIBILITY.md](BYTECODE_COMPATIBILITY.md).
 
 **Acceptance criteria:**
@@ -391,11 +391,11 @@ The recommendations are starting positions, not already implemented contracts.
 
 | ID | Decision | Recommended starting position | Due / status |
 | --- | --- | --- | --- |
-| D1 | State authority and snapshot consistency | Specify what a snapshot represents. For durable processing, use coordinator-owned state rebuilt from checkpoints and ordered inputs; do not replay against arbitrary latest Redis values. Define how external writers enter that input history. | M4 design; refine M7. Open. |
-| D2 | Conflicting outputs | Reject different values written to the same fact within one round by default; allow identical final fact writes to coalesce while retaining action trace. Do not make priority an undocumented winner policy or suppress future external actions. | Before M4 semantics. Open. |
-| D3 | Missing/null/invalid facts | Distinguish them in representation and diagnostics. Prefer explicit indeterminate comparisons: true satisfies `any`, false fails `all`, otherwise unknown propagates; only true fires. Define full truth tables, including `NEQ`, and version the behavior. | Before M4 semantics. Open. |
-| D4 | Failure and commit scope | Evaluation errors discard staged outputs. Specify adapter commit scope, observable partial/unknown outcomes, and recovery. Snapshot evaluation alone is not a storage transaction. | Before M4 semantics; complete recovery in M7. Open. |
-| D5 | Derived rounds and resource budgets | Outputs feed a subsequent ordered round; enforce action, event, chain/fan-out, payload, and state limits. Define chain IDs, budget ownership, and restart behavior. | M4; persistence in M7. Open. |
+| D1 | State authority and snapshot consistency | Specify what a snapshot represents. For durable processing, use coordinator-owned state rebuilt from checkpoints and ordered inputs; do not replay against arbitrary latest Redis values. Define how external writers enter that input history. | Resolved for M4 in [D1](decisions/REX-M4.md); durable history remains M7. |
+| D2 | Conflicting outputs | Reject different values written to the same fact within one round by default; allow identical final fact writes to coalesce while retaining action trace. Do not make priority an undocumented winner policy or suppress future external actions. | Resolved in [M4 contract](decisions/REX-M4.md). |
+| D3 | Missing/null/invalid facts | Distinguish them in representation and diagnostics. Prefer explicit indeterminate comparisons: true satisfies `any`, false fails `all`, otherwise unknown propagates; only true fires. Define full truth tables, including `NEQ`, and version the behavior. | Resolved in [M4 contract](decisions/REX-M4.md). |
+| D4 | Failure and commit scope | Evaluation errors discard staged outputs. Specify adapter commit scope, observable partial/unknown outcomes, and recovery. Snapshot evaluation alone is not a storage transaction. | Resolved in [D4](decisions/REX-M4.md); durable recovery remains M7. |
+| D5 | Derived rounds and resource budgets | Outputs feed a subsequent ordered round; enforce action, event, chain/fan-out, payload, and state limits. Define chain IDs, budget ownership, and restart behavior. | Resolved in [D5](decisions/REX-M4.md); persistence remains M7. |
 | D6 | Script capability and determinism | Isolated bounded workers if retaining general JavaScript; explicit time/randomness inputs or recorded results for replay. Document supported platforms and host-access limits. | Before M6 integration. Open. |
 | D7 | Durable topology, ordering, retention | Start with a documented single Redis commit domain and one state owner per partition; choose supported versions, persistence settings, retention, and consumer recovery together. | Before M7 implementation. Open. |
 
@@ -489,3 +489,31 @@ Next concrete action:
 - Production compiler/runtime behavior and bytecode format remain unchanged.
   M4 must add a separate contract/corpus for intentional semantic changes.
 - Next default milestone: **REX-M4**. M3 remains an independent operational lane.
+
+
+### 2026-09-08 — REX-M4 local completion; review pending
+
+- Starting revision: `23c87bc00a5dcf244743aa60a9ac9e7cc9544966`, merged M2
+  [PR #34](https://github.com/rgehrsitz/rex/pull/34). M4 is prepared on `codex/rex-m4-batch` for PR review; integration and hosted
+  CI remain pending.
+- Delivered immutable v4 programs, pure tri-state batch evaluation, one snapshot
+  read per round, deterministic staging and conflict rejection, separate source/
+  snapshot/commit adapters, bounded derived chains, and private runtime state.
+- D1–D5 are recorded in the [decision](decisions/REX-M4.md). The
+  [migration report](M4_MIGRATION.md) explains changed behavior, explicit v3
+  compatibility, script restrictions, results routing, and reconciliation.
+- Acceptance evidence: frozen v3 corpus; independent v4 oracle across 128 seeded
+  scenarios, 18 truth-table combinations, and seven authored migration cases;
+  coordinator bounds/cancellation/failure tests; memory/miniredis contracts;
+  Redis 7.4.2 failure tests for lost acknowledgments and notification failure.
+  Redis fault injection is client-hook based, not a network/crash durability test.
+- Normal/race suites, vet, build, and all six release archive targets pass.
+  CLI smoke checks verify default v4 and explicit legacy v3 headers. Dependency
+  tidy produces no changes. A ten-second v4 decoder fuzz smoke run
+  completed 2,209,984 executions. `govulncheck` found no reachable vulnerabilities
+  (one imported-package and one module finding remain unreachable).
+- Redis writes are sequential and can be partial or unknown. The coordinator
+  halts for reconciliation; the halt is not durable across restart. M7 owns
+  durable recovery. No performance speedup or transactional guarantee is claimed.
+- Next concrete action: review and integrate M4, then REX-M5. M3 remains an
+  independent operational lane.

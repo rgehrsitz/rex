@@ -1,0 +1,384 @@
+[
+  {
+    "name": "batch-dedup",
+    "contract": "batch-v4",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "b",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "snapshot": {},
+    "event": {
+      "b": 1,
+      "a": 1
+    },
+    "expected_rules": [
+      "r"
+    ],
+    "expected_writes": [
+      {
+        "key": "out",
+        "value": true
+      }
+    ],
+    "expected_actions": 1,
+    "expected_error": ""
+  },
+  {
+    "name": "missing-any",
+    "contract": "batch-v4",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "any": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "missing",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "snapshot": {},
+    "event": {
+      "a": 1
+    },
+    "expected_rules": [
+      "r"
+    ],
+    "expected_writes": [
+      {
+        "key": "out",
+        "value": true
+      }
+    ],
+    "expected_actions": 1,
+    "expected_error": ""
+  },
+  {
+    "name": "conflicting-priorities",
+    "contract": "batch-v4",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "late",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": "late"
+            }
+          ]
+        },
+        {
+          "name": "first",
+          "priority": 0,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": "first"
+            },
+            {
+              "type": "updateStore",
+              "target": "x",
+              "value": 2
+            }
+          ]
+        },
+        {
+          "name": "tie",
+          "priority": 0,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": "tie"
+            }
+          ]
+        }
+      ]
+    },
+    "snapshot": {},
+    "event": {
+      "a": 1
+    },
+    "expected_rules": [],
+    "expected_writes": [],
+    "expected_actions": 0,
+    "expected_error": "conflict"
+  },
+  {
+    "name": "type-is-unknown",
+    "contract": "batch-v4",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "NEQ",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "snapshot": {},
+    "event": {
+      "a": "wrong"
+    },
+    "expected_rules": [],
+    "expected_writes": [],
+    "expected_actions": 0,
+    "expected_error": ""
+  },
+  {
+    "name": "identical-coalesce",
+    "contract": "batch-v4",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            },
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "snapshot": {},
+    "event": {
+      "a": 1
+    },
+    "expected_rules": [
+      "r"
+    ],
+    "expected_writes": [
+      {
+        "key": "out",
+        "value": true
+      }
+    ],
+    "expected_actions": 2,
+    "expected_error": ""
+  },
+  {
+    "name": "snapshot-visibility",
+    "contract": "batch-v4",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        },
+        {
+          "name": "later",
+          "priority": 11,
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "out",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "second",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "snapshot": {
+      "out": false
+    },
+    "event": {
+      "a": 1
+    },
+    "expected_rules": [
+      "r"
+    ],
+    "expected_writes": [
+      {
+        "key": "out",
+        "value": true
+      }
+    ],
+    "expected_actions": 1,
+    "expected_error": ""
+  },
+  {
+    "name": "null-any",
+    "contract": "batch-v4",
+    "ruleset": {
+      "rules": [
+        {
+          "name": "r",
+          "priority": 10,
+          "conditions": {
+            "any": [
+              {
+                "fact": "a",
+                "operator": "GT",
+                "value": 0
+              },
+              {
+                "fact": "missing",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    },
+    "snapshot": {
+      "missing": null
+    },
+    "event": {
+      "a": 1
+    },
+    "expected_rules": [
+      "r"
+    ],
+    "expected_writes": [
+      {
+        "key": "out",
+        "value": true
+      }
+    ],
+    "expected_actions": 1,
+    "expected_error": ""
+  }
+]

@@ -15,6 +15,9 @@ import (
 // processing; like other Engine settings this is not a concurrent mutation API.
 func (e *Engine) SetConditionTracing(enabled bool) {
 	e.traceConditions = enabled
+	if e.coordinator != nil {
+		e.coordinator.trace = enabled
+	}
 }
 
 // WithTraceID returns a context that associates work with one event trace.

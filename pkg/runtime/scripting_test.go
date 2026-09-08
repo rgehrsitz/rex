@@ -99,7 +99,7 @@ func TestScriptingEndToEnd(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Log engine facts after processing
-	t.Logf("Engine facts after processing: %v", engine.Facts)
+	t.Logf("Engine facts after processing: %v", engine.facts)
 
 	// Verify rule execution
 	status, err := redisStore.GetFact("status")
@@ -108,7 +108,7 @@ func TestScriptingEndToEnd(t *testing.T) {
 	assert.Equal(t, "hot", status)
 
 	// Verify script execution
-	heatIndex, exists := engine.Facts["heat_index"]
+	heatIndex, exists := engine.facts["heat_index"]
 	assert.True(t, exists, "Heat index calculation result not found in engine facts")
 	if exists {
 		t.Logf("Calculated heat index: %v", heatIndex)
@@ -154,7 +154,7 @@ func TestDisabledScriptActionDoesNotBlockOtherRules(t *testing.T) {
 	regularStatus, err := redisStore.GetFact("regular_status")
 	require.NoError(t, err)
 	assert.Equal(t, "processed", regularStatus)
-	assert.NotContains(t, engine.Facts, "script_status")
+	assert.NotContains(t, engine.facts, "script_status")
 }
 
 func TestEnabledScriptActionRejectsMalformedParameters(t *testing.T) {

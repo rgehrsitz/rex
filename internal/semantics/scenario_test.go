@@ -136,6 +136,7 @@ func runScenario(t *testing.T, s scenario, oracle bool, mutate func(*compiler.By
 	}
 	local := map[string]interface{}{}
 	var eval evaluator
+	var inspect func() map[string]interface{}
 	if oracle {
 		eval = &reference{rules: authored.Rules, facts: local, store: backend, limit: limit}
 	} else {
@@ -161,10 +162,14 @@ func runScenario(t *testing.T, s scenario, oracle bool, mutate func(*compiler.By
 		defer engine.Shutdown()
 		engine.SetMaxActionsPerEvaluation(limit)
 		eval = engine
-		local = engine.Facts
+		local = engine.Snapshot()
+		inspect = engine.Snapshot
 	}
 	out := outcome{Errors: []string{}}
 	record := func() {
+		if inspect != nil {
+			local = inspect()
+		}
 		var saved map[string]interface{}
 		raw, _ := json.Marshal(local)
 		_ = json.Unmarshal(raw, &saved)
@@ -205,6 +210,9 @@ func runScenario(t *testing.T, s scenario, oracle bool, mutate func(*compiler.By
 		out.Errors = append(out.Errors, "harness delivery limit reached")
 	}
 	out.Facts = memorySnapshot(t, memory)
+	if inspect != nil {
+		local = inspect()
+	}
 	out.Local = local
 	out.Actions = backend.actions
 	return out

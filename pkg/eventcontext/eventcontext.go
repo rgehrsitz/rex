@@ -10,6 +10,7 @@ type metadataContextKey struct{}
 type Metadata struct {
 	TraceID string `json:"trace_id"`
 	Hop     int    `json:"hop"`
+	Kind    string `json:"kind,omitempty"`
 }
 
 // WithMetadata returns a context that carries event metadata.

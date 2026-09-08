@@ -15,7 +15,9 @@
             "properties": {
               "name": {
                 "description": "The name of the rule.  Must be unique.",
-                "type": "string"
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 255
               },
               "priority": {
                 "type": "integer",
@@ -34,7 +36,19 @@
                     "$ref": "#/definitions/conditionGroup"
                   }
                 },
-                "oneOf": [{ "required": ["all"] }, { "required": ["any"] }]
+                "oneOf": [
+                  {
+                    "required": [
+                      "all"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "any"
+                    ]
+                  }
+                ],
+                "additionalProperties": false
               },
               "actions": {
                 "type": "array",
@@ -43,33 +57,65 @@
                   "properties": {
                     "type": {
                       "type": "string",
-                      "enum": ["updateStore"]
+                      "enum": [
+                        "updateStore"
+                      ]
                     },
                     "target": {
                       "type": "string",
-                      "pattern": "^[^:]+:[^:]+$"
+                      "minLength": 1,
+                      "maxLength": 255
                     },
                     "value": {
-                      "type": ["string", "number", "boolean"]
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "maxLength": 255,
+                          "not": {
+                            "pattern": "^\\{[\\s\\S]*\\}$"
+                          }
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        }
+                      ]
                     }
                   },
-                  "required": ["type", "target", "value"],
+                  "required": [
+                    "type",
+                    "target",
+                    "value"
+                  ],
                   "additionalProperties": false
-                }
+                },
+                "minItems": 1
               }
             },
-            "required": ["name", "conditions", "actions"],
+            "required": [
+              "name",
+              "conditions",
+              "actions"
+            ],
             "additionalProperties": false
           }
         ]
-      }
+      },
+      "minItems": 1,
+      "maxItems": 10000
     }
   },
-  "required": ["rules"],
+  "required": [
+    "rules"
+  ],
   "definitions": {
     "ruleWithUniqueName": {
       "type": "object",
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string"
@@ -85,7 +131,8 @@
             "properties": {
               "fact": {
                 "type": "string",
-                "pattern": "^[^:]+:[^:]+$"
+                "minLength": 1,
+                "maxLength": 255
               },
               "operator": {
                 "type": "string",
@@ -101,11 +148,69 @@
                 ]
               },
               "value": {
-                "type": ["string", "number", "boolean"]
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 255
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "boolean"
+                  }
+                ]
               }
             },
-            "required": ["fact", "operator", "value"],
-            "additionalProperties": false
+            "required": [
+              "fact",
+              "operator",
+              "value"
+            ],
+            "additionalProperties": false,
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "enum": [
+                        "LT",
+                        "LTE",
+                        "GT",
+                        "GTE"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "value": {
+                      "type": "number"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "operator": {
+                      "enum": [
+                        "CONTAINS",
+                        "NOT_CONTAINS"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            ]
           },
           {
             "type": "object",
@@ -117,11 +222,26 @@
                 "$ref": "#/definitions/conditionGroup"
               }
             },
-            "oneOf": [{ "required": ["all"] }, { "required": ["any"] }],
+            "oneOf": [
+              {
+                "required": [
+                  "all"
+                ]
+              },
+              {
+                "required": [
+                  "any"
+                ]
+              }
+            ],
             "additionalProperties": false
           }
         ]
-      }
+      },
+      "minItems": 1
     }
-  }
+  },
+  "title": "REX v4 ruleset",
+  "description": "Batch v4: scalar conditions, script-free actions, simultaneous snapshots. Compiler additionally enforces unique rule names and UTF-8 byte limits.",
+  "additionalProperties": false
 }
