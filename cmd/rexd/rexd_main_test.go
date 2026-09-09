@@ -134,6 +134,9 @@ func TestParseConfig(t *testing.T) {
 		"redis.database": 1,
 		"redis.channels": ["rex_updates"],
 		"engine.scripts_enabled": true,
+		"engine.reload.interval": "3s",
+		"engine.reload.history_dir": "/tmp/rex-history",
+		"engine.reload.history_max_files": 8,
 		"observability.enabled": true,
 		"observability.address": "127.0.0.1:9091",
 		"engine.update_interval": 10,
@@ -161,6 +164,9 @@ func TestParseConfig(t *testing.T) {
 	assert.True(t, config.ScriptsEnabled)
 	assert.Equal(t, 32, config.MaxActionsPerEvaluation)
 	assert.Equal(t, 16, config.MaxEventHops)
+	assert.Equal(t, 3*time.Second, config.ReloadInterval)
+	assert.Equal(t, "/tmp/rex-history", config.ReloadHistoryDir)
+	assert.Equal(t, 8, config.ReloadHistoryMaxFiles)
 	assert.True(t, config.ObservabilityEnabled)
 	assert.Equal(t, "127.0.0.1:9091", config.ObservabilityAddress)
 }
@@ -181,6 +187,8 @@ func TestParseConfigDefaultsScriptsDisabled(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, config.ScriptsEnabled)
 	assert.True(t, config.TraceConditions)
+	assert.Zero(t, config.ReloadInterval)
+	assert.Equal(t, 32, config.ReloadHistoryMaxFiles)
 }
 
 func TestParseConfigEnvironmentOverridesFile(t *testing.T) {
@@ -229,6 +237,7 @@ func TestSetupDependencies(t *testing.T) {
 
 	assert.NotNil(t, deps.Store)
 	assert.NotNil(t, deps.Engine)
+	assert.NotNil(t, deps.Manager)
 }
 
 func TestSetupDependenciesRejectsScriptsEnabled(t *testing.T) {

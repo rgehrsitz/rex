@@ -21,6 +21,13 @@ type DurableQueue interface {
 	MaxAttempts() int64
 }
 
+// VersionedDurableQueue exposes the program pinned by a previous delivery so
+// an EngineManager can route recovery to the exact historical artifact.
+type VersionedDurableQueue interface {
+	DurableQueue
+	PinnedProgram(context.Context, string) (string, error)
+}
+
 type DurableProcessResult struct {
 	EventID      string
 	Attempts     int64
@@ -33,14 +40,18 @@ type DurableProcessResult struct {
 // ProcessNext processes at most one stream event. Failed events remain pending
 // until their bounded attempt count sends them to the dead-letter stream.
 func (e *Engine) ProcessNextDurable(ctx context.Context, queue DurableQueue) (DurableProcessResult, error) {
-	result := DurableProcessResult{}
 	if e.coordinator == nil || e.programID == "" {
-		return result, fmt.Errorf("durable processing requires a v4 artifact")
+		return DurableProcessResult{}, fmt.Errorf("durable processing requires a v4 artifact")
 	}
 	event, receiveErr := queue.Next(ctx)
 	if event.ID == "" {
-		return result, receiveErr
+		return DurableProcessResult{}, receiveErr
 	}
+	return e.processDurableEvent(ctx, queue, event, receiveErr)
+}
+
+func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, event store.DurableEvent, receiveErr error) (DurableProcessResult, error) {
+	result := DurableProcessResult{}
 	result.EventID = event.ID
 	result.Recovered = event.Recovered
 	status, err := queue.Begin(ctx, event, e.programID)

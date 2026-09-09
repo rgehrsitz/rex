@@ -14,20 +14,26 @@ import (
 )
 
 type durableQueueProbe struct {
-	event       store.DurableEvent
-	attempts    int64
-	maxAttempts int64
-	terminal    string
-	acked       int
-	completed   int
-	dead        int
-	beginErr    error
-	applyErr    error
-	inputs      int
+	event        store.DurableEvent
+	pinned       string
+	attempts     int64
+	maxAttempts  int64
+	terminal     string
+	acked        int
+	completed    int
+	dead         int
+	beginErr     error
+	applyErr     error
+	inputs       int
+	begunProgram string
 }
 
 func (q *durableQueueProbe) Next(context.Context) (store.DurableEvent, error) { return q.event, nil }
-func (q *durableQueueProbe) Begin(context.Context, store.DurableEvent, string) (store.JournalStatus, error) {
+func (q *durableQueueProbe) PinnedProgram(context.Context, string) (string, error) {
+	return q.pinned, nil
+}
+func (q *durableQueueProbe) Begin(_ context.Context, _ store.DurableEvent, programID string) (store.JournalStatus, error) {
+	q.begunProgram = programID
 	if q.beginErr != nil {
 		return store.JournalStatus{}, q.beginErr
 	}

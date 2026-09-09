@@ -242,6 +242,19 @@ func (d *RedisDurable) journalKey(eventID string) string {
 	return "rex:durable:" + d.options.Namespace + ":event:" + eventID
 }
 
+// PinnedProgram returns the artifact digest recorded by an earlier attempt.
+// An event without a journal has not yet been assigned a program.
+func (d *RedisDurable) PinnedProgram(ctx context.Context, eventID string) (string, error) {
+	programID, err := d.client.HGet(ctx, d.journalKey(eventID), "program_id").Result()
+	if err == redis.Nil {
+		return "", nil
+	}
+	if err != nil {
+		return "", infrastructureFailure("read durable event program", err)
+	}
+	return programID, nil
+}
+
 func (d *RedisDurable) validateFactKey(key string) error {
 	if key == "" {
 		return fmt.Errorf("durable fact key is empty")

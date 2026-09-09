@@ -65,7 +65,6 @@ func (e *Engine) SetMaxActionsPerEvaluation(limit int) error {
 
 // New method to create an engine from a file
 func NewEngineFromFile(filename string, store store.ContextStore, priorityThreshold int) (*Engine, error) {
-
 	file, err := os.Open(filename)
 	if err != nil {
 		return nil, err
@@ -78,11 +77,21 @@ func NewEngineFromFile(filename string, store store.ContextStore, priorityThresh
 	if err != nil {
 		return nil, logging.NewError(logging.ErrorTypeRuntime, "Failed to read bytecode file", err, map[string]interface{}{"filename": filename})
 	}
+	return NewEngineFromBytes(bytecode, store, priorityThreshold)
+}
+
+// NewEngineFromBytes validates and loads one immutable program artifact. The
+// input is copied so callers may safely reuse their read buffer after return.
+func NewEngineFromBytes(bytecode []byte, store store.ContextStore, priorityThreshold int) (*Engine, error) {
+	if len(bytecode) > compiler.MaxProgramBytes+16 {
+		return nil, fmt.Errorf("artifact exceeds byte limit")
+	}
+	bytecode = append([]byte(nil), bytecode...)
 	if len(bytecode) >= 4 && binary.LittleEndian.Uint32(bytecode) == compiler.BatchVersion {
 		return newBatchEngine(bytecode, store)
 	}
 	if err := validateBytecode(bytecode); err != nil {
-		return nil, logging.NewError(logging.ErrorTypeRuntime, fmt.Sprintf("Invalid bytecode file: %v", err), err, map[string]interface{}{"filename": filename})
+		return nil, logging.NewError(logging.ErrorTypeRuntime, fmt.Sprintf("Invalid bytecode artifact: %v", err), err, nil)
 	}
 	logging.Logger.Debug().Int("bytecodeLength", len(bytecode)).Msg("Read bytecode file")
 

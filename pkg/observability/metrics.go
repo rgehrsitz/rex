@@ -19,27 +19,30 @@ var eventLatencyBounds = [...]time.Duration{
 // Metrics collects process-local runtime measurements. Its methods are safe
 // for concurrent use by the Redis consumer and the HTTP metrics handler.
 type Metrics struct {
-	ready                atomic.Bool
-	readinessMu          sync.Mutex
-	redisReady           bool
-	subscriptionReady    bool
-	eventsReceived       atomic.Uint64
-	eventFailures        atomic.Uint64
-	eventProcessingNanos atomic.Uint64
-	rulesFired           atomic.Uint64
-	actionsSucceeded     atomic.Uint64
-	actionsSkipped       atomic.Uint64
-	actionFailures       atomic.Uint64
-	eventLatencyBuckets  [len(eventLatencyBounds) + 1]atomic.Uint64
-	redisDisconnects     atomic.Uint64
-	redisReconnects      atomic.Uint64
-	eventSourceErrors    atomic.Uint64
-	durableMode          atomic.Bool
-	durablePending       atomic.Int64
-	durableLag           atomic.Int64
-	durableRetries       atomic.Uint64
-	durableRecoveries    atomic.Uint64
-	durableDeadLetters   atomic.Uint64
+	ready                 atomic.Bool
+	readinessMu           sync.Mutex
+	redisReady            bool
+	subscriptionReady     bool
+	eventsReceived        atomic.Uint64
+	eventFailures         atomic.Uint64
+	eventProcessingNanos  atomic.Uint64
+	rulesFired            atomic.Uint64
+	actionsSucceeded      atomic.Uint64
+	actionsSkipped        atomic.Uint64
+	actionFailures        atomic.Uint64
+	eventLatencyBuckets   [len(eventLatencyBounds) + 1]atomic.Uint64
+	redisDisconnects      atomic.Uint64
+	redisReconnects       atomic.Uint64
+	eventSourceErrors     atomic.Uint64
+	durableMode           atomic.Bool
+	durablePending        atomic.Int64
+	durableLag            atomic.Int64
+	durableRetries        atomic.Uint64
+	durableRecoveries     atomic.Uint64
+	durableDeadLetters    atomic.Uint64
+	rulesetReloads        atomic.Uint64
+	rulesetReloadFailure  atomic.Uint64
+	rulesetReloadDeferred atomic.Uint64
 }
 
 // NewMetrics initializes an empty metrics collector.
@@ -94,9 +97,12 @@ func (m *Metrics) SetDurableBacklog(pending, lag int64) {
 	m.durableLag.Store(lag)
 }
 
-func (m *Metrics) RecordDurableRetry()      { m.durableRetries.Add(1) }
-func (m *Metrics) RecordDurableRecovery()   { m.durableRecoveries.Add(1) }
-func (m *Metrics) RecordDurableDeadLetter() { m.durableDeadLetters.Add(1) }
+func (m *Metrics) RecordDurableRetry()          { m.durableRetries.Add(1) }
+func (m *Metrics) RecordDurableRecovery()       { m.durableRecoveries.Add(1) }
+func (m *Metrics) RecordDurableDeadLetter()     { m.durableDeadLetters.Add(1) }
+func (m *Metrics) RecordRulesetReloadSuccess()  { m.rulesetReloads.Add(1) }
+func (m *Metrics) RecordRulesetReloadFailure()  { m.rulesetReloadFailure.Add(1) }
+func (m *Metrics) RecordRulesetReloadDeferred() { m.rulesetReloadDeferred.Add(1) }
 
 // RecordEvent records the result and elapsed time of processing one incoming
 // event, which may contain multiple fact updates.
@@ -216,6 +222,15 @@ rex_event_recoveries_total %d
 # HELP rex_dead_letters_total Number of durable events moved to the dead-letter stream.
 # TYPE rex_dead_letters_total counter
 rex_dead_letters_total %d
+# HELP rex_ruleset_reloads_total Number of validated rulesets installed successfully.
+# TYPE rex_ruleset_reloads_total counter
+rex_ruleset_reloads_total %d
+# HELP rex_ruleset_reload_failures_total Number of changed ruleset artifacts rejected before activation.
+# TYPE rex_ruleset_reload_failures_total counter
+rex_ruleset_reload_failures_total %d
+# HELP rex_ruleset_reload_deferred_total Number of reload attempts deferred for pending durable work.
+# TYPE rex_ruleset_reload_deferred_total counter
+rex_ruleset_reload_deferred_total %d
 # HELP rex_redis_disconnects_total Number of observed Redis connectivity losses.
 # TYPE rex_redis_disconnects_total counter
 rex_redis_disconnects_total %d
@@ -233,7 +248,7 @@ rex_rule_outcomes_total{outcome="fired"} %d
 rex_action_outcomes_total{outcome="succeeded"} %d
 rex_action_outcomes_total{outcome="skipped"} %d
 rex_action_outcomes_total{outcome="failed"} %d
-`, events, m.eventFailures.Load(), processingSeconds, average(processingSeconds, events), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load(), queueLag, queuePending, m.durableRetries.Load(), m.durableRecoveries.Load(), m.durableDeadLetters.Load(), m.redisDisconnects.Load(), m.redisReconnects.Load(), m.eventSourceErrors.Load(), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load())
+`, events, m.eventFailures.Load(), processingSeconds, average(processingSeconds, events), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load(), queueLag, queuePending, m.durableRetries.Load(), m.durableRecoveries.Load(), m.durableDeadLetters.Load(), m.rulesetReloads.Load(), m.rulesetReloadFailure.Load(), m.rulesetReloadDeferred.Load(), m.redisDisconnects.Load(), m.redisReconnects.Load(), m.eventSourceErrors.Load(), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load())
 
 	_, _ = fmt.Fprintln(w, "# HELP rex_event_processing_duration_seconds Time spent processing Redis events.")
 	_, _ = fmt.Fprintln(w, "# TYPE rex_event_processing_duration_seconds histogram")
