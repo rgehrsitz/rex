@@ -59,7 +59,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Complete | [PR #35](https://github.com/rgehrsitz/rex/pull/35), `f6e036c`; [migration](M4_MIGRATION.md). |
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
-| REX-M7 | Deliver durable event processing | M3, M4, M5 | Planned | Design journal, commit, acknowledgement, and crash recovery together. |
+| REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [Recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [local acceptance evidence](baselines/rex-m7/README.md). Implementation and Redis 7.4.2 fault suite complete; review pending. Next: scope the first M8 capability. |
 | REX-M8 | Extend the proven foundation | Capability-specific gates below | Planned | Start with ruleset reloads; split each capability into its own proposal. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
@@ -337,25 +337,25 @@ not justify this cost, record a deliberate removal decision and migration path.
 **Outcome:** accepted events and pending outputs survive the documented failure
 model and can be processed again without duplicating committed fact changes.
 
-- [ ] Add a Redis Streams event-source adapter with stable event IDs, consumer
+- [x] Add a Redis Streams event-source adapter with stable event IDs, consumer
   groups, acknowledgements, pending-work recovery, bounded retries, and a
   dead-letter policy. Retain an explicitly best-effort Pub/Sub mode.
-- [ ] Design input journal, authoritative state/checkpoint, event progress, output
+- [x] Design input journal, authoritative state/checkpoint, event progress, output
   records, and deduplication as one recovery protocol. A historical event must
   not fetch arbitrarily newer dependency values during retry/replay.
-- [ ] Persist state changes with a recoverable record of derived outputs before
+- [x] Persist state changes with a recoverable record of derived outputs before
   acknowledging the input. Define the supported Redis topology and atomic commit
   scope; command pipelining is not a commit protocol.
-- [ ] Use stable action/output IDs derived from event identity, program version,
+- [x] Use stable action/output IDs derived from event identity, program version,
   and action identity. Persist deduplication across restart and define its
   retention relative to stream/replay retention.
-- [ ] Resolve unknown commit outcomes before retrying. Define how poison events
+- [x] Resolve unknown commit outcomes before retrying. Define how poison events
   affect ordering and how operators repair/redrive them without losing identity.
-- [ ] Establish one ordered state owner per partition initially. Multiple
+- [x] Establish one ordered state owner per partition initially. Multiple
   consumers alone do not guarantee safe ordering for shared facts.
-- [ ] Define stream trimming, Redis persistence/replication assumptions,
+- [x] Define stream trimming, Redis persistence/replication assumptions,
   backpressure, maximum pending work, recovery procedures, and failure limits.
-- [ ] Add actual backlog/lag, retry, recovery, and dead-letter metrics and make
+- [x] Add actual backlog/lag, retry, recovery, and dead-letter metrics and make
   readiness reflect the durable processor's ability to accept/process work.
 
 **Acceptance criteria:** a real-Redis fault suite interrupts processing before
@@ -412,7 +412,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D4 | Failure and commit scope | Evaluation errors discard staged outputs. Specify adapter commit scope, observable partial/unknown outcomes, and recovery. Snapshot evaluation alone is not a storage transaction. | Resolved in [D4](decisions/REX-M4.md); durable recovery remains M7. |
 | D5 | Derived rounds and resource budgets | Outputs feed a subsequent ordered round; enforce action, event, chain/fan-out, payload, and state limits. Define chain IDs, budget ownership, and restart behavior. | Resolved in [D5](decisions/REX-M4.md); persistence remains M7. |
 | D6 | Script capability and determinism | Isolated bounded workers if retaining general JavaScript; explicit time/randomness inputs or recorded results for replay. Document supported platforms and host-access limits. | Resolved by removal in [REX-M6](decisions/REX-M6.md). |
-| D7 | Durable topology, ordering, retention | Start with a documented single Redis commit domain and one state owner per partition; choose supported versions, persistence settings, retention, and consumer recovery together. | Before M7 implementation. Open. |
+| D7 | Durable topology, ordering, retention | Start with a documented single Redis commit domain and one state owner per partition; choose supported versions, persistence settings, retention, and consumer recovery together. | Resolved for M7 in [REX-M7](decisions/REX-M7.md). |
 
 ## Review, validation, and completion discipline
 

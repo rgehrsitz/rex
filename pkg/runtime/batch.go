@@ -110,9 +110,10 @@ type Budget struct {
 	Work    int `json:"work"`
 }
 type ActionProposal struct {
-	Rule   string      `json:"rule"`
-	Target string      `json:"target"`
-	Value  interface{} `json:"value"`
+	Rule        string      `json:"rule"`
+	ActionIndex int         `json:"action_index,omitempty"`
+	Target      string      `json:"target"`
+	Value       interface{} `json:"value"`
 }
 type ConditionResult struct {
 	Rule   string          `json:"rule"`
@@ -385,7 +386,7 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 		if len(rule.Actions) > limits.ActionsPerRule {
 			return empty, budget, fmt.Errorf("rule %q exceeded action limit", rule.Name)
 		}
-		for _, a := range rule.Actions {
+		for actionIndex, a := range rule.Actions {
 			remaining.Actions++
 			if remaining.Actions > limits.ChainActions || len(result.Actions) >= limits.ActionsPerRound {
 				return empty, budget, fmt.Errorf("action budget exceeded")
@@ -398,7 +399,7 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 			if staged > limits.StagedBytes {
 				return empty, budget, fmt.Errorf("staged byte budget exceeded")
 			}
-			result.Actions = append(result.Actions, ActionProposal{Rule: rule.Name, Target: a.Target, Value: a.Value})
+			result.Actions = append(result.Actions, ActionProposal{Rule: rule.Name, ActionIndex: actionIndex, Target: a.Target, Value: a.Value})
 			if old, ok := targets[a.Target]; ok {
 				if old != a.Value {
 					return empty, budget, fmt.Errorf("conflicting writes to %q", a.Target)
@@ -479,16 +480,17 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		if err := validateEvent(event, c.limits); err != nil {
 			return result, err
 		}
+		roundCtx := store.WithEvaluationRound(ctx, round)
 		_, keys := c.program.candidates(event)
 		snapshot := map[string]store.Fact{}
 		if len(keys) > 0 {
 			var err error
-			snapshot, err = c.reader.ReadSnapshot(ctx, keys)
+			snapshot, err = c.reader.ReadSnapshot(roundCtx, keys)
 			if err != nil {
 				return result, fmt.Errorf("snapshot: %w", err)
 			}
 		}
-		eval, budget, err := c.program.Evaluate(ctx, snapshot, event, c.limits, result.Budget, c.trace)
+		eval, budget, err := c.program.Evaluate(roundCtx, snapshot, event, c.limits, result.Budget, c.trace)
 		if err != nil {
 			result.Rounds = append(result.Rounds, RoundResult{Round: round, Evaluation: eval, EvaluationError: err.Error(), Commit: store.CommitResult{Outcome: store.NotCommitted}})
 			return result, fmt.Errorf("evaluate round %d: %w", round, err)
@@ -510,7 +512,11 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		committed, err := c.committer.Commit(ctx, store.CommitRequest{ChainID: result.ChainID, Round: round, Writes: eval.Writes})
+		actions := make([]store.ActionIdentity, len(eval.Actions))
+		for i, action := range eval.Actions {
+			actions[i] = store.ActionIdentity{Rule: action.Rule, Index: action.ActionIndex, Target: action.Target}
+		}
+		committed, err := c.committer.Commit(roundCtx, store.CommitRequest{ChainID: result.ChainID, Round: round, Writes: eval.Writes, Actions: actions})
 		rr.Commit = committed
 		if err != nil {
 			rr.CommitError = err.Error()
@@ -527,7 +533,13 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 				err = fmt.Errorf("adapter declined commit")
 			}
 			return result, fmt.Errorf("commit: %w", err)
-		case store.Partial, store.Unknown:
+		case store.Unknown:
+			if resolver, ok := c.committer.(store.UnknownOutcomeResolver); ok && resolver.ResolvesUnknownOnRetry() {
+				return result, fmt.Errorf("commit outcome unknown; retry the same durable event: %w", err)
+			}
+			c.halted = true
+			return result, fmt.Errorf("commit %s (%v): %w", committed.Outcome, err, ErrReconciliationRequired)
+		case store.Partial:
 			c.halted = true
 			return result, fmt.Errorf("commit %s (%v): %w", committed.Outcome, err, ErrReconciliationRequired)
 		default:

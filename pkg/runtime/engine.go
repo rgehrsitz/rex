@@ -33,6 +33,7 @@ type Engine struct {
 	maxActionsPerEvaluation int
 	traceConditions         bool
 	executionObserver       ExecutionObserver
+	programID               string
 }
 
 // SetScriptsEnabled is retained as a migration diagnostic. JavaScript was

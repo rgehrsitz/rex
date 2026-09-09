@@ -14,6 +14,7 @@
     "connect_timeout": "5s",
     "health_check_interval": "1s",
     "health_check_timeout": "500ms",
+    "event_mode": "pubsub",
     "tls": {
       "enabled": false,
       "server_name": "",
@@ -29,7 +30,23 @@
       "humidity",
       "temperature",
       "flow_rate"
-    ]
+    ],
+    "durable": {
+      "stream": "rex_events",
+      "group": "rex",
+      "consumer": "rexd-1",
+      "output_stream": "rex_results_stream",
+      "dead_letter_stream": "rex_dead_letter",
+      "namespace": "default",
+      "claim_idle": "30s",
+      "block": "1s",
+      "journal_ttl": "168h",
+      "max_attempts": 5,
+      "output_max_len": 100000,
+      "dead_letter_max_len": 10000,
+      "lock_ttl": "30s",
+      "retry_backoff": "250ms"
+    }
   },
   "engine": {
     "priority_threshold": 1,

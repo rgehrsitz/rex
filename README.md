@@ -165,7 +165,10 @@ path, replacing dots with underscores, and adding `REX_`. For example,
 `REX_REDIS_TLS_CA_FILE`. Environment variables override the configuration file,
 which overrides built-in defaults. Comma-separate `REX_REDIS_CHANNELS` values.
 See the [M3 operations guide](docs/M3_OPERATIONS.md) for TLS, readiness,
-routing, limits, and metrics.
+routing, limits, and metrics. Redis Pub/Sub remains the default event mode.
+For retained delivery and restart recovery, set `redis.event_mode` to `streams`,
+configure `redis.durable.stream`, `group`, and `consumer`, and follow the
+[M7 durable processing runbook](docs/M7_DURABLE_PROCESSING.md).
 
 `scripts_enabled` remains only as an M6 migration tripwire: `false` is accepted,
 while `true` fails startup. See the [M6 migration guide](docs/M6_SCRIPT_REMOVAL.md).
@@ -182,7 +185,11 @@ Example:
 
 ### Fact Event Format
 
-`rexd` consumes and the Redis store publishes JSON objects that map fact keys to their JSON values. For example, publishing the following event updates a numeric fact, a boolean fact, and a string fact without type conversion:
+`rexd` consumes JSON objects that map fact keys to their JSON values. In Pub/Sub
+mode the producer publishes the object to a configured channel. In Streams mode
+the producer appends it as the `payload` field of the configured input stream.
+For example, the following event updates a numeric fact, a boolean fact, and a
+string fact without type conversion:
 
 ```json
 {
@@ -213,15 +220,16 @@ they no longer write event payloads through the standard-library logger.
 Set `observability.enabled` to `true` to expose local HTTP endpoints at `observability.address` (default: `127.0.0.1:8080`):
 
 - `/healthz` confirms that the daemon process is serving HTTP.
-- `/readyz` returns `200` only while the Redis subscription and periodic
-  connectivity checks are healthy; it returns `503` during startup,
-  disconnection, and shutdown.
+- `/readyz` returns `200` only while Redis connectivity and the configured event
+  source are healthy. Durable mode also requires the partition ownership lease.
+  It returns `503` during startup, disconnection, lease loss, and shutdown.
 - `/metrics` emits Prometheus text-format counters and an event-processing
   latency histogram. Rule and action outcome labels use fixed value sets.
 
 The endpoint is disabled by default so an upgrade does not unexpectedly open a
-port. Redis Pub/Sub has no retained queue, producer timestamp, or broker-side
-drop counter, so queue lag and drop metrics are emitted as `NaN`.
+port. Durable mode reports consumer-group lag, pending work, retries, and dead
+letters. Redis Pub/Sub has no retained queue, producer timestamp, or broker-side
+drop counter, so its queue metrics are emitted as `NaN`.
 
 ### Cycle Safety
 

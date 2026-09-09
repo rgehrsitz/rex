@@ -626,6 +626,80 @@ func TestRun(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestRunMainLoopDurableProcessesAndAcknowledges(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	defer mr.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	redisStore, err := store.NewRedisStore(ctx, store.RedisOptions{Addr: mr.Addr()})
+	require.NoError(t, err)
+	defer redisStore.Close()
+	artifact, err := compiler.CompileBatch([]byte(batchRuleForDurableTest))
+	require.NoError(t, err)
+	path := t.TempDir() + "/durable.bytecode"
+	require.NoError(t, os.WriteFile(path, artifact, 0o644))
+	engine, err := runtime.NewEngineFromFile(path, redisStore, 0)
+	require.NoError(t, err)
+	defer engine.Shutdown()
+	input := "rex:m7:daemon:input"
+	output := "rex:m7:daemon:output"
+	producer := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	defer producer.Close()
+	require.NoError(t, producer.XAdd(ctx, &redis.XAddArgs{Stream: input, Values: map[string]interface{}{"payload": `{"a":1,"b":1}`}}).Err())
+	config := &Config{
+		RedisEventMode: "streams", RedisHealthInterval: 10 * time.Millisecond,
+		RedisHealthTimeout: time.Second, RedisRetryBackoff: time.Millisecond,
+		RedisDurable: store.DurableOptions{
+			Stream: input, Group: "rex", Consumer: "worker", OutputStream: output,
+			DeadLetter: "rex:m7:daemon:dead", Namespace: "daemon-test", ClaimIdle: time.Millisecond,
+			Block: 5 * time.Millisecond, JournalTTL: time.Hour, MaxAttempts: 3, LockTTL: time.Second,
+		},
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- runMainLoopWithObservability(ctx, &RexDependencies{Store: redisStore, Engine: engine}, config, observability.NewMetrics())
+	}()
+	require.Eventually(t, func() bool {
+		return producer.XLen(context.Background(), output).Val() == 1
+	}, time.Second, 10*time.Millisecond)
+	cancel()
+	require.NoError(t, <-done)
+	value, err := redisStore.GetFactContext(context.Background(), "out")
+	require.NoError(t, err)
+	require.Equal(t, true, value)
+}
+
+const batchRuleForDurableTest = `{"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"GT","value":0},{"fact":"b","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+
+type canceledLeaseRenewer struct{ started chan struct{} }
+
+func (r *canceledLeaseRenewer) OwnershipRenewInterval() time.Duration { return time.Nanosecond }
+func (r *canceledLeaseRenewer) RenewOwnership(ctx context.Context) error {
+	close(r.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestMonitorDurableOwnershipIgnoresShutdownCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	failures := make(chan error, 1)
+	done := make(chan struct{})
+	renewer := &canceledLeaseRenewer{started: make(chan struct{})}
+	go func() {
+		defer close(done)
+		monitorDurableOwnership(ctx, cancel, renewer, failures)
+	}()
+	<-renewer.started
+	cancel()
+	<-done
+	select {
+	case err := <-failures:
+		t.Fatalf("shutdown reported as lease failure: %v", err)
+	default:
+	}
+}
+
 func TestV4MessageIsOneBatchAndOutputNotificationIsIgnored(t *testing.T) {
 	source := []byte(`{"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"GT","value":0},{"fact":"b","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
 	artifact, err := compiler.CompileBatch(source)
