@@ -54,9 +54,17 @@ type Write struct {
 	Value interface{} `json:"value"`
 }
 type CommitRequest struct {
-	ChainID string  `json:"chain_id"`
-	Round   int     `json:"round"`
-	Writes  []Write `json:"writes"`
+	ChainID string           `json:"chain_id"`
+	Round   int              `json:"round"`
+	Writes  []Write          `json:"writes"`
+	Actions []ActionIdentity `json:"actions,omitempty"`
+}
+
+// ActionIdentity identifies a source action independently of its output value.
+type ActionIdentity struct {
+	Rule   string `json:"rule"`
+	Index  int    `json:"index"`
+	Target string `json:"target"`
 }
 type CommitOutcome string
 
@@ -75,6 +83,12 @@ type CommitResult struct {
 // Committer must not retry dispatched operations whose outcome is unknown.
 type Committer interface {
 	Commit(context.Context, CommitRequest) (CommitResult, error)
+}
+
+// UnknownOutcomeResolver marks a committer whose durable marker resolves an
+// unknown transaction outcome before the same event is retried.
+type UnknownOutcomeResolver interface {
+	ResolvesUnknownOnRetry() bool
 }
 
 func validateWrites(writes []Write) error {

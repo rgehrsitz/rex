@@ -34,6 +34,12 @@ type Metrics struct {
 	redisDisconnects     atomic.Uint64
 	redisReconnects      atomic.Uint64
 	eventSourceErrors    atomic.Uint64
+	durableMode          atomic.Bool
+	durablePending       atomic.Int64
+	durableLag           atomic.Int64
+	durableRetries       atomic.Uint64
+	durableRecoveries    atomic.Uint64
+	durableDeadLetters   atomic.Uint64
 }
 
 // NewMetrics initializes an empty metrics collector.
@@ -80,6 +86,17 @@ func (m *Metrics) RecordRedisReconnect() { m.redisReconnects.Add(1) }
 
 // RecordEventSourceError records an error reported by the subscription transport.
 func (m *Metrics) RecordEventSourceError() { m.eventSourceErrors.Add(1) }
+
+// SetDurableBacklog records the consumer group's pending and undelivered work.
+func (m *Metrics) SetDurableBacklog(pending, lag int64) {
+	m.durableMode.Store(true)
+	m.durablePending.Store(pending)
+	m.durableLag.Store(lag)
+}
+
+func (m *Metrics) RecordDurableRetry()      { m.durableRetries.Add(1) }
+func (m *Metrics) RecordDurableRecovery()   { m.durableRecoveries.Add(1) }
+func (m *Metrics) RecordDurableDeadLetter() { m.durableDeadLetters.Add(1) }
 
 // RecordEvent records the result and elapsed time of processing one incoming
 // event, which may contain multiple fact updates.
@@ -148,6 +165,12 @@ func (m *Metrics) writeMetrics(w http.ResponseWriter, _ *http.Request) {
 	events := m.eventsReceived.Load()
 	processingSeconds := float64(m.eventProcessingNanos.Load()) / float64(time.Second)
 
+	queueLag := "NaN"
+	queuePending := "NaN"
+	if m.durableMode.Load() {
+		queueLag = fmt.Sprintf("%d", m.durableLag.Load())
+		queuePending = fmt.Sprintf("%d", m.durablePending.Load())
+	}
 	_, _ = fmt.Fprintf(w, `# HELP rex_events_received_total Number of Redis events received by rexd.
 # TYPE rex_events_received_total counter
 rex_events_received_total %d
@@ -172,12 +195,27 @@ rex_actions_skipped_total %d
 # HELP rex_action_failures_total Number of actions that failed.
 # TYPE rex_action_failures_total counter
 rex_action_failures_total %d
-# HELP rex_event_queue_lag_seconds Redis Pub/Sub does not expose queue lag; this metric is unavailable.
+# HELP rex_event_queue_lag Number of undelivered events in durable mode; unavailable in Pub/Sub mode.
+# TYPE rex_event_queue_lag gauge
+rex_event_queue_lag %s
+# HELP rex_event_queue_pending Number of delivered, unacknowledged events in durable mode; unavailable in Pub/Sub mode.
+# TYPE rex_event_queue_pending gauge
+rex_event_queue_pending %s
+# HELP rex_event_queue_lag_seconds Compatibility metric; producer timestamps are not part of the input protocol.
 # TYPE rex_event_queue_lag_seconds gauge
 rex_event_queue_lag_seconds NaN
 # HELP rex_event_queue_drops Redis Pub/Sub does not expose broker-side drops; this metric is unavailable.
 # TYPE rex_event_queue_drops gauge
 rex_event_queue_drops NaN
+# HELP rex_event_retries_total Number of durable events left pending for another attempt.
+# TYPE rex_event_retries_total counter
+rex_event_retries_total %d
+# HELP rex_event_recoveries_total Number of pending durable deliveries recovered by a worker.
+# TYPE rex_event_recoveries_total counter
+rex_event_recoveries_total %d
+# HELP rex_dead_letters_total Number of durable events moved to the dead-letter stream.
+# TYPE rex_dead_letters_total counter
+rex_dead_letters_total %d
 # HELP rex_redis_disconnects_total Number of observed Redis connectivity losses.
 # TYPE rex_redis_disconnects_total counter
 rex_redis_disconnects_total %d
@@ -195,7 +233,7 @@ rex_rule_outcomes_total{outcome="fired"} %d
 rex_action_outcomes_total{outcome="succeeded"} %d
 rex_action_outcomes_total{outcome="skipped"} %d
 rex_action_outcomes_total{outcome="failed"} %d
-`, events, m.eventFailures.Load(), processingSeconds, average(processingSeconds, events), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load(), m.redisDisconnects.Load(), m.redisReconnects.Load(), m.eventSourceErrors.Load(), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load())
+`, events, m.eventFailures.Load(), processingSeconds, average(processingSeconds, events), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load(), queueLag, queuePending, m.durableRetries.Load(), m.durableRecoveries.Load(), m.durableDeadLetters.Load(), m.redisDisconnects.Load(), m.redisReconnects.Load(), m.eventSourceErrors.Load(), m.rulesFired.Load(), m.actionsSucceeded.Load(), m.actionsSkipped.Load(), m.actionFailures.Load())
 
 	_, _ = fmt.Fprintln(w, "# HELP rex_event_processing_duration_seconds Time spent processing Redis events.")
 	_, _ = fmt.Fprintln(w, "# TYPE rex_event_processing_duration_seconds histogram")

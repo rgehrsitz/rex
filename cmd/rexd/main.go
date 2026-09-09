@@ -44,6 +44,9 @@ type Config struct {
 	RedisPassword           string
 	RedisDB                 int
 	RedisChannels           []string
+	RedisEventMode          string
+	RedisDurable            store.DurableOptions
+	RedisRetryBackoff       time.Duration
 	RedisTLSEnabled         bool
 	RedisTLSServerName      string
 	RedisTLSCAFile          string
@@ -82,6 +85,10 @@ type factUpdateProcessor interface {
 
 type connectivityChecker interface {
 	Ping(context.Context) error
+}
+
+type durableStore interface {
+	OpenDurable(context.Context, store.DurableOptions) (*store.RedisDurable, error)
 }
 
 var messageTraceSequence atomic.Uint64
@@ -132,6 +139,18 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.address", "localhost:6379")
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
+	viper.SetDefault("redis.event_mode", "pubsub")
+	viper.SetDefault("redis.durable.output_stream", "rex_results_stream")
+	viper.SetDefault("redis.durable.dead_letter_stream", "rex_dead_letter")
+	viper.SetDefault("redis.durable.namespace", "default")
+	viper.SetDefault("redis.durable.claim_idle", "30s")
+	viper.SetDefault("redis.durable.block", "1s")
+	viper.SetDefault("redis.durable.journal_ttl", "168h")
+	viper.SetDefault("redis.durable.max_attempts", 5)
+	viper.SetDefault("redis.durable.output_max_len", 100000)
+	viper.SetDefault("redis.durable.dead_letter_max_len", 10000)
+	viper.SetDefault("redis.durable.lock_ttl", "30s")
+	viper.SetDefault("redis.durable.retry_backoff", "250ms")
 	viper.SetDefault("redis.tls.enabled", false)
 	viper.SetDefault("redis.connect_timeout", "5s")
 	viper.SetDefault("redis.health_check_interval", "1s")
@@ -173,16 +192,27 @@ func parseConfig(args []string) (*Config, error) {
 	}
 
 	config := &Config{
-		BytecodeFile:            viper.GetString("bytecode_file"),
-		LogLevel:                viper.GetString("logging.level"),
-		LogDestination:          viper.GetString("logging.output"),
-		LogTimeFormat:           viper.GetString("logging.time_format"),
-		TraceConditions:         viper.GetBool("logging.trace_conditions"),
-		RedisAddress:            viper.GetString("redis.address"),
-		RedisUsername:           viper.GetString("redis.username"),
-		RedisPassword:           viper.GetString("redis.password"),
-		RedisDB:                 viper.GetInt("redis.database"),
-		RedisChannels:           configStringSlice("redis.channels"),
+		BytecodeFile:    viper.GetString("bytecode_file"),
+		LogLevel:        viper.GetString("logging.level"),
+		LogDestination:  viper.GetString("logging.output"),
+		LogTimeFormat:   viper.GetString("logging.time_format"),
+		TraceConditions: viper.GetBool("logging.trace_conditions"),
+		RedisAddress:    viper.GetString("redis.address"),
+		RedisUsername:   viper.GetString("redis.username"),
+		RedisPassword:   viper.GetString("redis.password"),
+		RedisDB:         viper.GetInt("redis.database"),
+		RedisChannels:   configStringSlice("redis.channels"),
+		RedisEventMode:  strings.ToLower(viper.GetString("redis.event_mode")),
+		RedisDurable: store.DurableOptions{
+			Stream: viper.GetString("redis.durable.stream"), Group: viper.GetString("redis.durable.group"),
+			Consumer: viper.GetString("redis.durable.consumer"), OutputStream: viper.GetString("redis.durable.output_stream"),
+			DeadLetter: viper.GetString("redis.durable.dead_letter_stream"), Namespace: viper.GetString("redis.durable.namespace"),
+			ClaimIdle: viper.GetDuration("redis.durable.claim_idle"), Block: viper.GetDuration("redis.durable.block"),
+			JournalTTL: viper.GetDuration("redis.durable.journal_ttl"), MaxAttempts: viper.GetInt64("redis.durable.max_attempts"),
+			OutputMaxLen: viper.GetInt64("redis.durable.output_max_len"), DeadMaxLen: viper.GetInt64("redis.durable.dead_letter_max_len"),
+			LockTTL: viper.GetDuration("redis.durable.lock_ttl"),
+		},
+		RedisRetryBackoff:       viper.GetDuration("redis.durable.retry_backoff"),
 		RedisTLSEnabled:         viper.GetBool("redis.tls.enabled"),
 		RedisTLSServerName:      viper.GetString("redis.tls.server_name"),
 		RedisTLSCAFile:          viper.GetString("redis.tls.ca_file"),
@@ -201,8 +231,19 @@ func parseConfig(args []string) (*Config, error) {
 	if config.RedisAddress == "" {
 		return nil, fmt.Errorf("redis.address is required")
 	}
-	if len(config.RedisChannels) == 0 {
+	if config.RedisEventMode != "pubsub" && config.RedisEventMode != "streams" {
+		return nil, fmt.Errorf("redis.event_mode must be pubsub or streams")
+	}
+	if config.RedisEventMode == "pubsub" && len(config.RedisChannels) == 0 {
 		return nil, fmt.Errorf("redis.channels must contain at least one channel")
+	}
+	if config.RedisEventMode == "streams" {
+		if config.RedisDurable.Stream == "" || config.RedisDurable.Group == "" || config.RedisDurable.Consumer == "" {
+			return nil, fmt.Errorf("redis durable stream, group, and consumer are required in streams mode")
+		}
+		if config.RedisRetryBackoff <= 0 {
+			return nil, fmt.Errorf("redis.durable.retry_backoff must be greater than zero")
+		}
 	}
 	if config.RedisConnectTimeout <= 0 {
 		return nil, fmt.Errorf("redis.connect_timeout must be greater than zero")
@@ -258,6 +299,10 @@ func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFa
 	if engine.BytecodeVersion() == 3 && !config.AllowLegacyV3 {
 		_ = redisStore.Close()
 		return nil, fmt.Errorf("v3 requires engine.allow_legacy_v3; recompile for v4")
+	}
+	if config.RedisEventMode == "streams" && engine.BytecodeVersion() != 4 {
+		_ = redisStore.Close()
+		return nil, fmt.Errorf("Redis Streams durable processing requires a v4 artifact")
 	}
 	if engine.BytecodeVersion() == 4 {
 		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
@@ -336,6 +381,13 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 	if server != nil {
 		defer shutdownObservabilityServer(server)
 	}
+	checker, ok := deps.Store.(connectivityChecker)
+	if !ok {
+		return fmt.Errorf("store does not provide connectivity checks")
+	}
+	if config.RedisEventMode == "streams" {
+		return runDurableMainLoop(ctx, deps, config, metrics, checker)
+	}
 
 	subscriber, ok := deps.Store.(store.EventSubscriber)
 	if !ok {
@@ -346,10 +398,6 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 		return fmt.Errorf("failed to subscribe to Redis channels: %w", err)
 	}
 	defer source.Close()
-	checker, ok := deps.Store.(connectivityChecker)
-	if !ok {
-		return fmt.Errorf("store does not provide connectivity checks")
-	}
 	healthTimeout := config.RedisHealthTimeout
 	if healthTimeout <= 0 {
 		healthTimeout = 500 * time.Millisecond
@@ -383,6 +431,138 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 
 	logging.Logger.Info().Msg("REX runtime engine started")
 	return consumeEvents(ctx, deps.Engine, source.Events(), sigChan, metrics, config.MaxEventHops)
+}
+
+func runDurableMainLoop(ctx context.Context, deps *RexDependencies, config *Config, metrics *observability.Metrics, checker connectivityChecker) error {
+	opener, ok := deps.Store.(durableStore)
+	if !ok {
+		return fmt.Errorf("store does not provide durable Redis Streams processing")
+	}
+	queue, err := opener.OpenDurable(ctx, config.RedisDurable)
+	if err != nil {
+		return fmt.Errorf("open durable Redis stream: %w", err)
+	}
+	if err := queue.AcquireOwnership(ctx); err != nil {
+		return fmt.Errorf("acquire durable partition: %w", err)
+	}
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), config.RedisHealthTimeout)
+		defer cancel()
+		if err := queue.ReleaseOwnership(releaseCtx); err != nil {
+			logging.Logger.Error().Err(err).Msg("Failed to release durable partition")
+		}
+	}()
+
+	healthCtx, cancelHealth := context.WithTimeout(ctx, config.RedisHealthTimeout)
+	err = checker.Ping(healthCtx)
+	cancelHealth()
+	if err != nil {
+		return fmt.Errorf("Redis readiness check after opening durable stream: %w", err)
+	}
+	metrics.SetRedisReady(true)
+	metrics.SetSubscriptionReady(true)
+	defer func() {
+		metrics.SetSubscriptionReady(false)
+		metrics.SetRedisReady(false)
+	}()
+	if stats, err := queue.Stats(ctx); err == nil {
+		metrics.SetDurableBacklog(stats.Pending, stats.Lag)
+	}
+
+	processCtx, stopProcessing := context.WithCancel(ctx)
+	defer stopProcessing()
+	monitorDone := make(chan struct{})
+	go func() {
+		defer close(monitorDone)
+		monitorRedisConnectivity(processCtx, checker, metrics, config.RedisHealthInterval, config.RedisHealthTimeout)
+	}()
+	defer func() {
+		stopProcessing()
+		<-monitorDone
+	}()
+	leaseErr := make(chan error, 1)
+	go monitorDurableOwnership(processCtx, stopProcessing, queue, leaseErr)
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+	logging.Logger.Info().Str("stream", config.RedisDurable.Stream).Str("group", config.RedisDurable.Group).Msg("REX durable runtime engine started")
+
+	for {
+		select {
+		case <-sigChan:
+			return nil
+		case err := <-leaseErr:
+			metrics.SetSubscriptionReady(false)
+			return fmt.Errorf("durable partition lease lost: %w", err)
+		case <-processCtx.Done():
+			select {
+			case err := <-leaseErr:
+				return fmt.Errorf("durable partition lease lost: %w", err)
+			default:
+				return nil
+			}
+		default:
+		}
+
+		started := time.Now()
+		result, processErr := deps.Engine.ProcessNextDurable(processCtx, queue)
+		if processCtx.Err() != nil {
+			continue
+		}
+		if result.EventID != "" {
+			metrics.RecordEvent(time.Since(started), processErr)
+		}
+		if result.RetryPending {
+			metrics.RecordDurableRetry()
+		}
+		if result.Recovered {
+			metrics.RecordDurableRecovery()
+		}
+		if result.DeadLettered {
+			metrics.RecordDurableDeadLetter()
+		}
+		if stats, err := queue.Stats(processCtx); err == nil {
+			metrics.SetDurableBacklog(stats.Pending, stats.Lag)
+		}
+		if processErr == nil {
+			metrics.SetSubscriptionReady(true)
+			continue
+		}
+		if errors.Is(processErr, store.ErrDurableProgramMismatch) || errors.Is(processErr, store.ErrDurableReconciliation) {
+			metrics.SetSubscriptionReady(false)
+			return processErr
+		}
+		if result.EventID == "" || errors.Is(processErr, store.ErrDurableInfrastructure) {
+			metrics.SetSubscriptionReady(false)
+			metrics.RecordEventSourceError()
+		}
+		logging.Logger.Error().Err(processErr).Str("input_id", result.EventID).Int64("attempt", result.Attempts).Msg("Durable event processing failed")
+		timer := time.NewTimer(config.RedisRetryBackoff)
+		select {
+		case <-processCtx.Done():
+			timer.Stop()
+		case <-timer.C:
+		}
+	}
+}
+
+func monitorDurableOwnership(ctx context.Context, cancel context.CancelFunc, queue *store.RedisDurable, failures chan<- error) {
+	interval := queue.OwnershipRenewInterval()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := queue.RenewOwnership(ctx); err != nil {
+				failures <- err
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 func startObservabilityServer(config *Config, metrics *observability.Metrics) (*http.Server, error) {

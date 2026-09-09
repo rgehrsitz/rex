@@ -79,3 +79,19 @@ func TestEventLatencyHistogramPreservesSlowTail(t *testing.T) {
 	assert.Contains(t, body, `rex_event_processing_duration_seconds_bucket{le="1.000"} 0`)
 	assert.Contains(t, body, `rex_event_processing_duration_seconds_bucket{le="+Inf"} 1`)
 }
+
+func TestMetricsHandlerReportsDurableQueueState(t *testing.T) {
+	metrics := NewMetrics()
+	metrics.SetDurableBacklog(2, 7)
+	metrics.RecordDurableRetry()
+	metrics.RecordDurableRecovery()
+	metrics.RecordDurableDeadLetter()
+	response := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := response.Body.String()
+	assert.Contains(t, body, "rex_event_queue_pending 2")
+	assert.Contains(t, body, "rex_event_queue_lag 7")
+	assert.Contains(t, body, "rex_event_retries_total 1")
+	assert.Contains(t, body, "rex_event_recoveries_total 1")
+	assert.Contains(t, body, "rex_dead_letters_total 1")
+}

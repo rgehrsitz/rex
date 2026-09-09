@@ -26,6 +26,16 @@ func (s *RedisStore) batchWriter() *redis.Client {
 	return s.batchClient
 }
 func (s *RedisStore) ReadSnapshot(ctx context.Context, keys []string) (map[string]Fact, error) {
+	if metadata, ok := durableEventFromContext(ctx); ok {
+		if s.durable == nil {
+			return nil, fmt.Errorf("durable event context requires an open durable adapter")
+		}
+		return s.durable.readSnapshot(ctx, metadata, keys)
+	}
+	return s.readRedisSnapshot(ctx, keys)
+}
+
+func (s *RedisStore) readRedisSnapshot(ctx context.Context, keys []string) (map[string]Fact, error) {
 	out := make(map[string]Fact, len(keys))
 	if len(keys) == 0 {
 		return out, ctx.Err()
@@ -60,6 +70,12 @@ func (s *RedisStore) Commit(ctx context.Context, request CommitRequest) (CommitR
 	}
 	if err := validateWrites(request.Writes); err != nil {
 		return result, err
+	}
+	if metadata, ok := durableEventFromContext(ctx); ok {
+		if s.durable == nil {
+			return result, fmt.Errorf("durable event context requires an open durable adapter")
+		}
+		return s.durable.commit(ctx, metadata, request)
 	}
 	encoded := make([][]byte, len(request.Writes))
 	facts := map[string]interface{}{}

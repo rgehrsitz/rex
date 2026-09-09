@@ -20,6 +20,7 @@ type RedisStore struct {
 	client      *redis.Client
 	batchOnce   sync.Once
 	batchClient *redis.Client
+	durable     *RedisDurable
 }
 
 // RedisOptions defines connection settings without owning caller credentials or

@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"sort"
 
@@ -28,8 +30,12 @@ func newBatchEngine(data []byte, backend store.ContextStore) (*Engine, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Engine{coordinator: coordinator, traceConditions: true, maxActionsPerEvaluation: DefaultMaxActionsPerEvaluation}, nil
+	digest := sha256.Sum256(data)
+	return &Engine{coordinator: coordinator, traceConditions: true, maxActionsPerEvaluation: DefaultMaxActionsPerEvaluation, programID: hex.EncodeToString(digest[:])}, nil
 }
+
+// ProgramID is the stable digest used to pin durable retries to one artifact.
+func (e *Engine) ProgramID() string { return e.programID }
 func (e *Engine) BytecodeVersion() uint32 {
 	if e.coordinator != nil {
 		return compiler.BatchVersion
