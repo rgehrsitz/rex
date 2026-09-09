@@ -1,9 +1,9 @@
 # REX-M5 authoring tools
 
 All commands below run locally without Redis. Build `rexc` and `rexd` from this
-revision; the tools support batch execution contracts v4 and v5. The legacy `-legacy-v3`
+revision; the tools support batch execution contracts v4, v5, and v6. The legacy `-legacy-v3`
 compiler remains available but v3 replay/jump disassembly is not supported by
-these tools. Batch explain describes structured IR: v4/v5 have no bytecode jumps.
+these tools. Batch explain describes structured IR: v4/v5/v6 have no bytecode jumps.
 
 ## Explain and compile
 
@@ -27,7 +27,10 @@ condition trees and action metadata. Replay reports add `rule_results` for each
 affected rule: `true`, `false`, or `unknown`; only true fires. A rule absent from
 a round's results was not affected by that round's input. Condition traces show
 missing, null, invalid, and present values' states without embedding the values.
-Short-circuited conditions are omitted. Failed evaluations discard staged output but preserve condition/rule diagnostics
+Short-circuited conditions are omitted in v4/v5. After an otherwise decisive
+v6 result, evaluation continues only through sibling leaves or subtrees that
+contain temporal state, while preserving the same truth table. Failed evaluations
+discard staged output but preserve condition/rule diagnostics
 and an `evaluation_error` on the failed round. Earlier committed rounds remain
 visible. Use the static explanation alongside that error to inspect its source.
 
@@ -56,8 +59,10 @@ remain null/invalid snapshot diagnostics. Producers' inputs are persisted in
 simulation memory before each chain, matching M4. `limits` may be omitted when
 creating a bundle; default v4 limits are then materialized. A replay bundle must
 include all limits, the exact source text, and matching program/source digests.
-No timestamps or random IDs are generated. V4 has no time/function capabilities;
-unsupported fields/contracts fail rather than substituting nondeterministic data.
+No timestamps or random IDs are generated. Each v6 event requires an RFC 3339
+`at` processing time, in nondecreasing order; replay injects it into the runtime.
+V4/v5 reject `at`, and unsupported fields/contracts fail rather than substituting
+nondeterministic data.
 
 A suite contains `schema_version: 1` and 1–100 uniquely named `scenarios`. Each
 scenario needs an `expect` object with exact `final_state` and ordered `actions`

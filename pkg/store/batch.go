@@ -5,7 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 )
+
+const InternalStatePrefix = "__rex_temporal_"
+
+func IsInternalKey(key string) bool { return strings.HasPrefix(key, InternalStatePrefix) }
 
 type FactState string
 
@@ -50,8 +55,10 @@ type SnapshotReader interface {
 	ReadSnapshot(context.Context, []string) (map[string]Fact, error)
 }
 type Write struct {
-	Key   string      `json:"key"`
-	Value interface{} `json:"value"`
+	Key      string      `json:"key"`
+	Value    interface{} `json:"value"`
+	Internal bool        `json:"internal,omitempty"`
+	Delete   bool        `json:"delete,omitempty"`
 }
 type CommitRequest struct {
 	ChainID string           `json:"chain_id"`
@@ -80,9 +87,17 @@ type CommitResult struct {
 	Applied []string      `json:"applied,omitempty"`
 }
 
+const MaxCommitWrites = 4096
+
 // Committer must not retry dispatched operations whose outcome is unknown.
 type Committer interface {
 	Commit(context.Context, CommitRequest) (CommitResult, error)
+}
+
+// InternalStateCleaner removes private state after its owning artifact is no
+// longer retained for active execution, rollback, or durable recovery.
+type InternalStateCleaner interface {
+	DeleteInternal(context.Context, []string) error
 }
 
 // UnknownOutcomeResolver marks a committer whose durable marker resolves an
@@ -92,13 +107,13 @@ type UnknownOutcomeResolver interface {
 }
 
 func validateWrites(writes []Write) error {
-	if len(writes) > 4096 {
+	if len(writes) > MaxCommitWrites {
 		return fmt.Errorf("commit exceeds write limit")
 	}
 	bytes := 0
 	seen := map[string]bool{}
 	for _, w := range writes {
-		if w.Key == "" || len(w.Key) > 255 || !Scalar(w.Value) || seen[w.Key] {
+		if w.Key == "" || len(w.Key) > 255 || !Scalar(w.Value) || seen[w.Key] || w.Internal != IsInternalKey(w.Key) || (w.Delete && (!w.Internal || w.Value != nil)) {
 			return fmt.Errorf("invalid or duplicate commit target %q", w.Key)
 		}
 		if value, ok := w.Value.(string); ok && len(value) > MaxSnapshotBytes {
@@ -127,7 +142,13 @@ func (s *MemoryStore) ReadSnapshot(ctx context.Context, keys []string) (map[stri
 	}
 	out := make(map[string]Fact, len(keys))
 	for _, k := range keys {
-		value, ok := s.facts[k]
+		var value interface{}
+		var ok bool
+		if IsInternalKey(k) {
+			value, ok = s.internal[k]
+		} else {
+			value, ok = s.facts[k]
+		}
 		if !ok {
 			out[k] = Fact{State: Missing}
 			continue
@@ -159,9 +180,40 @@ func (s *MemoryStore) Commit(ctx context.Context, request CommitRequest) (Commit
 	}
 	result := CommitResult{Outcome: Committed}
 	for _, w := range request.Writes {
+		if w.Internal {
+			if s.internal == nil {
+				s.internal = make(map[string]interface{})
+			}
+			if w.Delete {
+				delete(s.internal, w.Key)
+				continue
+			}
+			s.internal[w.Key] = w.Value
+			continue
+		}
 		s.facts[w.Key] = w.Value
 		s.publications = append(s.publications, FactUpdate{Key: w.Key, Value: w.Value})
 		result.Applied = append(result.Applied, w.Key)
 	}
 	return result, nil
+}
+
+func (s *MemoryStore) DeleteInternal(ctx context.Context, keys []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.closed {
+		return ErrMemoryStoreClosed
+	}
+	for _, key := range keys {
+		if !IsInternalKey(key) {
+			return fmt.Errorf("internal cleanup key %q is invalid", key)
+		}
+	}
+	for _, key := range keys {
+		delete(s.internal, key)
+	}
+	return nil
 }

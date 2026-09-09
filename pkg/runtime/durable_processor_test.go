@@ -27,7 +27,30 @@ type durableQueueProbe struct {
 	applyErr     error
 	inputs       int
 	begunProgram string
+	pinnedTime   time.Time
 }
+
+type durableQueueWithoutProcessingTime struct{ queue *durableQueueProbe }
+
+func (q durableQueueWithoutProcessingTime) Next(ctx context.Context) (store.DurableEvent, error) {
+	return q.queue.Next(ctx)
+}
+func (q durableQueueWithoutProcessingTime) Begin(ctx context.Context, event store.DurableEvent, programID string) (store.JournalStatus, error) {
+	return q.queue.Begin(ctx, event, programID)
+}
+func (q durableQueueWithoutProcessingTime) ApplyInput(ctx context.Context, eventID, programID string, facts map[string]interface{}) error {
+	return q.queue.ApplyInput(ctx, eventID, programID, facts)
+}
+func (q durableQueueWithoutProcessingTime) Acknowledge(ctx context.Context, eventID string) error {
+	return q.queue.Acknowledge(ctx, eventID)
+}
+func (q durableQueueWithoutProcessingTime) Complete(ctx context.Context, eventID string) error {
+	return q.queue.Complete(ctx, eventID)
+}
+func (q durableQueueWithoutProcessingTime) DeadLetterEvent(ctx context.Context, event store.DurableEvent, programID string, attempts int64, processErr error) error {
+	return q.queue.DeadLetterEvent(ctx, event, programID, attempts, processErr)
+}
+func (q durableQueueWithoutProcessingTime) MaxAttempts() int64 { return q.queue.MaxAttempts() }
 
 func (q *durableQueueProbe) Next(context.Context) (store.DurableEvent, error) { return q.event, nil }
 func (q *durableQueueProbe) PinnedProgram(context.Context, string) (string, error) {
@@ -40,6 +63,12 @@ func (q *durableQueueProbe) Begin(_ context.Context, _ store.DurableEvent, progr
 	}
 	q.attempts++
 	return store.JournalStatus{Attempts: q.attempts, Terminal: q.terminal}, nil
+}
+func (q *durableQueueProbe) PinProcessingTime(_ context.Context, _ string, proposed time.Time) (time.Time, error) {
+	if q.pinnedTime.IsZero() {
+		q.pinnedTime = proposed
+	}
+	return q.pinnedTime, nil
 }
 func (q *durableQueueProbe) Acknowledge(context.Context, string) error { q.acked++; return nil }
 func (q *durableQueueProbe) ApplyInput(context.Context, string, string, map[string]interface{}) error {
@@ -146,6 +175,52 @@ func TestProcessNextDurableValidatesTypedInputBeforePersistence(t *testing.T) {
 	facts, err := memory.Snapshot()
 	require.NoError(t, err)
 	require.Empty(t, facts)
+}
+
+func TestProcessNextDurablePinsTemporalTimeAcrossRetry(t *testing.T) {
+	p, _ := temporalProgram(t, `{"all":[{"fact":"hot","operator":"EQ","value":true,"for":"1m"}]}`)
+	memory, err := store.NewMemoryStore(nil)
+	require.NoError(t, err)
+	var trackerKey string
+	for _, temporal := range p.temporal {
+		trackerKey = temporal.key
+	}
+	start := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	_, err = memory.Commit(context.Background(), store.CommitRequest{Writes: []store.Write{{Key: trackerKey, Value: start.Format(time.RFC3339Nano), Internal: true}}})
+	require.NoError(t, err)
+	coordinator, err := NewCoordinator(p, memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	clock := &testClock{at: start.Add(30 * time.Second)}
+	require.NoError(t, coordinator.SetClock(clock))
+	engine := &Engine{coordinator: coordinator, programID: "program-temporal"}
+	queue := &durableQueueProbe{event: store.DurableEvent{ID: "temporal-1", Payload: `{"hot":true}`}, maxAttempts: 3, applyErr: errors.New("retry")}
+
+	result, err := engine.ProcessNextDurable(context.Background(), queue)
+	require.ErrorContains(t, err, "retry")
+	require.True(t, result.RetryPending)
+	require.Equal(t, start.Add(30*time.Second), queue.pinnedTime)
+
+	queue.applyErr = nil
+	clock.at = start.Add(2 * time.Minute)
+	result, err = engine.ProcessNextDurable(context.Background(), queue)
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+	require.NotContains(t, snapshotMemory(t, memory), "alert", "retry must reuse the first processing time")
+}
+
+func TestTemporalDurableQueueWithoutTimeJournalIsInfrastructureFailure(t *testing.T) {
+	p, _ := temporalProgram(t, `{"all":[{"fact":"hot","operator":"EQ","value":true,"for":"1m"}]}`)
+	memory, err := store.NewMemoryStore(nil)
+	require.NoError(t, err)
+	coordinator, err := NewCoordinator(p, memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	engine := &Engine{coordinator: coordinator, programID: "program-temporal"}
+	probe := &durableQueueProbe{event: store.DurableEvent{ID: "temporal-no-clock", Payload: `{"hot":true}`}, maxAttempts: 1}
+	result, err := engine.ProcessNextDurable(context.Background(), durableQueueWithoutProcessingTime{queue: probe})
+	require.ErrorIs(t, err, store.ErrDurableInfrastructure)
+	require.True(t, result.RetryPending)
+	require.False(t, result.DeadLettered)
+	require.Zero(t, probe.dead, "adapter configuration failures must not discard the event")
 }
 
 func TestRealRedisDurablePoisonThenProgress(t *testing.T) {

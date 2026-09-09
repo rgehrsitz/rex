@@ -7,8 +7,9 @@ changes.
 
 ## Current support
 
-`rexc` writes **v4** for rulesets without declarations and **v5** when the
-top-level `facts` map is present. `rexd` accepts both batch contracts.
+`rexc` writes **v4** for rulesets without declarations, **v5** when the
+top-level `facts` map is present, and **v6** when any condition has `for`.
+`rexd` accepts all three batch contracts.
 V3 is retained for script-free artifacts: compile using `rexc -legacy-v3` and
 explicitly set `engine.allow_legacy_v3: true` to run it in the daemon.
 Versions 1, 2, and unknown versions are rejected. Keep the source JSON and
@@ -20,9 +21,24 @@ opcode numbers remain reserved only to provide a deterministic migration error.
 
 Embedded APIs `GenerateBytecode` / `WriteBytecodeToFile` and `compiler.Version`
 remain explicitly v3 for existing integrations and the frozen semantics corpus.
-New callers use `CompileBatch`, `BatchVersion`/`TypedFactsVersion`, and
+New callers use `CompileBatch`, `BatchVersion`/`TypedFactsVersion`/`TemporalVersion`, and
 `LoadProgram` or the version-dispatching `NewEngineFromFile`. `DecodeBatch`
-accepts v4 and v5.
+accepts v4, v5, and v6.
+
+## Version-6 format and meaning
+
+V6 uses the same 16-byte header and canonical structured JSON payload as v4/v5,
+with header version `6` and at least one condition leaf containing `for`. It may
+also contain v5 fact declarations. A v4/v5 artifact containing `for`, or a v6
+artifact without it, is rejected.
+
+`for` is a positive Go duration no longer than 365 days. The predicate must be
+observed continuously true in processing time before it becomes true. REX samples
+one injected clock value per event chain and reevaluates only when an event affects
+the rule; reaching a deadline does not create a scheduled wake-up. Private start
+times are persisted through the same commit boundary as outputs. See the
+[temporal contract](decisions/REX-M8-TEMPORAL-RULES.md) and
+[operator guide](M8_TEMPORAL_RULES.md).
 
 ## Version-5 format and meaning
 
@@ -62,7 +78,7 @@ validation remains required. The file loader bounds reads to 8 MiB plus header.
 V4 means deduplicated batch rounds, a shared snapshot, Unknown propagation,
 staged/coalesced writes, conflict rejection, and bounded local derived rounds.
 See the [decision record](decisions/REX-M4.md) and [migration guide](M4_MIGRATION.md).
-The default [source schema](../examples/rex-rules-schema.json) describes v4/v5;
+The default [source schema](../examples/rex-rules-schema.json) describes v4/v5/v6;
 [the legacy schema](../examples/rex-v3-rules-schema.json) remains available.
 
 ## Version-3 format
@@ -144,6 +160,11 @@ existing deployed artifacts is a release requirement.
 M6 is a documented support narrowing: v3 script opcodes are rejected instead of
 being assigned new meaning. Script-free v3 bytes and execution remain unchanged.
 This exception does not make reserved opcodes available for reuse.
+
+M8.3 reserves fact names beginning with `__rex_temporal_` in every source and
+external input contract. Existing v3/v4/v5 artifact bytes and their execution
+remain supported, but source or producer traffic using that prefix must rename
+those facts before upgrading.
 
 `compiler.GenerateBytecode` returns an error that callers must check. Label
 resolution is an internal compiler step, so unresolved control-flow labels

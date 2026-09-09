@@ -105,6 +105,9 @@ func runWithGenerator(config *Config, generateBytecode func(*compiler.Ruleset) (
 	if err != nil {
 		return fmt.Errorf("failed to parse JSON file %q: %w", config.JSONFilePath, err)
 	}
+	if compiler.HasTemporalConditions(ruleset) {
+		return fmt.Errorf("temporal conditions require the v6 batch compiler")
+	}
 	if ruleset.Facts != nil {
 		return fmt.Errorf("typed fact declarations require the v5 batch compiler")
 	}

@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"rgehrsitz/rex/pkg/compiler"
@@ -63,6 +65,9 @@ func probe(t *testing.T, initial map[string]interface{}) *batchProbe {
 }
 func TestBatchOnceAndSnapshotIsolation(t *testing.T) {
 	p := batchProgram(t, batchOne)
+	require.False(t, p.hasTemporalConditions)
+	require.Nil(t, p.temporal)
+	require.Nil(t, p.hasTemporal)
 	s := probe(t, map[string]interface{}{"a": float64(-1), "b": float64(-1)})
 	c, err := NewCoordinator(p, s, s, DefaultLimits())
 	require.NoError(t, err)
@@ -237,6 +242,185 @@ func TestBatchInconsistentCommitRequiresReconciliation(t *testing.T) {
 	_, err = c.Process(context.Background(), "later", map[string]interface{}{"a": float64(1)})
 	require.ErrorIs(t, err, ErrReconciliationRequired)
 	require.Equal(t, 1, s.commits)
+}
+
+type testClock struct{ at time.Time }
+
+func (c *testClock) Now() time.Time { return c.at }
+
+func temporalProgram(t *testing.T, conditions string) (*Program, []byte) {
+	t.Helper()
+	source := `{"rules":[{"name":"sustained","conditions":` + conditions + `,"actions":[{"type":"updateStore","target":"alert","value":true}]}]}`
+	artifact, err := compiler.CompileBatch([]byte(source))
+	require.NoError(t, err)
+	p, err := LoadProgram(artifact)
+	require.NoError(t, err)
+	return p, artifact
+}
+
+func TestTemporalConditionBoundaryResetAndRestart(t *testing.T) {
+	p, artifact := temporalProgram(t, `{"all":[{"fact":"hot","operator":"EQ","value":true,"for":"5m"}]}`)
+	memory, err := store.NewMemoryStore(nil)
+	require.NoError(t, err)
+	clock := &testClock{at: time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)}
+	coordinator, err := NewCoordinator(p, memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	require.NoError(t, coordinator.SetClock(clock))
+
+	first, err := coordinator.Process(context.Background(), "first", map[string]interface{}{"hot": true})
+	require.NoError(t, err)
+	require.Equal(t, Indeterminate, first.Rounds[0].Evaluation.RuleResults[0].Result)
+	require.Empty(t, first.Rounds[0].Evaluation.Actions)
+	require.Empty(t, first.Rounds[0].Commit.Applied)
+	require.Empty(t, snapshotMemory(t, memory), "timer state must stay out of public snapshots")
+	require.Empty(t, drainMemory(t, memory), "timer state must not publish")
+
+	clock.at = clock.at.Add(5*time.Minute - time.Nanosecond)
+	before, err := coordinator.Process(context.Background(), "before", map[string]interface{}{"hot": true})
+	require.NoError(t, err)
+	require.Equal(t, Indeterminate, before.Rounds[0].Evaluation.RuleResults[0].Result)
+
+	// Re-loading the same artifact reconstructs the same private tracker key.
+	p, err = LoadProgram(artifact)
+	require.NoError(t, err)
+	coordinator, err = NewCoordinator(p, memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	clock.at = clock.at.Add(time.Nanosecond)
+	require.NoError(t, coordinator.SetClock(clock))
+	atBoundary, err := coordinator.Process(context.Background(), "boundary", map[string]interface{}{"hot": true})
+	require.NoError(t, err)
+	require.Equal(t, True, atBoundary.Rounds[0].Evaluation.RuleResults[0].Result)
+	require.Len(t, atBoundary.Rounds[0].Evaluation.Actions, 1)
+	require.Equal(t, true, snapshotMemory(t, memory)["alert"])
+	clock.at = clock.at.Add(time.Minute)
+	afterBoundary, err := coordinator.Process(context.Background(), "after-boundary", map[string]interface{}{"hot": true})
+	require.NoError(t, err)
+	require.Len(t, afterBoundary.Rounds[0].Evaluation.Actions, 1, "temporal conditions remain level-triggered until reset")
+
+	clock.at = clock.at.Add(time.Minute)
+	_, err = coordinator.Process(context.Background(), "reset", map[string]interface{}{"hot": false})
+	require.NoError(t, err)
+	var trackerKey string
+	for _, temporal := range p.temporal {
+		trackerKey = temporal.key
+	}
+	tracker, err := memory.ReadSnapshot(context.Background(), []string{trackerKey})
+	require.NoError(t, err)
+	require.Equal(t, store.Missing, tracker[trackerKey].State)
+	clock.at = clock.at.Add(time.Minute)
+	restarted, err := coordinator.Process(context.Background(), "restart", map[string]interface{}{"hot": true})
+	require.NoError(t, err)
+	require.Equal(t, Indeterminate, restarted.Rounds[0].Evaluation.RuleResults[0].Result)
+}
+
+func TestTemporalStateMaintainedPastBooleanShortCircuit(t *testing.T) {
+	p, _ := temporalProgram(t, `{"all":[{"fact":"gate","operator":"EQ","value":true},{"fact":"hot","operator":"EQ","value":true,"for":"1m"}]}`)
+	memory, err := store.NewMemoryStore(nil)
+	require.NoError(t, err)
+	clock := &testClock{at: time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)}
+	coordinator, err := NewCoordinator(p, memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	require.NoError(t, coordinator.SetClock(clock))
+
+	_, err = coordinator.Process(context.Background(), "start", map[string]interface{}{"gate": false, "hot": true})
+	require.NoError(t, err)
+	clock.at = clock.at.Add(30 * time.Second)
+	_, err = coordinator.Process(context.Background(), "reset", map[string]interface{}{"gate": false, "hot": false})
+	require.NoError(t, err)
+	clock.at = clock.at.Add(31 * time.Second)
+	result, err := coordinator.Process(context.Background(), "check", map[string]interface{}{"gate": true, "hot": true})
+	require.NoError(t, err)
+	require.Equal(t, Indeterminate, result.Rounds[0].Evaluation.RuleResults[0].Result, "false while short-circuited must reset the timer")
+}
+
+func TestTemporalConditionRequiresClockAndRestartsAfterRegression(t *testing.T) {
+	p, _ := temporalProgram(t, `{"all":[{"fact":"hot","operator":"EQ","value":true,"for":"1m"}]}`)
+	_, _, err := p.Evaluate(context.Background(), nil, map[string]interface{}{"hot": true}, DefaultLimits(), Budget{}, true)
+	require.ErrorContains(t, err, "injected processing time")
+	var trackerKey string
+	for _, temporal := range p.temporal {
+		trackerKey = temporal.key
+	}
+	_, _, err = p.EvaluateAt(context.Background(), map[string]store.Fact{trackerKey: {State: store.Present, Value: "corrupt"}}, map[string]interface{}{"hot": true}, DefaultLimits(), Budget{}, true, time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC))
+	require.ErrorContains(t, err, "invalid temporal state")
+	memory, err := store.NewMemoryStore(nil)
+	require.NoError(t, err)
+	clock := &testClock{at: time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)}
+	coordinator, err := NewCoordinator(p, memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	require.NoError(t, coordinator.SetClock(clock))
+	_, err = coordinator.Process(context.Background(), "start", map[string]interface{}{"hot": true})
+	require.NoError(t, err)
+	clock.at = clock.at.Add(-time.Second)
+	result, err := coordinator.Process(context.Background(), "backward", map[string]interface{}{"hot": true})
+	require.NoError(t, err)
+	require.Equal(t, Indeterminate, result.Rounds[0].Evaluation.RuleResults[0].Result)
+	require.Len(t, result.Rounds[0].Evaluation.Writes, 1)
+	require.True(t, result.Rounds[0].Evaluation.Writes[0].Internal)
+	require.False(t, result.Rounds[0].Evaluation.Writes[0].Delete)
+	_, err = coordinator.Process(context.Background(), "forged", map[string]interface{}{trackerKey: "2000-01-01T00:00:00Z"})
+	require.ErrorContains(t, err, "reserved internal state prefix")
+}
+
+func TestTemporalConditionUnknownStatesResetTracker(t *testing.T) {
+	for _, state := range []store.FactState{store.Missing, store.Null, store.Invalid} {
+		t.Run(string(state), func(t *testing.T) {
+			p, _ := temporalProgram(t, `{"all":[{"fact":"trigger","operator":"EQ","value":true},{"fact":"hot","operator":"EQ","value":true,"for":"1m"}]}`)
+			var trackerKey string
+			for _, temporal := range p.temporal {
+				trackerKey = temporal.key
+			}
+			snapshot := map[string]store.Fact{
+				"hot":      {State: state},
+				trackerKey: {State: store.Present, Value: "2026-09-09T12:00:00Z"},
+			}
+			evaluation, _, err := p.EvaluateAt(context.Background(), snapshot, map[string]interface{}{"trigger": true}, DefaultLimits(), Budget{}, true, time.Date(2026, 9, 9, 12, 2, 0, 0, time.UTC))
+			require.NoError(t, err)
+			require.Contains(t, evaluation.Writes, store.Write{Key: trackerKey, Value: nil, Internal: true, Delete: true})
+			require.Empty(t, evaluation.Actions)
+		})
+	}
+}
+
+func TestTemporalAndActionWritesShareStagedByteBudget(t *testing.T) {
+	source := `{"rules":[{"name":"timer","priority":0,"conditions":{"all":[{"fact":"hot","operator":"EQ","value":true,"for":"1m"}]},"actions":[{"type":"updateStore","target":"unused","value":true}]},{"name":"output","priority":1,"conditions":{"all":[{"fact":"hot","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"result","value":"` + strings.Repeat("x", 100) + `"}]}]}`
+	p := batchProgram(t, source)
+	var trackerKey string
+	for _, temporal := range p.temporal {
+		trackerKey = temporal.key
+	}
+	limits := DefaultLimits()
+	timerBytes, err := fieldBytes(trackerKey, "2026-09-09T12:00:00Z", limits.StagedBytes)
+	require.NoError(t, err)
+	actionBytes, err := fieldBytes("result", strings.Repeat("x", 100), limits.StagedBytes)
+	require.NoError(t, err)
+	limits.StagedBytes = max(timerBytes, actionBytes)
+	_, _, err = p.EvaluateAt(context.Background(), nil, map[string]interface{}{"hot": true}, limits, Budget{}, true, time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC))
+	require.ErrorContains(t, err, "staged byte budget")
+}
+
+func TestTemporalMaintenanceSkipsUnrelatedShortCircuitedSiblings(t *testing.T) {
+	p, _ := temporalProgram(t, `{"all":[{"fact":"gate","operator":"EQ","value":true},{"fact":"unused","operator":"EQ","value":true},{"fact":"hot","operator":"EQ","value":true,"for":"1m"}]}`)
+	evaluation, _, err := p.EvaluateAt(context.Background(), nil, map[string]interface{}{"gate": false, "unused": true, "hot": true}, DefaultLimits(), Budget{}, true, time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Equal(t, []ConditionResult{
+		{Rule: "sustained", Fact: "gate", State: store.Present, Result: False},
+		{Rule: "sustained", Fact: "hot", State: store.Present, Result: Indeterminate},
+	}, evaluation.Conditions)
+}
+
+func snapshotMemory(t *testing.T, memory *store.MemoryStore) map[string]interface{} {
+	t.Helper()
+	values, err := memory.Snapshot()
+	require.NoError(t, err)
+	return values
+}
+
+func drainMemory(t *testing.T, memory *store.MemoryStore) []store.FactUpdate {
+	t.Helper()
+	events, err := memory.DrainPublications()
+	require.NoError(t, err)
+	return events
 }
 
 func TestBatchEngineReviewBoundaries(t *testing.T) {

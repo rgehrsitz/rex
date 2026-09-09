@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
+	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/store"
 )
@@ -26,6 +28,13 @@ type DurableQueue interface {
 type VersionedDurableQueue interface {
 	DurableQueue
 	PinnedProgram(context.Context, string) (string, error)
+}
+
+// ProcessingTimeDurableQueue pins the first processing-time sample for a
+// durable event so every retry evaluates temporal conditions at the same time.
+type ProcessingTimeDurableQueue interface {
+	DurableQueue
+	PinProcessingTime(context.Context, string, time.Time) (time.Time, error)
 }
 
 type DurableProcessResult struct {
@@ -62,6 +71,24 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 	if status.Terminal != "" {
 		return result, queue.Acknowledge(ctx, event.ID)
 	}
+	processingTime := time.Time{}
+	if e.BytecodeVersion() == compiler.TemporalVersion {
+		temporalQueue, ok := queue.(ProcessingTimeDurableQueue)
+		if !ok {
+			result.RetryPending = true
+			return result, errors.Join(store.ErrDurableInfrastructure, fmt.Errorf("v6 durable processing requires a processing-time journal"))
+		}
+		proposed, sampleErr := e.coordinator.processingTime()
+		if sampleErr != nil {
+			result.RetryPending = true
+			return result, errors.Join(store.ErrDurableInfrastructure, sampleErr)
+		}
+		processingTime, err = temporalQueue.PinProcessingTime(ctx, event.ID, proposed)
+		if err != nil {
+			result.RetryPending = true
+			return result, err
+		}
+	}
 	if receiveErr == nil {
 		var metadata eventcontext.Metadata
 		facts, decodedMetadata, _, decodeErr := eventcontext.DecodeFactEvent([]byte(event.Payload))
@@ -80,7 +107,7 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 			} else {
 				eventCtx := eventcontext.WithMetadata(ctx, metadata)
 				eventCtx = store.WithDurableEvent(eventCtx, event.ID, e.programID)
-				_, receiveErr = e.EvaluateBatch(eventCtx, facts)
+				_, receiveErr = e.evaluateBatch(eventCtx, facts, processingTime)
 			}
 		}
 	}

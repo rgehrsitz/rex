@@ -46,6 +46,7 @@ type ConditionOrGroup struct {
 	Fact     string              `json:"fact,omitempty"`
 	Operator string              `json:"operator,omitempty"`
 	Value    interface{}         `json:"value,omitempty"`
+	For      string              `json:"for,omitempty"`
 	All      []*ConditionOrGroup `json:"all,omitempty"`
 	Any      []*ConditionOrGroup `json:"any,omitempty"`
 }

@@ -162,8 +162,12 @@ func (r *rulesetReloader) reload(ctx context.Context) (string, error) {
 		// safer than removing an engine when the directory cannot be inspected.
 		logging.Logger.Error().Err(err).Msg("Ruleset activated but in-memory history could not be pruned")
 	} else {
-		if removed := r.manager.RetainPrograms(keep); len(removed) > 0 {
+		removed, cleanupErr := r.manager.RetainProgramsContext(ctx, keep)
+		if len(removed) > 0 {
 			logging.Logger.Info().Strs("program_ids", removed).Msg("Released ruleset programs removed from artifact history")
+		}
+		if cleanupErr != nil {
+			logging.Logger.Error().Err(cleanupErr).Msg("Ruleset activated but retired temporal state could not be cleaned")
 		}
 	}
 	return candidate.ProgramID(), nil

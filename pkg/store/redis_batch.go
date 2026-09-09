@@ -85,7 +85,9 @@ func (s *RedisStore) Commit(ctx context.Context, request CommitRequest) (CommitR
 		if err != nil {
 			return result, err
 		}
-		facts[w.Key] = w.Value
+		if !w.Internal {
+			facts[w.Key] = w.Value
+		}
 	}
 	notification, err := json.Marshal(struct {
 		Metadata map[string]interface{} `json:"_rex"`
@@ -98,21 +100,31 @@ func (s *RedisStore) Commit(ctx context.Context, request CommitRequest) (CommitR
 		return result, fmt.Errorf("output notification exceeds %d bytes", MaxEventBytes)
 	}
 	writer := s.batchWriter()
+	acknowledgedWrites := 0
 	for i, w := range request.Writes {
 		if err := ctx.Err(); err != nil {
-			if len(result.Applied) > 0 {
+			if acknowledgedWrites > 0 {
 				result.Outcome = Partial
 			}
 			return result, err
 		}
-		// No automatic retries. Any error after dispatch may conceal an applied SET.
-		if err := writer.Set(ctx, w.Key, encoded[i], 0).Err(); err != nil {
+		// No automatic retries. Any error after dispatch may conceal an applied mutation.
+		var err error
+		if w.Delete {
+			err = writer.Del(ctx, w.Key).Err()
+		} else {
+			err = writer.Set(ctx, w.Key, encoded[i], 0).Err()
+		}
+		if err != nil {
 			result.Outcome = Unknown
 			return result, err
 		}
-		result.Applied = append(result.Applied, w.Key)
+		acknowledgedWrites++
+		if !w.Internal {
+			result.Applied = append(result.Applied, w.Key)
+		}
 	}
-	if len(request.Writes) > 0 {
+	if len(facts) > 0 {
 		if err := writer.Publish(ctx, ResultsChannel, notification).Err(); err != nil {
 			result.Outcome = Partial
 			return result, fmt.Errorf("writes acknowledged; notification failed: %w", err)
@@ -120,4 +132,19 @@ func (s *RedisStore) Commit(ctx context.Context, request CommitRequest) (CommitR
 	}
 	result.Outcome = Committed
 	return result, nil
+}
+
+func (s *RedisStore) DeleteInternal(ctx context.Context, keys []string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	for _, key := range keys {
+		if !IsInternalKey(key) {
+			return fmt.Errorf("internal cleanup key %q is invalid", key)
+		}
+	}
+	return s.client.Del(ctx, keys...).Err()
 }

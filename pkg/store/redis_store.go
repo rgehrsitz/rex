@@ -105,6 +105,9 @@ func (s *RedisStore) SetFact(key string, value interface{}) error {
 
 // SetFactContext sets a fact using the caller's context.
 func (s *RedisStore) SetFactContext(ctx context.Context, key string, value interface{}) error {
+	if IsInternalKey(key) {
+		return fmt.Errorf("fact key %q uses reserved internal state prefix", key)
+	}
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -118,6 +121,9 @@ func (s *RedisStore) GetFact(key string) (interface{}, error) {
 
 // GetFactContext retrieves a fact using the caller's context.
 func (s *RedisStore) GetFactContext(ctx context.Context, key string) (interface{}, error) {
+	if IsInternalKey(key) {
+		return nil, fmt.Errorf("fact key %q uses reserved internal state prefix", key)
+	}
 	data, err := s.client.Get(ctx, key).Result()
 	if err == redis.Nil {
 		logging.Logger.Debug().Str("key", key).Msg("Fact not found in Redis")
@@ -142,6 +148,11 @@ func (s *RedisStore) MGetFacts(keys ...string) (map[string]interface{}, error) {
 
 // MGetFactsContext retrieves facts using the caller's context.
 func (s *RedisStore) MGetFactsContext(ctx context.Context, keys ...string) (map[string]interface{}, error) {
+	for _, key := range keys {
+		if IsInternalKey(key) {
+			return nil, fmt.Errorf("fact key %q uses reserved internal state prefix", key)
+		}
+	}
 	results, err := s.client.MGet(ctx, keys...).Result()
 	if err != nil {
 		return nil, err
@@ -195,6 +206,9 @@ func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 
 // SetAndPublishFactContext updates and publishes a fact using the caller's context.
 func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, value interface{}) error {
+	if IsInternalKey(key) {
+		return fmt.Errorf("fact key %q uses reserved internal state prefix", key)
+	}
 	group, _, _ := strings.Cut(key, ":")
 	if strings.TrimSpace(group) == "" {
 		return fmt.Errorf("fact key %q has no publish channel before ':'", key)

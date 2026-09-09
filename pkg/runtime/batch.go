@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
@@ -25,11 +27,19 @@ const (
 
 // Program contains a private, immutable copy of a validated batch artifact.
 type Program struct {
-	rules        []compiler.Rule
-	dependents   map[string][]int
-	dependencies [][]string
-	declarations map[string]compiler.FactDeclaration
-	version      uint32
+	rules                 []compiler.Rule
+	dependents            map[string][]int
+	dependencies          [][]string
+	declarations          map[string]compiler.FactDeclaration
+	version               uint32
+	temporal              map[*compiler.ConditionOrGroup]temporalCondition
+	hasTemporal           map[*compiler.ConditionOrGroup]bool
+	hasTemporalConditions bool
+}
+
+type temporalCondition struct {
+	duration time.Duration
+	key      string
 }
 
 func LoadProgram(data []byte) (*Program, error) {
@@ -42,6 +52,12 @@ func LoadProgram(data []byte) (*Program, error) {
 		return nil, err
 	}
 	p := &Program{rules: rules.Rules, declarations: rules.Facts, version: version, dependents: map[string][]int{}, dependencies: make([][]string, len(rules.Rules))}
+	if version == compiler.TemporalVersion {
+		p.temporal = map[*compiler.ConditionOrGroup]temporalCondition{}
+		p.hasTemporal = map[*compiler.ConditionOrGroup]bool{}
+		p.hasTemporalConditions = true
+	}
+	programDigest := sha256.Sum256(data)
 	nodes := 0
 	unique := map[string]bool{}
 	var visit func([]*compiler.ConditionOrGroup, map[string]bool) error
@@ -75,6 +91,47 @@ func LoadProgram(data []byte) (*Program, error) {
 		for fact := range facts {
 			p.dependencies[i] = append(p.dependencies[i], fact)
 			p.dependents[fact] = append(p.dependents[fact], i)
+		}
+		if !p.hasTemporalConditions {
+			sort.Strings(p.dependencies[i])
+			continue
+		}
+		var temporal func([]*compiler.ConditionOrGroup, string) (bool, error)
+		temporal = func(ns []*compiler.ConditionOrGroup, path string) (bool, error) {
+			containsTemporal := false
+			for nodeIndex, node := range ns {
+				nodePath := fmt.Sprintf("%s/%d", path, nodeIndex)
+				nodeContainsTemporal := false
+				if node.For != "" {
+					duration, err := time.ParseDuration(node.For)
+					if err != nil {
+						return false, err
+					}
+					identity := sha256.Sum256([]byte(fmt.Sprintf("%x/%d/%s", programDigest, i, nodePath)))
+					key := fmt.Sprintf("__rex_temporal_%x", identity)
+					p.temporal[node] = temporalCondition{duration: duration, key: key}
+					p.dependencies[i] = append(p.dependencies[i], key)
+					nodeContainsTemporal = true
+				}
+				allContainsTemporal, err := temporal(node.All, nodePath+"/all")
+				if err != nil {
+					return false, err
+				}
+				anyContainsTemporal, err := temporal(node.Any, nodePath+"/any")
+				if err != nil {
+					return false, err
+				}
+				nodeContainsTemporal = nodeContainsTemporal || allContainsTemporal || anyContainsTemporal
+				p.hasTemporal[node] = nodeContainsTemporal
+				containsTemporal = containsTemporal || nodeContainsTemporal
+			}
+			return containsTemporal, nil
+		}
+		if _, err := temporal(r.Conditions.All, "all"); err != nil {
+			return nil, err
+		}
+		if _, err := temporal(r.Conditions.Any, "any"); err != nil {
+			return nil, err
 		}
 		sort.Strings(p.dependencies[i])
 	}
@@ -171,6 +228,9 @@ func validateEvent(event map[string]interface{}, l Limits) error {
 	}
 	size := 0
 	for k, v := range event {
+		if store.IsInternalKey(k) {
+			return fmt.Errorf("fact %q uses reserved internal state prefix", k)
+		}
 		n, err := fieldBytes(k, v, l.EventBytes)
 		if err != nil {
 			return err
@@ -191,6 +251,11 @@ func (p *Program) validateEvent(event map[string]interface{}, limits Limits) err
 }
 
 func (p *Program) validateFactTypes(facts map[string]interface{}) error {
+	for name := range facts {
+		if store.IsInternalKey(name) {
+			return fmt.Errorf("fact %q uses reserved internal state prefix", name)
+		}
+	}
 	if p.declarations == nil {
 		return nil
 	}
@@ -301,7 +366,11 @@ func compareV4(f store.Fact, constant interface{}, op string) Truth {
 // Evaluate is pure with respect to state and transport. It never calls an
 // adapter. Inputs must not be concurrently mutated by the caller. Budget is
 // copied on entry; a failed evaluation does not consume the caller's budget.
-func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, event map[string]interface{}, limits Limits, budget Budget, trace bool) (retEval Evaluation, retBudget Budget, retErr error) {
+func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, event map[string]interface{}, limits Limits, budget Budget, trace bool) (Evaluation, Budget, error) {
+	return p.EvaluateAt(ctx, snapshot, event, limits, budget, trace, time.Time{})
+}
+
+func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact, event map[string]interface{}, limits Limits, budget Budget, trace bool, at time.Time) (retEval Evaluation, retBudget Budget, retErr error) {
 	empty := Evaluation{}
 	result := Evaluation{}
 	defer func() {
@@ -318,6 +387,10 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 	if err := ctx.Err(); err != nil {
 		return empty, budget, err
 	}
+	if len(p.temporal) > 0 && at.IsZero() {
+		return empty, budget, fmt.Errorf("temporal evaluation requires an injected processing time")
+	}
+	at = at.UTC()
 	if budget.Actions < 0 || budget.Work < 0 || budget.Actions > limits.ChainActions || budget.Work > limits.ChainWork {
 		return empty, budget, fmt.Errorf("invalid chain budget")
 	}
@@ -363,10 +436,37 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 		values[k] = store.Fact{State: state, Value: v}
 	}
 	result = Evaluation{Rules: []string{}, Actions: []ActionProposal{}, Writes: []store.Write{}}
+	staged := 0
+	stageInternal := func(key string, value interface{}, deleteState bool) error {
+		n, err := fieldBytes(key, value, limits.StagedBytes)
+		if err != nil {
+			return err
+		}
+		staged += n
+		if staged > limits.StagedBytes {
+			return fmt.Errorf("staged byte budget exceeded")
+		}
+		if len(result.Writes) >= store.MaxCommitWrites {
+			return fmt.Errorf("commit exceeds write limit")
+		}
+		result.Writes = append(result.Writes, store.Write{Key: key, Value: value, Internal: true, Delete: deleteState})
+		return nil
+	}
 	var group func(string, []*compiler.ConditionOrGroup, bool) (Truth, error)
 	group = func(rule string, nodes []*compiler.ConditionOrGroup, all bool) (Truth, error) {
 		unknown := false
+		decisive := false
+		maintainTemporal := p.hasTemporalConditions
+		if maintainTemporal {
+			maintainTemporal = false
+			for _, node := range nodes {
+				maintainTemporal = maintainTemporal || p.hasTemporal[node]
+			}
+		}
 		for _, node := range nodes {
+			if decisive && !p.hasTemporal[node] {
+				continue
+			}
 			if err := ctx.Err(); err != nil {
 				return Indeterminate, err
 			}
@@ -387,6 +487,44 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 					fact.State = store.Missing
 				}
 				value = compareV4(fact, node.Value, node.Operator)
+				if temporal, ok := p.temporal[node]; ok {
+					tracker := values[temporal.key]
+					if value == True {
+						switch tracker.State {
+						case "", store.Missing, store.Null:
+							started := at.Format(time.RFC3339Nano)
+							if err := stageInternal(temporal.key, started, false); err != nil {
+								return Indeterminate, err
+							}
+							value = Indeterminate
+						case store.Present:
+							startedText, ok := tracker.Value.(string)
+							if !ok {
+								return Indeterminate, fmt.Errorf("invalid temporal state for %q", node.Fact)
+							}
+							started, parseErr := time.Parse(time.RFC3339Nano, startedText)
+							if parseErr != nil {
+								return Indeterminate, fmt.Errorf("invalid temporal state for %q", node.Fact)
+							}
+							if at.Before(started) {
+								if err := stageInternal(temporal.key, at.Format(time.RFC3339Nano), false); err != nil {
+									return Indeterminate, err
+								}
+								value = Indeterminate
+								break
+							}
+							if at.Sub(started) < temporal.duration {
+								value = Indeterminate
+							}
+						default:
+							return Indeterminate, fmt.Errorf("invalid temporal state for %q", node.Fact)
+						}
+					} else if tracker.State == store.Present {
+						if err := stageInternal(temporal.key, nil, true); err != nil {
+							return Indeterminate, err
+						}
+					}
+				}
 				if trace {
 					result.Conditions = append(result.Conditions, ConditionResult{Rule: rule, Fact: node.Fact, State: fact.State, Result: value})
 				}
@@ -395,12 +533,24 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 				return Indeterminate, err
 			}
 			if all && value == False {
-				return False, nil
+				decisive = true
+				if !maintainTemporal {
+					return False, nil
+				}
 			}
 			if !all && value == True {
-				return True, nil
+				decisive = true
+				if !maintainTemporal {
+					return True, nil
+				}
 			}
 			unknown = unknown || value == Indeterminate
+		}
+		if decisive {
+			if all {
+				return False, nil
+			}
+			return True, nil
 		}
 		if unknown {
 			return Indeterminate, nil
@@ -411,7 +561,6 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 		return False, nil
 	}
 	targets := map[string]interface{}{}
-	staged := 0
 	for _, i := range ids {
 		remaining.Work++
 		if remaining.Work > limits.ChainWork {
@@ -457,6 +606,9 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 				continue
 			}
 			targets[a.Target] = a.Value
+			if len(result.Writes) >= store.MaxCommitWrites {
+				return empty, budget, fmt.Errorf("commit exceeds write limit")
+			}
 			result.Writes = append(result.Writes, store.Write{Key: a.Target, Value: a.Value})
 		}
 	}
@@ -489,7 +641,13 @@ type Coordinator struct {
 	limits    Limits
 	trace     bool
 	halted    bool
+	clock     Clock
 }
+
+type Clock interface{ Now() time.Time }
+type systemClock struct{}
+
+func (systemClock) Now() time.Time { return time.Now() }
 
 func NewCoordinator(program *Program, reader store.SnapshotReader, committer store.Committer, limits Limits) (*Coordinator, error) {
 	if program == nil || reader == nil || committer == nil {
@@ -498,9 +656,43 @@ func NewCoordinator(program *Program, reader store.SnapshotReader, committer sto
 	if err := limits.Validate(); err != nil {
 		return nil, err
 	}
-	return &Coordinator{program: program, reader: reader, committer: committer, limits: limits, trace: true}, nil
+	return &Coordinator{program: program, reader: reader, committer: committer, limits: limits, trace: true, clock: systemClock{}}, nil
 }
+
+func (c *Coordinator) SetClock(clock Clock) error {
+	if clock == nil {
+		return fmt.Errorf("clock is required")
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.clock = clock
+	return nil
+}
+
+func (c *Coordinator) processingTime() (time.Time, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	at := c.clock.Now().UTC()
+	if at.IsZero() {
+		return time.Time{}, fmt.Errorf("clock returned zero processing time")
+	}
+	return at, nil
+}
+
 func (c *Coordinator) Process(ctx context.Context, chainID string, event map[string]interface{}) (ChainResult, error) {
+	return c.process(ctx, chainID, event, time.Time{})
+}
+
+// ProcessAt evaluates a chain at an already pinned processing time. Durable
+// recovery uses it so retry timing cannot change temporal results.
+func (c *Coordinator) ProcessAt(ctx context.Context, chainID string, event map[string]interface{}, at time.Time) (ChainResult, error) {
+	if at.IsZero() {
+		return ChainResult{ChainID: chainID, Rounds: []RoundResult{}}, fmt.Errorf("processing time is required")
+	}
+	return c.process(ctx, chainID, event, at.UTC())
+}
+
+func (c *Coordinator) process(ctx context.Context, chainID string, event map[string]interface{}, evaluationTime time.Time) (ChainResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	result := ChainResult{ChainID: chainID, Rounds: []RoundResult{}}
@@ -519,6 +711,12 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 	}
 	if err := c.program.validateEvent(event, c.limits); err != nil {
 		return result, err
+	}
+	if evaluationTime.IsZero() {
+		evaluationTime = c.clock.Now().UTC()
+		if evaluationTime.IsZero() {
+			return result, fmt.Errorf("clock returned zero processing time")
+		}
 	}
 	for round := 0; len(event) > 0; round++ {
 		if round >= c.limits.Rounds {
@@ -540,7 +738,7 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 				return result, fmt.Errorf("snapshot: %w", err)
 			}
 		}
-		eval, budget, err := c.program.Evaluate(roundCtx, snapshot, event, c.limits, result.Budget, c.trace)
+		eval, budget, err := c.program.EvaluateAt(roundCtx, snapshot, event, c.limits, result.Budget, c.trace, evaluationTime)
 		if err != nil {
 			result.Rounds = append(result.Rounds, RoundResult{Round: round, Evaluation: eval, EvaluationError: err.Error(), Commit: store.CommitResult{Outcome: store.NotCommitted}})
 			return result, fmt.Errorf("evaluate round %d: %w", round, err)
@@ -554,10 +752,14 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		// Next-round fact and payload bounds are checked before these writes escape.
 		next := map[string]interface{}{}
 		for _, w := range eval.Writes {
-			next[w.Key] = w.Value
+			if !w.Internal {
+				next[w.Key] = w.Value
+			}
 		}
-		if err := c.program.validateEvent(next, c.limits); err != nil {
-			return result, fmt.Errorf("derived event: %w", err)
+		if len(next) > 0 {
+			if err := c.program.validateEvent(next, c.limits); err != nil {
+				return result, fmt.Errorf("derived event: %w", err)
+			}
 		}
 		if err := ctx.Err(); err != nil {
 			return result, err

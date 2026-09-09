@@ -5,13 +5,17 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"sort"
+	"time"
 
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/store"
 )
+
+var errTemporalStateCleanupUnsupported = errors.New("temporal state cleanup unsupported")
 
 func newBatchEngine(data []byte, backend store.ContextStore) (*Engine, error) {
 	program, err := LoadProgram(data)
@@ -86,7 +90,45 @@ func (e *Engine) SetBatchLimits(limits Limits) error {
 	e.maxActionsPerEvaluation = limits.ActionsPerRule
 	return nil
 }
+
+// SetClock injects the processing-time source used by v6 temporal conditions.
+// Production engines use the system clock by default.
+func (e *Engine) SetClock(clock Clock) error {
+	if e.coordinator == nil {
+		return fmt.Errorf("clock injection requires a batch artifact")
+	}
+	return e.coordinator.SetClock(clock)
+}
+
+func (e *Engine) temporalStateKeys() []string {
+	if e.coordinator == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(e.coordinator.program.temporal))
+	for _, temporal := range e.coordinator.program.temporal {
+		keys = append(keys, temporal.key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func (e *Engine) deleteTemporalState(ctx context.Context) error {
+	keys := e.temporalStateKeys()
+	if len(keys) == 0 {
+		return nil
+	}
+	cleaner, ok := e.coordinator.committer.(store.InternalStateCleaner)
+	if !ok {
+		return fmt.Errorf("%w: batch adapter cannot clean retired temporal state", errTemporalStateCleanupUnsupported)
+	}
+	return cleaner.DeleteInternal(ctx, keys)
+}
+
 func (e *Engine) EvaluateBatch(ctx context.Context, event map[string]interface{}) (ChainResult, error) {
+	return e.evaluateBatch(ctx, event, time.Time{})
+}
+
+func (e *Engine) evaluateBatch(ctx context.Context, event map[string]interface{}, at time.Time) (ChainResult, error) {
 	if e.coordinator == nil {
 		return ChainResult{}, fmt.Errorf("batch evaluation requires a batch artifact")
 	}
@@ -97,7 +139,13 @@ func (e *Engine) EvaluateBatch(ctx context.Context, event map[string]interface{}
 	if metadata.Kind != "" {
 		return ChainResult{}, fmt.Errorf("unsupported event kind %q", metadata.Kind)
 	}
-	result, err := e.coordinator.Process(ctx, metadata.TraceID, event)
+	var result ChainResult
+	var err error
+	if at.IsZero() {
+		result, err = e.coordinator.Process(ctx, metadata.TraceID, event)
+	} else {
+		result, err = e.coordinator.ProcessAt(ctx, metadata.TraceID, event, at)
+	}
 	logger := traceLogger(ctx)
 	for _, round := range result.Rounds {
 		for _, condition := range round.Evaluation.Conditions {

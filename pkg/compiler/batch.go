@@ -10,6 +10,7 @@ import (
 	"math"
 	"sort"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -18,10 +19,13 @@ import (
 // v3 jump-program version for explicitly compatible embedded callers.
 const BatchVersion uint32 = 4
 const TypedFactsVersion uint32 = 5
+const TemporalVersion uint32 = 6
 const MaxProgramBytes = 8 << 20
 const MaxProgramRules = 10000
 const MaxConditionNodes = 100000
 const MaxDependencies = 65536
+const MaxTemporalConditions = 10000
+const MaxTemporalDuration = 365 * 24 * time.Hour
 const batchHeaderSize = 16
 
 // ErrTypedFactContract classifies source errors caused by v5 declarations.
@@ -34,7 +38,7 @@ func typedFactErrorf(format string, args ...interface{}) error {
 }
 
 func IsBatchVersion(version uint32) bool {
-	return version == BatchVersion || version == TypedFactsVersion
+	return version == BatchVersion || version == TypedFactsVersion || version == TemporalVersion
 }
 
 func BatchArtifactVersion(data []byte) (uint32, error) {
@@ -48,7 +52,7 @@ func BatchArtifactVersion(data []byte) (uint32, error) {
 	return version, nil
 }
 
-// ParseBatch validates the bounded, script-free v4/v5 source contract.
+// ParseBatch validates the bounded, script-free batch source contract.
 func ParseBatch(data []byte) (*Ruleset, error) {
 	if len(data) > MaxProgramBytes {
 		return nil, fmt.Errorf("program exceeds %d bytes", MaxProgramBytes)
@@ -101,6 +105,7 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 	}
 
 	nodes := 0
+	temporalConditions := 0
 	facts := map[string]bool{}
 	var check func([]*ConditionOrGroup) error
 	check = func(children []*ConditionOrGroup) error {
@@ -122,6 +127,16 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 				}
 				if !valid {
 					return fmt.Errorf("v4 condition %q requires a scalar constant and matching operator", n.Fact)
+				}
+				if n.For != "" {
+					duration, err := time.ParseDuration(n.For)
+					if err != nil || duration <= 0 || duration > MaxTemporalDuration {
+						return fmt.Errorf("temporal condition %q requires for duration between 1ns and %s", n.Fact, MaxTemporalDuration)
+					}
+					temporalConditions++
+					if temporalConditions > MaxTemporalConditions {
+						return fmt.Errorf("program exceeds %d temporal conditions", MaxTemporalConditions)
+					}
 				}
 			}
 			if err := check(n.All); err != nil {
@@ -161,8 +176,26 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 			}
 		}
 	}
-	if len(facts) > MaxDependencies {
+	if len(facts)+temporalConditions > MaxDependencies {
 		return nil, fmt.Errorf("program exceeds 65536 dependencies")
+	}
+	const reserved = "__rex_temporal_"
+	for name := range rules.Facts {
+		if strings.HasPrefix(name, reserved) {
+			return nil, fmt.Errorf("fact name %q uses reserved temporal state prefix", name)
+		}
+	}
+	for _, rule := range rules.Rules {
+		for _, action := range rule.Actions {
+			if strings.HasPrefix(action.Target, reserved) {
+				return nil, fmt.Errorf("action target %q uses reserved temporal state prefix", action.Target)
+			}
+		}
+	}
+	for fact := range facts {
+		if strings.HasPrefix(fact, reserved) {
+			return nil, fmt.Errorf("condition fact %q uses reserved temporal state prefix", fact)
+		}
 	}
 	return rules, nil
 }
@@ -298,7 +331,9 @@ func CompileBatch(source []byte) ([]byte, error) {
 	}
 	out := make([]byte, batchHeaderSize, len(payload)+batchHeaderSize)
 	version := BatchVersion
-	if rules.Facts != nil {
+	if temporalConditionCount(rules) > 0 {
+		version = TemporalVersion
+	} else if rules.Facts != nil {
 		version = TypedFactsVersion
 	}
 	binary.LittleEndian.PutUint32(out, version)
@@ -333,7 +368,37 @@ func DecodeBatch(data []byte) (*Ruleset, error) {
 	if version == TypedFactsVersion && rules.Facts == nil {
 		return nil, fmt.Errorf("v5 artifact requires typed fact declarations")
 	}
+	temporal := temporalConditionCount(rules)
+	if (version == BatchVersion || version == TypedFactsVersion) && temporal > 0 {
+		return nil, fmt.Errorf("v%d artifact cannot contain temporal conditions", version)
+	}
+	if version == TemporalVersion && temporal == 0 {
+		return nil, fmt.Errorf("v6 artifact requires temporal conditions")
+	}
 	return rules, nil
+}
+
+func temporalConditionCount(rules *Ruleset) int {
+	count := 0
+	var walk func([]*ConditionOrGroup)
+	walk = func(nodes []*ConditionOrGroup) {
+		for _, node := range nodes {
+			if node.For != "" {
+				count++
+			}
+			walk(node.All)
+			walk(node.Any)
+		}
+	}
+	for _, rule := range rules.Rules {
+		walk(rule.Conditions.All)
+		walk(rule.Conditions.Any)
+	}
+	return count
+}
+
+func HasTemporalConditions(rules *Ruleset) bool {
+	return rules != nil && temporalConditionCount(rules) > 0
 }
 
 // validateBatchShapes checks field presence that the shared legacy AST loses
@@ -353,6 +418,12 @@ func validateBatchShapes(data []byte) error {
 		}
 		all, hasAll := fields["all"]
 		any, hasAny := fields["any"]
+		if rawFor, present := fields["for"]; present {
+			var duration string
+			if json.Unmarshal(rawFor, &duration) != nil || duration == "" {
+				return fmt.Errorf("temporal condition for must be a nonempty duration string")
+			}
+		}
 		if hasAll == hasAny {
 			if !hasAll && leafAllowed {
 				return nil

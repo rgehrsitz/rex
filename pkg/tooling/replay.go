@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"reflect"
+	"time"
 
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/runtime"
@@ -56,6 +57,7 @@ func Decode(data []byte, value interface{}) error {
 
 type Input struct {
 	ID    string                 `json:"id"`
+	At    string                 `json:"at,omitempty"`
 	Facts map[string]interface{} `json:"facts"`
 }
 type Expectation struct {
@@ -157,11 +159,27 @@ func (b Bundle) validate() (validatedBundle, error) {
 		return validatedBundle{}, fmt.Errorf("initial state exceeds byte limit")
 	}
 	seen := map[string]bool{}
+	var previousTime time.Time
 	for _, event := range b.Scenario.Events {
 		if event.ID == "" || len(event.ID) > 255 || seen[event.ID] || event.Facts == nil {
 			return validatedBundle{}, fmt.Errorf("events require unique nonempty ids and facts")
 		}
 		seen[event.ID] = true
+		if program.Version() == compiler.TemporalVersion {
+			if event.At == "" {
+				return validatedBundle{}, fmt.Errorf("event %q requires processing time at for temporal replay", event.ID)
+			}
+			at, err := time.Parse(time.RFC3339Nano, event.At)
+			if err != nil {
+				return validatedBundle{}, fmt.Errorf("event %q has invalid processing time at: %w", event.ID, err)
+			}
+			if !previousTime.IsZero() && at.Before(previousTime) {
+				return validatedBundle{}, fmt.Errorf("event %q processing time precedes the prior event", event.ID)
+			}
+			previousTime = at
+		} else if event.At != "" {
+			return validatedBundle{}, fmt.Errorf("event %q sets at for a non-temporal replay", event.ID)
+		}
 		if err := runtime.ValidateProgramEvent(program, event.Facts, *b.Scenario.Limits); err != nil {
 			return validatedBundle{}, fmt.Errorf("event %q: %w", event.ID, err)
 		}
@@ -223,6 +241,12 @@ func Replay(ctx context.Context, b Bundle) (Report, error) {
 				return r, err
 			}
 		}
+		if validated.program.Version() == compiler.TemporalVersion {
+			at, _ := time.Parse(time.RFC3339Nano, event.At) // validated above
+			if err := coordinator.SetClock(fixedClock{at: at}); err != nil {
+				return r, err
+			}
+		}
 		chain, evalErr := coordinator.Process(ctx, event.ID, event.Facts)
 		entry := EventResult{ID: event.ID, Chain: chain}
 		if evalErr != nil {
@@ -260,6 +284,10 @@ func Replay(ctx context.Context, b Bundle) (Report, error) {
 	r.FinalState, err = memory.Snapshot()
 	return r, err
 }
+
+type fixedClock struct{ at time.Time }
+
+func (c fixedClock) Now() time.Time { return c.at }
 func Actions(r Report) []runtime.ActionProposal {
 	out := []runtime.ActionProposal{}
 	for _, e := range r.Events {

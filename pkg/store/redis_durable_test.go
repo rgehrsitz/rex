@@ -105,6 +105,53 @@ func TestRedisDurableCommitRecoveryAndSnapshotReplay(t *testing.T) {
 	require.Equal(t, int64(1), status.Attempts)
 }
 
+func TestRedisDurableInternalCommitIsAtomicAndSilent(t *testing.T) {
+	server, redisStore := setupMiniredis(t)
+	defer server.Close()
+	defer redisStore.Close()
+	ctx := context.Background()
+	options := durableTestOptions(t)
+	durable, err := redisStore.OpenDurable(ctx, options)
+	require.NoError(t, err)
+	event := addDurableEvent(t, durable, `{"hot":true}`)
+	_, err = durable.Begin(ctx, event, "program-temporal")
+	require.NoError(t, err)
+	firstTime := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	pinned, err := durable.PinProcessingTime(ctx, event.ID, firstTime)
+	require.NoError(t, err)
+	require.Equal(t, firstTime, pinned)
+	pinned, err = durable.PinProcessingTime(ctx, event.ID, firstTime.Add(time.Hour))
+	require.NoError(t, err)
+	require.Equal(t, firstTime, pinned)
+	eventCtx := WithEvaluationRound(WithDurableEvent(ctx, event.ID, "program-temporal"), 0)
+	tracker := "__rex_temporal_test"
+	request := CommitRequest{ChainID: event.ID, Round: 0, Writes: []Write{{Key: tracker, Value: "2026-09-09T12:00:00Z", Internal: true}}}
+
+	result, err := redisStore.Commit(eventCtx, request)
+	require.NoError(t, err)
+	require.Equal(t, Committed, result.Outcome)
+	require.Empty(t, result.Applied)
+	require.Equal(t, int64(0), redisStore.client.XLen(ctx, options.OutputStream).Val())
+	state, err := redisStore.ReadSnapshot(eventCtx, []string{tracker})
+	require.NoError(t, err)
+	require.Equal(t, Fact{State: Present, Value: "2026-09-09T12:00:00Z"}, state[tracker])
+
+	result, err = redisStore.Commit(eventCtx, request)
+	require.NoError(t, err)
+	require.Equal(t, Committed, result.Outcome)
+	require.Empty(t, result.Applied)
+	require.Equal(t, int64(0), redisStore.client.XLen(ctx, options.OutputStream).Val())
+
+	resetCtx := WithEvaluationRound(WithDurableEvent(ctx, event.ID, "program-temporal"), 1)
+	result, err = redisStore.Commit(resetCtx, CommitRequest{ChainID: event.ID, Round: 1, Writes: []Write{{Key: tracker, Internal: true, Delete: true}}})
+	require.NoError(t, err)
+	require.Equal(t, Committed, result.Outcome)
+	state, err = redisStore.ReadSnapshot(resetCtx, []string{tracker})
+	require.NoError(t, err)
+	require.Equal(t, Missing, state[tracker].State)
+	require.Equal(t, int64(0), redisStore.client.XLen(ctx, options.OutputStream).Val())
+}
+
 func TestRedisDurableRejectsProgramDriftAndUnsafeOutputType(t *testing.T) {
 	server, redisStore := setupMiniredis(t)
 	defer server.Close()

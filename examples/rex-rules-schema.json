@@ -3,13 +3,14 @@
   "type": "object",
   "properties": {
     "facts": {
-      "description": "Optional closed fact namespace. Presence selects the v5 typed-fact contract.",
+      "description": "Optional closed fact namespace. Presence selects v5 unless a temporal condition selects v6.",
       "type": "object",
       "minProperties": 1,
       "maxProperties": 65536,
       "propertyNames": {
         "minLength": 1,
-        "maxLength": 255
+        "maxLength": 255,
+        "not": {"pattern": "^__rex_temporal_"}
       },
       "additionalProperties": {
         "$ref": "#/definitions/factDeclaration"
@@ -77,7 +78,8 @@
                     "target": {
                       "type": "string",
                       "minLength": 1,
-                      "maxLength": 255
+                      "maxLength": 255,
+                      "not": {"pattern": "^__rex_temporal_"}
                     },
                     "value": {
                       "oneOf": [
@@ -160,7 +162,8 @@
               "fact": {
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 255
+                "maxLength": 255,
+                "not": {"pattern": "^__rex_temporal_"}
               },
               "operator": {
                 "type": "string",
@@ -189,6 +192,11 @@
                     "type": "boolean"
                   }
                 ]
+              },
+              "for": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Processing-time duration for which this predicate must remain true, such as 30s or 5m. Presence selects v6."
               }
             },
             "required": [
@@ -270,6 +278,6 @@
     }
   },
   "title": "REX batch ruleset",
-  "description": "Batch v4/v5: scalar conditions, script-free actions, simultaneous snapshots, and optional v5 typed fact declarations. Compiler additionally enforces unique rule names, declaration references, type agreement, and UTF-8 byte limits.",
+  "description": "Batch v4/v5/v6: scalar conditions, script-free actions, simultaneous snapshots, optional typed fact declarations, and optional v6 processing-time durations. Compiler additionally enforces unique rule names, declaration references, type agreement, duration bounds, and UTF-8 byte limits.",
   "additionalProperties": false
 }
