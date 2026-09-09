@@ -35,6 +35,8 @@ The daemon loads the complete candidate, applies configured limits, archives
 its exact bytes, and activates it between events. In Streams mode, activation
 waits until the consumer group has no pending deliveries. Undelivered lag does
 not block activation; those events have not acquired a program yet.
+Consequently, a nonzero lag can span program versions across consecutive events;
+each individual event still uses exactly one program.
 
 Watch the log for `Ruleset reload completed` and the new `program_id`. Monitor:
 
@@ -60,6 +62,14 @@ mv /etc/rex/.current.bytecode.rollback /etc/rex/current.bytecode
 Confirm a successful reload log with the expected program ID. This restores
 rule behavior for later events. It does not undo facts committed by events
 already processed under the newer program.
+
+Before removing an archived artifact, verify that `XPENDING` contains no event
+for that deployment and retain the artifact for the full
+`redis.durable.journal_ttl` after the last event that could have used it. Zero
+pending work by itself is insufficient because a journal entry or deliberate
+redrive can remain recoverable after acknowledgement. REX logs the program IDs
+released from memory after their history files are removed and a later reload
+succeeds.
 
 ## Recovery failures
 

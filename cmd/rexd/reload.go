@@ -28,14 +28,15 @@ type durableStatsReader interface {
 }
 
 type rulesetReloader struct {
-	config      *Config
-	store       store.ContextStore
-	manager     *runtime.EngineManager
-	metrics     *observability.Metrics
-	stats       durableStatsReader
-	mu          sync.Mutex
-	lastAttempt [sha256.Size]byte
-	hasAttempt  bool
+	config       *Config
+	store        store.ContextStore
+	manager      *runtime.EngineManager
+	metrics      *observability.Metrics
+	stats        durableStatsReader
+	mu           sync.Mutex
+	lastAttempt  [sha256.Size]byte
+	hasAttempt   bool
+	lastDeferred store.DurableStats
 }
 
 func startRulesetReload(ctx context.Context, deps *RexDependencies, config *Config, metrics *observability.Metrics, stats durableStatsReader) error {
@@ -55,6 +56,9 @@ func newRulesetReloader(config *Config, deps *RexDependencies, metrics *observab
 	r := &rulesetReloader{config: config, store: deps.Store, manager: deps.Manager, metrics: metrics, stats: stats}
 	if err := os.MkdirAll(config.ReloadHistoryDir, 0o750); err != nil {
 		return nil, fmt.Errorf("create ruleset history directory: %w", err)
+	}
+	if err := cleanupReloadTemps(config.ReloadHistoryDir); err != nil {
+		return nil, err
 	}
 	if err := r.loadHistory(); err != nil {
 		return nil, err
@@ -82,7 +86,8 @@ func (r *rulesetReloader) run(ctx context.Context) {
 			programID, err := r.reload(ctx)
 			if errors.Is(err, errReloadDeferred) {
 				r.metrics.RecordRulesetReloadDeferred()
-				logging.Logger.Info().Str("active_program_id", r.manager.ActiveProgramID()).Msg("Ruleset reload deferred while durable events are pending")
+				stats := r.deferredStats()
+				logging.Logger.Info().Str("active_program_id", r.manager.ActiveProgramID()).Int64("pending", stats.Pending).Int64("lag", stats.Lag).Msg("Ruleset reload deferred while durable events are pending")
 				continue
 			}
 			if err != nil {
@@ -138,6 +143,7 @@ func (r *rulesetReloader) reload(ctx context.Context) (string, error) {
 		}
 		if stats.Pending > 0 {
 			// Permit another attempt without requiring the artifact file to change.
+			r.lastDeferred = stats
 			r.hasAttempt = false
 			return "", errReloadDeferred
 		}
@@ -156,9 +162,17 @@ func (r *rulesetReloader) reload(ctx context.Context) (string, error) {
 		// safer than removing an engine when the directory cannot be inspected.
 		logging.Logger.Error().Err(err).Msg("Ruleset activated but in-memory history could not be pruned")
 	} else {
-		r.manager.RetainPrograms(keep)
+		if removed := r.manager.RetainPrograms(keep); len(removed) > 0 {
+			logging.Logger.Info().Strs("program_ids", removed).Msg("Released ruleset programs removed from artifact history")
+		}
 	}
 	return candidate.ProgramID(), nil
+}
+
+func (r *rulesetReloader) deferredStats() store.DurableStats {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.lastDeferred
 }
 
 func (r *rulesetReloader) historyProgramIDs() (map[string]struct{}, error) {
@@ -230,7 +244,7 @@ func (r *rulesetReloader) archive(data []byte, programID string) error {
 	if len(paths) >= r.config.ReloadHistoryMaxFiles {
 		return fmt.Errorf("ruleset history is full (%d artifacts); preserve or remove artifacts explicitly", r.config.ReloadHistoryMaxFiles)
 	}
-	tmp, err := os.CreateTemp(r.config.ReloadHistoryDir, ".ruleset-*")
+	tmp, err := os.CreateTemp(r.config.ReloadHistoryDir, ".ruleset-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create ruleset history file: %w", err)
 	}
@@ -251,6 +265,19 @@ func (r *rulesetReloader) archive(data []byte, programID string) error {
 	}
 	if err := os.Rename(tmpName, path); err != nil {
 		return fmt.Errorf("publish ruleset history: %w", err)
+	}
+	return nil
+}
+
+func cleanupReloadTemps(historyDir string) error {
+	paths, err := filepath.Glob(filepath.Join(historyDir, ".ruleset-*.tmp"))
+	if err != nil {
+		return fmt.Errorf("list stale ruleset history files: %w", err)
+	}
+	for _, path := range paths {
+		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("remove stale ruleset history file %s: %w", path, err)
+		}
 	}
 	return nil
 }

@@ -91,7 +91,8 @@ func TestEngineManagerReleasesPrunedHistoricalPrograms(t *testing.T) {
 	manager, err := NewEngineManager(oldEngine)
 	require.NoError(t, err)
 	require.NoError(t, manager.Swap(newEngine))
-	manager.RetainPrograms(map[string]struct{}{newEngine.ProgramID(): {}})
+	removed := manager.RetainPrograms(map[string]struct{}{newEngine.ProgramID(): {}})
+	require.Equal(t, []string{oldEngine.ProgramID()}, removed)
 	queue := &durableQueueProbe{
 		event:  store.DurableEvent{ID: "2-0", Payload: `{"a":1}`, Recovered: true},
 		pinned: oldEngine.ProgramID(), maxAttempts: 3,

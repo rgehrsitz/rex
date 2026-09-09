@@ -3,6 +3,7 @@ package runtime
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 
 	"rgehrsitz/rex/pkg/store"
@@ -72,9 +73,10 @@ func (m *EngineManager) Swap(candidate *Engine) error {
 
 // RetainPrograms releases inactive historical engines that the operator has
 // removed from durable artifact history. The active engine is always retained.
-func (m *EngineManager) RetainPrograms(keep map[string]struct{}) {
+func (m *EngineManager) RetainPrograms(keep map[string]struct{}) []string {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	var removed []string
 	for programID, engine := range m.programs {
 		if engine == m.active {
 			continue
@@ -84,7 +86,10 @@ func (m *EngineManager) RetainPrograms(keep map[string]struct{}) {
 		}
 		engine.Shutdown()
 		delete(m.programs, programID)
+		removed = append(removed, programID)
 	}
+	sort.Strings(removed)
+	return removed
 }
 
 func (m *EngineManager) SetExecutionObserver(observer ExecutionObserver) {

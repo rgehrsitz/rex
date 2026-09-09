@@ -31,6 +31,12 @@ makes normal rollout drain-first. A delivery can begin between this check and
 the eventual swap, but the manager lock makes it finish before activation and
 the archived engine remains available if it fails.
 
+Undelivered stream lag does not block activation because those events have not
+yet acquired a program. A backlog can therefore span a deployment: events
+delivered before the swap use the old program and events first delivered after
+it use the new one. Reload preserves per-event consistency, not one program for
+an entire queued backlog.
+
 ## Artifact history
 
 Reload requires a dedicated history directory and a positive maximum file
@@ -44,6 +50,9 @@ artifact is outside every Redis journal's recovery window. When the configured
 limit is reached, the candidate is rejected and the active program continues.
 Operators must retain each artifact for at least `redis.durable.journal_ttl`
 after its last possible event and remove it only after checking pending work.
+An empty `XPENDING` result alone is insufficient: journal entries and deliberate
+redrives can outlive the pending list, so the full journal retention interval
+must also have elapsed.
 Each historical engine keeps its decoded program in memory, so the file-count
 limit also bounds the reload feature's program-memory growth. After successful
 activation, decoded engines whose files an operator removed are released.
@@ -57,10 +66,11 @@ separate checkpoint/restore procedure under the M7 contract.
 
 Reload is disabled by default and changes no v3 or existing daemon behavior.
 V3 remains available only through its existing explicit compatibility switch
-and cannot enable reload. Activation is process-local; a multi-instance rollout
-must coordinate artifact publication and the existing single-owner durable
-lease. Polling is portable across supported operating systems and avoids
-signal-specific behavior.
+and cannot enable reload. Its legacy multi-fact dispatch therefore cannot be
+swapped between fact updates by the daemon. Activation is process-local; a
+multi-instance rollout must coordinate artifact publication and the existing
+single-owner durable lease. Polling is portable across supported operating
+systems and avoids signal-specific behavior.
 
 ## Acceptance evidence
 

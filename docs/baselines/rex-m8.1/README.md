@@ -53,6 +53,8 @@ backlog coordination through a deterministic stats adapter.
 - `TestRulesetReloadWaitsForPendingDurableWork`
 - `TestRulesetReloadRetriesAfterHistoryCapacityIsFreed`
 - `TestRulesetReloadRejectsMisnamedHistory`
+- `TestRulesetReloadPreservesProgramForEventEnteringAfterPendingCheck`
+- `TestRulesetReloadCleansAbandonedTempFiles`
 - `TestRedisDurableCommitRecoveryAndSnapshotReplay`
 
 Hosted CI and review remain integration gates. Replace the branch reference
