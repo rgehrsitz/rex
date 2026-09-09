@@ -38,7 +38,7 @@ func newBatchEngine(data []byte, backend store.ContextStore) (*Engine, error) {
 func (e *Engine) ProgramID() string { return e.programID }
 func (e *Engine) BytecodeVersion() uint32 {
 	if e.coordinator != nil {
-		return compiler.BatchVersion
+		return e.coordinator.program.Version()
 	}
 	if len(e.bytecode) >= 4 {
 		return binary.LittleEndian.Uint32(e.bytecode)
@@ -88,7 +88,7 @@ func (e *Engine) SetBatchLimits(limits Limits) error {
 }
 func (e *Engine) EvaluateBatch(ctx context.Context, event map[string]interface{}) (ChainResult, error) {
 	if e.coordinator == nil {
-		return ChainResult{}, fmt.Errorf("batch evaluation requires v4 artifact")
+		return ChainResult{}, fmt.Errorf("batch evaluation requires a batch artifact")
 	}
 	metadata, _ := eventcontext.MetadataFromContext(ctx)
 	if metadata.Kind == "committed_output" {

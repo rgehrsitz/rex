@@ -7,7 +7,8 @@ changes.
 
 ## Current support
 
-`rexc` writes **v4** by default, and `rexd` defaults to the v4 batch contract.
+`rexc` writes **v4** for rulesets without declarations and **v5** when the
+top-level `facts` map is present. `rexd` accepts both batch contracts.
 V3 is retained for script-free artifacts: compile using `rexc -legacy-v3` and
 explicitly set `engine.allow_legacy_v3: true` to run it in the daemon.
 Versions 1, 2, and unknown versions are rejected. Keep the source JSON and
@@ -19,8 +20,24 @@ opcode numbers remain reserved only to provide a deterministic migration error.
 
 Embedded APIs `GenerateBytecode` / `WriteBytecodeToFile` and `compiler.Version`
 remain explicitly v3 for existing integrations and the frozen semantics corpus.
-New callers use `CompileBatch`, `BatchVersion`, and `LoadProgram` or the
-version-dispatching `NewEngineFromFile`. `DecodeBatch` accepts only v4.
+New callers use `CompileBatch`, `BatchVersion`/`TypedFactsVersion`, and
+`LoadProgram` or the version-dispatching `NewEngineFromFile`. `DecodeBatch`
+accepts v4 and v5.
+
+## Version-5 format and meaning
+
+V5 uses the same 16-byte header and canonical structured JSON payload as v4,
+with header version `5` and a required top-level `facts` declaration map. A v5
+artifact without declarations and a v4 artifact with declarations are rejected.
+
+Declarations define a closed namespace of JSON `number`, `string`, and
+`boolean` values. They add compile-time checks for condition constants and
+action values, plus pre-persistence validation for external input. Missing is
+valid and compares as unknown; explicit null requires `nullable: true`; an
+incompatible value already present in stored state is invalid and compares as
+unknown. Number representation remains finite JSON `float64`. See the
+[typed fact contract](decisions/REX-M8-TYPED-FACTS.md) and
+[migration guide](M8_TYPED_FACTS.md).
 
 ## Version-4 format and meaning
 
@@ -45,7 +62,7 @@ validation remains required. The file loader bounds reads to 8 MiB plus header.
 V4 means deduplicated batch rounds, a shared snapshot, Unknown propagation,
 staged/coalesced writes, conflict rejection, and bounded local derived rounds.
 See the [decision record](decisions/REX-M4.md) and [migration guide](M4_MIGRATION.md).
-The default [source schema](../examples/rex-rules-schema.json) describes v4;
+The default [source schema](../examples/rex-rules-schema.json) describes v4/v5;
 [the legacy schema](../examples/rex-v3-rules-schema.json) remains available.
 
 ## Version-3 format

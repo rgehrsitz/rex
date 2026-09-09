@@ -41,7 +41,7 @@ type DurableProcessResult struct {
 // until their bounded attempt count sends them to the dead-letter stream.
 func (e *Engine) ProcessNextDurable(ctx context.Context, queue DurableQueue) (DurableProcessResult, error) {
 	if e.coordinator == nil || e.programID == "" {
-		return DurableProcessResult{}, fmt.Errorf("durable processing requires a v4 artifact")
+		return DurableProcessResult{}, fmt.Errorf("durable processing requires a batch artifact")
 	}
 	event, receiveErr := queue.Next(ctx)
 	if event.ID == "" {
@@ -73,7 +73,9 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 			metadata = decodedMetadata
 			metadata.TraceID = event.ID
 			metadata.Hop = 0
-			if applyErr := queue.ApplyInput(ctx, event.ID, e.programID, facts); applyErr != nil {
+			if validationErr := e.ValidateBatchEvent(facts); validationErr != nil {
+				receiveErr = fmt.Errorf("validate durable event: %w", validationErr)
+			} else if applyErr := queue.ApplyInput(ctx, event.ID, e.programID, facts); applyErr != nil {
 				receiveErr = applyErr
 			} else {
 				eventCtx := eventcontext.WithMetadata(ctx, metadata)

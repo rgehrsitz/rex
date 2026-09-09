@@ -60,8 +60,9 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1 ruleset reload is implemented locally; review pending. Next: typed fact declarations. |
-| REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete locally | [Reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [local acceptance evidence](baselines/rex-m8.1/README.md). Review pending. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1 and M8.2 are complete. Next: temporal rules. |
+| REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
+| REX-M8.2 | Typed fact declarations | M4, M5 | Complete locally | [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [local acceptance evidence](baselines/rex-m8.2/README.md). Review pending. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -402,7 +403,7 @@ release or a reason to delay foundation work.
 
 ### REX-M8.1 — Safe ruleset reload and rollback
 
-- [x] Restrict reload to validated v4 artifacts and retain the active engine on
+- [x] Restrict reload to validated batch artifacts and retain the active engine on
   read, validation, configuration, history, or durable-backlog failure.
 - [x] Serialize swaps with event processing so one event cannot observe two
   programs.
@@ -414,11 +415,28 @@ release or a reason to delay foundation work.
 - [x] Expose bounded success, failure, and deferral counters and document rollout,
   rollback, retention, and failure handling.
 
-**Completed locally 2026-09-09:** runtime and daemon tests cover event-boundary
+**Merged 2026-09-09 in PR #40 (`a001349`):** runtime and daemon tests cover event-boundary
 serialization, historical durable selection, invalid-candidate isolation,
 artifact archival, activation, capacity recovery, history integrity, and
 pending-work deferral. Full repository, race, vet, vulnerability, offline CLI,
 package build, and release cross-build checks pass.
+
+### REX-M8.2 — Typed fact declarations
+
+- [x] Add an optional closed fact declaration map for `number`, `string`, and
+  `boolean` facts; its presence selects execution contract v5.
+- [x] Preserve source and artifact compatibility for undeclared rulesets, which
+  continue to compile deterministically as v4.
+- [x] Validate condition constants and action values at compile time, and reject
+  undeclared, wrong-type, or disallowed-null inputs before persistence.
+- [x] Preserve missing facts as unknown, permit explicit null only when declared
+  nullable, and normalize incompatible stored values to invalid/unknown.
+- [x] Carry declarations and v5 through explanation, replay, reload, history,
+  CLI diagnostics, the published schema, and migration fixtures.
+
+**Completed locally 2026-09-09:** focused compiler, runtime, durable-processing,
+tooling, and schema-agreement tests pass. Full repository acceptance checks are
+recorded in [the M8.2 evidence](baselines/rex-m8.2/README.md).
 
 ## Decisions to record before dependent implementation
 
@@ -435,6 +453,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D6 | Script capability and determinism | Isolated bounded workers if retaining general JavaScript; explicit time/randomness inputs or recorded results for replay. Document supported platforms and host-access limits. | Resolved by removal in [REX-M6](decisions/REX-M6.md). |
 | D7 | Durable topology, ordering, retention | Start with a documented single Redis commit domain and one state owner per partition; choose supported versions, persistence settings, retention, and consumer recovery together. | Resolved for M7 in [REX-M7](decisions/REX-M7.md). |
 | D8 | Ruleset activation and durable version history | Poll an immutable artifact path; validate and configure before an event-boundary swap; archive exact bytes by program digest; defer while durable work is pending and retain history for at least the journal recovery window. | Resolved for M8.1 in [reload contract](decisions/REX-M8-RULESET-RELOAD.md). |
+| D9 | Typed fact namespace and compatibility | Make declarations an optional closed namespace; missing remains valid/unknown, null is opt-in, incompatible stored values become invalid, and declaration presence selects v5 while undeclared source remains v4. | Resolved for M8.2 in [typed fact contract](decisions/REX-M8-TYPED-FACTS.md). |
 
 ## Review, validation, and completion discipline
 
@@ -582,7 +601,7 @@ Next concrete action:
 - V4 field-presence validation now rejects explicit empty alternate groups and
   script fields that the published schema already prohibited; canonical v4
   artifact meaning is unchanged. Legacy parsing is unchanged.
-- Limits: tools execute v4 only; explain describes IR rather than legacy jumps.
+- Limits at M5 completion: tools executed v4 only; explain described IR rather than legacy jumps.
   Lint proves the documented simple self-cycle, not arbitrary multi-rule cycles.
   Offline memory outcomes do not predict Redis delivery failures. These bounds
   are explicit in the tooling guide, rather than claiming general equivalence.

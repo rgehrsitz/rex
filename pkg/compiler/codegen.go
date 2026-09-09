@@ -78,6 +78,9 @@ func RemoveLabels(instructions []Instruction) []Instruction {
 // GenerateBytecode compiles a parsed ruleset and fails if its control-flow
 // labels cannot be resolved to concrete byte offsets.
 func GenerateBytecode(ruleset *Ruleset) (BytecodeFile, error) {
+	if ruleset != nil && ruleset.Facts != nil {
+		return BytecodeFile{}, fmt.Errorf("typed fact declarations require the v5 batch compiler")
+	}
 	return generateBytecode(ruleset, resolveLabelOffsets)
 }
 

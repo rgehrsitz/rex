@@ -9,16 +9,34 @@
           "priority": 2,
           "conditions": {
             "all": [
-              {"fact": "message", "operator": "CONTAINS", "value": "ready"},
+              {
+                "fact": "message",
+                "operator": "CONTAINS",
+                "value": "ready"
+              },
               {
                 "any": [
-                  {"fact": "region", "operator": "EQ", "value": "east"},
-                  {"fact": "region", "operator": "EQ", "value": "west"}
+                  {
+                    "fact": "region",
+                    "operator": "EQ",
+                    "value": "east"
+                  },
+                  {
+                    "fact": "region",
+                    "operator": "EQ",
+                    "value": "west"
+                  }
                 ]
               }
             ]
           },
-          "actions": [{"type": "updateStore", "target": "eligible", "value": true}]
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "eligible",
+              "value": true
+            }
+          ]
         }
       ]
     }
@@ -30,13 +48,41 @@
       "rules": [
         {
           "name": "text",
-          "conditions": {"any": [{"fact": "status", "operator": "NOT_CONTAINS", "value": "closed"}]},
-          "actions": [{"type": "updateStore", "target": "open", "value": true}]
+          "conditions": {
+            "any": [
+              {
+                "fact": "status",
+                "operator": "NOT_CONTAINS",
+                "value": "closed"
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "open",
+              "value": true
+            }
+          ]
         },
         {
           "name": "numeric",
-          "conditions": {"all": [{"fact": "score", "operator": "GTE", "value": 10}]},
-          "actions": [{"type": "updateStore", "target": "tier", "value": "high"}]
+          "conditions": {
+            "all": [
+              {
+                "fact": "score",
+                "operator": "GTE",
+                "value": 10
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "tier",
+              "value": "high"
+            }
+          ]
         }
       ]
     }
@@ -46,7 +92,16 @@
     "valid": false,
     "document": {
       "rules": [
-        {"name": "missing", "actions": [{"type": "updateStore", "target": "out", "value": true}]}
+        {
+          "name": "missing",
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
       ]
     }
   },
@@ -55,7 +110,19 @@
     "valid": false,
     "document": {
       "rules": [
-        {"name": "empty", "conditions": {"all": [{"fact": "a", "operator": "EQ", "value": true}]}, "actions": []}
+        {
+          "name": "empty",
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": []
+        }
       ]
     }
   },
@@ -66,8 +133,22 @@
       "rules": [
         {
           "name": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "conditions": {"all": [{"fact": "a", "operator": "EQ", "value": true}]},
-          "actions": [{"type": "updateStore", "target": "out", "value": true}]
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
         }
       ]
     }
@@ -79,8 +160,152 @@
       "rules": [
         {
           "name": "wrong-type",
-          "conditions": {"all": [{"fact": "a", "operator": "CONTAINS", "value": 1}]},
-          "actions": [{"type": "updateStore", "target": "out", "value": true}]
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "CONTAINS",
+                "value": 1
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "typed_fact_declarations",
+    "valid": true,
+    "document": {
+      "facts": {
+        "temperature": {
+          "type": "number"
+        },
+        "note": {
+          "type": "string",
+          "nullable": true
+        },
+        "alert": {
+          "type": "boolean"
+        }
+      },
+      "rules": [
+        {
+          "name": "typed",
+          "conditions": {
+            "all": [
+              {
+                "fact": "temperature",
+                "operator": "GT",
+                "value": 30
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "alert",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "empty_typed_fact_declarations",
+    "valid": false,
+    "document": {
+      "facts": {},
+      "rules": [
+        {
+          "name": "typed",
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unsupported_typed_fact_type",
+    "valid": false,
+    "document": {
+      "facts": {
+        "a": {
+          "type": "object"
+        },
+        "out": {
+          "type": "boolean"
+        }
+      },
+      "rules": [
+        {
+          "name": "typed",
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "null_typed_fact_declarations",
+    "valid": false,
+    "document": {
+      "facts": null,
+      "rules": [
+        {
+          "name": "typed",
+          "conditions": {
+            "all": [
+              {
+                "fact": "a",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
         }
       ]
     }

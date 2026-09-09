@@ -39,7 +39,7 @@ configured approximate maximum lengths.
 
 ## Configuration and cutover
 
-Compile and validate a v4 artifact first. Durable mode rejects v3 artifacts.
+Compile and validate a v4 or v5 batch artifact first. Durable mode rejects v3 artifacts.
 Configure one producer and one consumer together:
 
 ```json

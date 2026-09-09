@@ -13,8 +13,11 @@ M6 removed JavaScript execution from every contract; see the
 [script migration guide](docs/M6_SCRIPT_REMOVAL.md) before upgrading a legacy
 v3 deployment that used scripts.
 
+Rulesets may opt into the v5 closed typed-fact contract with a top-level
+`facts` declaration map; see the [typed fact migration guide](docs/M8_TYPED_FACTS.md).
+
 Use the [M5 authoring tools](docs/M5_TOOLING.md) to explain, lint, test, replay,
-and compare v4 rulesets offline. `rexd --dry-run --bundle ...` emits simulated
+and compare v4/v5 batch rulesets offline. `rexd --dry-run --bundle ...` emits simulated
 results without creating Redis connections.
 
 The planning documents have distinct roles:
@@ -406,7 +409,7 @@ An action object has the following properties:
 ### Removed scripting capability
 
 REX no longer accepts JavaScript definitions or `{script}` action values. The
-compiler rejects them for both v3 and v4, and the runtime rejects legacy v3
+compiler rejects them for every contract, and the runtime rejects legacy v3
 artifacts containing script opcodes before execution. Move calculations into
 producer-supplied facts or express them with declarative rules. See the
 [M6 migration guide](docs/M6_SCRIPT_REMOVAL.md).
@@ -417,7 +420,9 @@ Actions will be executed in the order they are defined in the rule.
 
 ### Fact and Value Data Types
 
-Facts are strings. Values can be strings surrounded by quotation marks (e.g. "fact_a"), bools (e.g. true or false), or numbers with or without decimal points (e.g. 30.01, 30, -12.123).
+Fact names are strings. Values can be strings surrounded by quotation marks
+(e.g. "fact_a"), booleans, or finite JSON numbers. V5 declarations bind each
+name to one of those scalar types and may explicitly permit null.
 
 ### Priority Ties
 

@@ -1,4 +1,4 @@
-// Package tooling provides deterministic, offline v4 authoring tools. It never
+// Package tooling provides deterministic, offline batch authoring tools. It never
 // creates network clients; all state and derived writes belong to one replay.
 package tooling
 
@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -79,7 +80,11 @@ type Manifest struct {
 }
 
 func NewManifest(source, artifact []byte) Manifest {
-	return Manifest{SchemaVersion, compiler.BatchVersion, Digest(source), Digest(artifact), len(artifact)}
+	version := uint32(0)
+	if len(artifact) >= 4 {
+		version = binary.LittleEndian.Uint32(artifact)
+	}
+	return Manifest{SchemaVersion, version, Digest(source), Digest(artifact), len(artifact)}
 }
 
 type Bundle struct {
@@ -104,8 +109,8 @@ func NewBundle(source []byte, scenario Scenario) (Bundle, error) {
 	return b, err
 }
 func (b Bundle) Validate() ([]byte, error) {
-	if b.SchemaVersion != SchemaVersion || b.Manifest.SchemaVersion != SchemaVersion || b.Manifest.ExecutionContract != compiler.BatchVersion {
-		return nil, fmt.Errorf("unsupported replay schema or execution contract; tooling requires schema 1 / v4")
+	if b.SchemaVersion != SchemaVersion || b.Manifest.SchemaVersion != SchemaVersion || !compiler.IsBatchVersion(b.Manifest.ExecutionContract) {
+		return nil, fmt.Errorf("unsupported replay schema or execution contract; tooling requires schema 1 and a supported batch artifact")
 	}
 	if b.Scenario.SchemaVersion != SchemaVersion {
 		return nil, fmt.Errorf("unsupported scenario schema")
@@ -118,6 +123,17 @@ func (b Bundle) Validate() ([]byte, error) {
 	}
 	if len(b.Scenario.Events) > MaxEvents {
 		return nil, fmt.Errorf("replay exceeds %d events", MaxEvents)
+	}
+	artifact, err := compiler.CompileBatch([]byte(b.Source))
+	if err != nil {
+		return nil, err
+	}
+	program, err := runtime.LoadProgram(artifact)
+	if err != nil {
+		return nil, err
+	}
+	if err := runtime.ValidateProgramFacts(program, b.Scenario.InitialState); err != nil {
+		return nil, fmt.Errorf("initial state: %w", err)
 	}
 	if len(b.Scenario.InitialState) > 65536 {
 		return nil, fmt.Errorf("initial state exceeds fact limit")
@@ -135,7 +151,7 @@ func (b Bundle) Validate() ([]byte, error) {
 			return nil, fmt.Errorf("events require unique nonempty ids and facts")
 		}
 		seen[event.ID] = true
-		if err := runtime.ValidateEvent(event.Facts, *b.Scenario.Limits); err != nil {
+		if err := runtime.ValidateProgramEvent(program, event.Facts, *b.Scenario.Limits); err != nil {
 			return nil, fmt.Errorf("event %q: %w", event.ID, err)
 		}
 		for key, value := range event.Facts {
@@ -143,10 +159,6 @@ func (b Bundle) Validate() ([]byte, error) {
 				return nil, fmt.Errorf("event %q contains invalid scalar fact %q", event.ID, key)
 			}
 		}
-	}
-	artifact, err := compiler.CompileBatch([]byte(b.Source))
-	if err != nil {
-		return nil, err
 	}
 	if b.Manifest != NewManifest([]byte(b.Source), artifact) {
 		return nil, fmt.Errorf("replay source/artifact digest or provenance mismatch")
@@ -196,7 +208,7 @@ func Replay(ctx context.Context, b Bundle) (Report, error) {
 			return r, err
 		}
 		// Validate before persisting input without consuming evaluation work.
-		if err := runtime.ValidateEvent(event.Facts, *b.Scenario.Limits); err != nil {
+		if err := runtime.ValidateProgramEvent(p, event.Facts, *b.Scenario.Limits); err != nil {
 			return r, fmt.Errorf("event %q: %w", event.ID, err)
 		}
 		for key, value := range event.Facts {

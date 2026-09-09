@@ -253,3 +253,35 @@ func TestConflictTraceHasNoStagedEffects(t *testing.T) {
 	require.Empty(t, round.Evaluation.Writes)
 	require.Equal(t, map[string]interface{}{"a": true}, r.FinalState)
 }
+
+func TestTypedFactToolingContract(t *testing.T) {
+	source := []byte(`{"facts":{"temperature":{"type":"number"},"note":{"type":"string","nullable":true},"alert":{"type":"boolean"}},"rules":[{"name":"hot","conditions":{"all":[{"fact":"temperature","operator":"GT","value":30}]},"actions":[{"type":"updateStore","target":"alert","value":true}]}]}`)
+	scenario := Scenario{SchemaVersion: SchemaVersion, Name: "typed", InitialState: map[string]interface{}{"note": nil}, Events: []Input{{ID: "reading", Facts: map[string]interface{}{"temperature": float64(31)}}}}
+	bundle, err := NewBundle(source, scenario)
+	require.NoError(t, err)
+	require.Equal(t, compiler.TypedFactsVersion, bundle.Manifest.ExecutionContract)
+	report, err := Replay(context.Background(), bundle)
+	require.NoError(t, err)
+	require.Equal(t, true, report.FinalState["alert"])
+
+	artifact, err := compiler.CompileBatch(source)
+	require.NoError(t, err)
+	explanation, err := Explain(artifact)
+	require.NoError(t, err)
+	require.Equal(t, compiler.TypedFactsVersion, explanation.ExecutionContract)
+	require.True(t, explanation.Facts["note"].Nullable)
+
+	badInitial := scenario
+	badInitial.InitialState = map[string]interface{}{"temperature": "hot"}
+	_, err = NewBundle(source, badInitial)
+	require.ErrorContains(t, err, "initial state")
+
+	badEvent := scenario
+	badEvent.Events = []Input{{ID: "bad", Facts: map[string]interface{}{"extra": true}}}
+	_, err = NewBundle(source, badEvent)
+	require.ErrorContains(t, err, "undeclared")
+
+	lint := Lint([]byte(strings.Replace(string(source), `"type":"number"`, `"type":"object"`, 1)), nil)
+	require.Len(t, lint.Diagnostics, 1)
+	require.Equal(t, "REX-L006", lint.Diagnostics[0].ID)
+}

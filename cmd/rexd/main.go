@@ -24,6 +24,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/spf13/viper"
 
+	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/logging"
 	"rgehrsitz/rex/pkg/observability"
@@ -320,9 +321,9 @@ func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFa
 		_ = redisStore.Close()
 		return nil, fmt.Errorf("v3 requires engine.allow_legacy_v3; recompile for v4")
 	}
-	if config.RedisEventMode == "streams" && engine.BytecodeVersion() != 4 {
+	if config.RedisEventMode == "streams" && !compiler.IsBatchVersion(engine.BytecodeVersion()) {
 		_ = redisStore.Close()
-		return nil, fmt.Errorf("Redis Streams durable processing requires a v4 artifact")
+		return nil, fmt.Errorf("Redis Streams durable processing requires a batch artifact")
 	}
 	if err := configureEngine(engine, config); err != nil {
 		_ = redisStore.Close()
@@ -341,9 +342,9 @@ func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFa
 		_ = redisStore.Close()
 		return nil, err
 	}
-	if config.ReloadInterval > 0 && engine.BytecodeVersion() != 4 {
+	if config.ReloadInterval > 0 && !compiler.IsBatchVersion(engine.BytecodeVersion()) {
 		_ = redisStore.Close()
-		return nil, fmt.Errorf("ruleset reload requires a v4 artifact")
+		return nil, fmt.Errorf("ruleset reload requires a batch artifact")
 	}
 
 	return &RexDependencies{
@@ -352,7 +353,7 @@ func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFa
 }
 
 func configureEngine(engine *runtime.Engine, config *Config) error {
-	if engine.BytecodeVersion() == 4 {
+	if compiler.IsBatchVersion(engine.BytecodeVersion()) {
 		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
 			return err
 		}
@@ -709,7 +710,7 @@ func processMessageWithMaxEventHops(ctx context.Context, engine factUpdateProces
 		}
 		return processLegacyMessage(ctx, engine, msg)
 	}
-	if batch, ok := engine.(interface{ BytecodeVersion() uint32 }); ok && batch.BytecodeVersion() == 4 && metadata.Kind == "committed_output" {
+	if batch, ok := engine.(interface{ BytecodeVersion() uint32 }); ok && compiler.IsBatchVersion(batch.BytecodeVersion()) && metadata.Kind == "committed_output" {
 		return nil
 	}
 	if metadata.Kind != "" {

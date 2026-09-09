@@ -2,7 +2,23 @@
 package compiler
 
 type Ruleset struct {
-	Rules []Rule `json:"rules"`
+	Facts map[string]FactDeclaration `json:"facts,omitempty"`
+	Rules []Rule                     `json:"rules"`
+}
+
+type FactType string
+
+const (
+	FactNumber  FactType = "number"
+	FactString  FactType = "string"
+	FactBoolean FactType = "boolean"
+)
+
+// FactDeclaration opts a ruleset into a closed, scalar fact namespace.
+// Missing facts are allowed; Nullable controls explicit JSON null inputs.
+type FactDeclaration struct {
+	Type     FactType `json:"type"`
+	Nullable bool     `json:"nullable,omitempty"`
 }
 
 // Script is retained only so embedded callers and the JSON decoder receive a

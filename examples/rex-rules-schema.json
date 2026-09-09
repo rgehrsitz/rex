@@ -2,6 +2,19 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
   "properties": {
+    "facts": {
+      "description": "Optional closed fact namespace. Presence selects the v5 typed-fact contract.",
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 65536,
+      "propertyNames": {
+        "minLength": 1,
+        "maxLength": 255
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/factDeclaration"
+      }
+    },
     "rules": {
       "type": "array",
       "uniqueItems": true,
@@ -111,6 +124,21 @@
     "rules"
   ],
   "definitions": {
+    "factDeclaration": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["number", "string", "boolean"]
+        },
+        "nullable": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "required": ["type"],
+      "additionalProperties": false
+    },
     "ruleWithUniqueName": {
       "type": "object",
       "required": [
@@ -241,7 +269,7 @@
       "minItems": 1
     }
   },
-  "title": "REX v4 ruleset",
-  "description": "Batch v4: scalar conditions, script-free actions, simultaneous snapshots. Compiler additionally enforces unique rule names and UTF-8 byte limits.",
+  "title": "REX batch ruleset",
+  "description": "Batch v4/v5: scalar conditions, script-free actions, simultaneous snapshots, and optional v5 typed fact declarations. Compiler additionally enforces unique rule names, declaration references, type agreement, and UTF-8 byte limits.",
   "additionalProperties": false
 }

@@ -2,13 +2,13 @@
 
 Date: 2026-09-09
 
-Starting revision: `f1298b1`
+Starting revision: `f1298b1`; merged revision: `a001349`
 
 Branch: `codex/rex-m8-ruleset-reload`
 
 ## Delivered behavior
 
-- Validated v4 rulesets activate atomically between complete events.
+- Validated batch rulesets activate atomically between complete events.
 - Failed candidates retain the active program and unchanged invalid bytes are
   not repeatedly validated.
 - Exact artifacts are archived by SHA-256 program ID before activation.
@@ -57,5 +57,4 @@ backlog coordination through a deterministic stats adapter.
 - `TestRulesetReloadCleansAbandonedTempFiles`
 - `TestRedisDurableCommitRecoveryAndSnapshotReplay`
 
-Hosted CI and review remain integration gates. Replace the branch reference
-with the merged revision and PR link when M8.1 is integrated.
+Integrated through [PR #40](https://github.com/rgehrsitz/rex/pull/40).

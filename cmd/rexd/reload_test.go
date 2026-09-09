@@ -73,6 +73,23 @@ func TestRulesetReloadArchivesThenAtomicallyActivatesCandidate(t *testing.T) {
 	require.Equal(t, candidate, archived)
 }
 
+func TestRulesetReloadAcceptsTypedV5Candidate(t *testing.T) {
+	reloader, manager, path := reloadFixture(t, nil)
+	typed, err := compiler.CompileBatch([]byte(`{"facts":{"a":{"type":"number"},"typed-output":{"type":"boolean"}},"rules":[{"name":"typed","conditions":{"all":[{"fact":"a","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"typed-output","value":true}]}]}`))
+	require.NoError(t, err)
+	version, err := compiler.BatchArtifactVersion(typed)
+	require.NoError(t, err)
+	require.Equal(t, compiler.TypedFactsVersion, version)
+	require.NoError(t, os.WriteFile(path, typed, 0o640))
+
+	programID, err := reloader.reload(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, programID, manager.ActiveProgramID())
+	archived, err := os.ReadFile(filepath.Join(reloader.config.ReloadHistoryDir, programID+".bytecode"))
+	require.NoError(t, err)
+	require.Equal(t, typed, archived)
+}
+
 type reloadStats struct{ pending int64 }
 
 func (s *reloadStats) Stats(context.Context) (store.DurableStats, error) {

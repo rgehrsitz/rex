@@ -1,11 +1,11 @@
 # REX-M8.1 ruleset reload contract
 
-Status: implemented locally; review pending (2026-09-09)
+Status: merged in PR #40 (`a001349`, 2026-09-09)
 
 ## Decision
 
 `rexd` may poll its configured bytecode path and activate a changed artifact
-without restarting. Reload is opt-in, accepts v4 artifacts only, and treats the
+without restarting. Reload is opt-in, accepts supported batch artifacts, and treats the
 SHA-256 digest of the exact artifact bytes as the program identity.
 
 The daemon reads, bounds, validates, loads, and applies all runtime limits and

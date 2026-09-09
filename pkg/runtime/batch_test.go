@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -285,4 +286,27 @@ func TestBatchEarlierSuccessSurvivesLaterCommitError(t *testing.T) {
 	require.Equal(t, "second round inconsistent", result.Rounds[1].CommitError)
 	require.Len(t, observer.actionsSucceeded, 1)
 	require.Len(t, observer.actionFailures, 1)
+}
+
+func TestTypedFactRuntimeContract(t *testing.T) {
+	source := `{"facts":{"trigger":{"type":"boolean"},"dependency":{"type":"number","nullable":true},"out":{"type":"boolean"}},"rules":[{"name":"typed","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true},{"fact":"dependency","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	p := batchProgram(t, source)
+	require.Equal(t, compiler.TypedFactsVersion, p.Version())
+	require.Equal(t, compiler.FactNumber, p.FactDeclarations()["dependency"].Type)
+
+	limits := DefaultLimits()
+	require.NoError(t, ValidateProgramEvent(p, map[string]interface{}{"trigger": true}, limits), "missing declared facts are valid")
+	require.NoError(t, ValidateProgramEvent(p, map[string]interface{}{"dependency": nil}, limits), "nullable facts accept null")
+	require.ErrorContains(t, ValidateProgramEvent(p, map[string]interface{}{"unknown": true}, limits), "undeclared")
+	require.ErrorContains(t, ValidateProgramEvent(p, map[string]interface{}{"trigger": "true"}, limits), "must be boolean")
+	require.ErrorContains(t, ValidateProgramEvent(p, map[string]interface{}{"out": nil}, limits), "is null")
+	require.Error(t, ValidateProgramFacts(p, map[string]interface{}{"dependency": math.Inf(1)}))
+
+	evaluation, _, err := p.Evaluate(context.Background(), map[string]store.Fact{
+		"dependency": {State: store.Present, Value: "wrong"},
+	}, map[string]interface{}{"trigger": true}, limits, Budget{}, true)
+	require.NoError(t, err)
+	require.Equal(t, Indeterminate, evaluation.RuleResults[0].Result)
+	require.Equal(t, store.Invalid, evaluation.Conditions[1].State)
+	require.Empty(t, evaluation.Actions)
 }

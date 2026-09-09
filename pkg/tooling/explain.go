@@ -19,11 +19,12 @@ type RuleInfo struct {
 	Actions      []compiler.Action       `json:"actions"`
 }
 type Explanation struct {
-	SchemaVersion     int        `json:"schema_version"`
-	ArtifactSHA256    string     `json:"artifact_sha256"`
-	ExecutionContract uint32     `json:"execution_contract"`
-	Representation    string     `json:"representation"`
-	Rules             []RuleInfo `json:"rules"`
+	SchemaVersion     int                                 `json:"schema_version"`
+	ArtifactSHA256    string                              `json:"artifact_sha256"`
+	ExecutionContract uint32                              `json:"execution_contract"`
+	Representation    string                              `json:"representation"`
+	Rules             []RuleInfo                          `json:"rules"`
+	Facts             map[string]compiler.FactDeclaration `json:"facts,omitempty"`
 }
 
 func Dependencies(r compiler.Rule) []string {
@@ -50,9 +51,13 @@ func Dependencies(r compiler.Rule) []string {
 func Explain(artifact []byte) (Explanation, error) {
 	rules, err := compiler.DecodeBatch(artifact)
 	if err != nil {
-		return Explanation{}, fmt.Errorf("explain requires a valid v4 artifact: %w", err)
+		return Explanation{}, fmt.Errorf("explain requires a valid batch artifact: %w", err)
 	}
-	out := Explanation{SchemaVersion: SchemaVersion, ArtifactSHA256: Digest(artifact), ExecutionContract: compiler.BatchVersion, Representation: "structured condition IR; v4 has no jump instructions", Rules: []RuleInfo{}}
+	version, err := compiler.BatchArtifactVersion(artifact)
+	if err != nil {
+		return Explanation{}, err
+	}
+	out := Explanation{SchemaVersion: SchemaVersion, ArtifactSHA256: Digest(artifact), ExecutionContract: version, Representation: "structured condition IR; batch artifacts have no jump instructions", Rules: []RuleInfo{}, Facts: rules.Facts}
 	for i, r := range rules.Rules {
 		out.Rules = append(out.Rules, RuleInfo{r.Name, i, r.Priority, Dependencies(r), r.Conditions, r.Actions})
 	}
@@ -99,11 +104,19 @@ func Lint(source []byte, channels []string) LintReport {
 		if undefinedScript && strings.Contains(err.Error(), "scripts are no longer supported") {
 			return out
 		}
-		add("REX-L001", "error", "", err.Error())
+		id := "REX-L001"
+		if strings.Contains(err.Error(), "typed fact") {
+			id = "REX-L006"
+		}
+		add(id, "error", "", err.Error())
 		return out
 	}
 	if _, err := compiler.ParseBatch(source); err != nil {
-		add("REX-L001", "error", "", err.Error())
+		id := "REX-L001"
+		if strings.Contains(err.Error(), "typed fact") {
+			id = "REX-L006"
+		}
+		add(id, "error", "", err.Error())
 		return out
 	}
 	type writer struct {
@@ -131,7 +144,7 @@ func Lint(source []byte, channels []string) LintReport {
 	}
 	for _, channel := range channels {
 		if channel == store.ResultsChannel {
-			add("REX-L005", "warning", "", "rex_results carries committed notifications, not new inputs; v4 ignores them")
+			add("REX-L005", "warning", "", "rex_results carries committed notifications, not new inputs; batch execution ignores them")
 		}
 		if channel == "" {
 			add("REX-L005", "error", "", "empty input channel")

@@ -23,7 +23,7 @@ full rather than deleting recovery evidence.
 
 ## Deploy a ruleset
 
-Compile and validate the v4 artifact with the existing M5 tooling. Publish it
+Compile and validate a supported v4 or v5 batch artifact with the existing M5 tooling. Publish it
 with an atomic rename in the same filesystem as `bytecode_file`:
 
 ```sh
@@ -45,7 +45,7 @@ Watch the log for `Ruleset reload completed` and the new `program_id`. Monitor:
 - `rex_ruleset_reload_deferred_total`
 - `rex_event_queue_pending` in Streams mode
 
-An invalid, unreadable, non-v4, or unarchivable candidate increments the failure
+An invalid, unreadable, unsupported, or unarchivable candidate increments the failure
 counter and leaves readiness and the current program unchanged. A deferral also
 leaves the current program active and retries on a later poll.
 
