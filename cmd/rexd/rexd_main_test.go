@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -44,6 +46,28 @@ func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.ContextSt
 
 type actionCountingStore struct {
 	publishCount int
+}
+
+type readinessProbeStore struct {
+	actionCountingStore
+	pingErr error
+	source  *readinessProbeSource
+}
+
+type readinessProbeSource struct {
+	events chan store.Event
+	closed bool
+}
+
+func (s *readinessProbeStore) Ping(context.Context) error { return s.pingErr }
+func (s *readinessProbeStore) OpenEvents(context.Context, ...string) (store.EventSource, error) {
+	return s.source, nil
+}
+func (s *readinessProbeSource) Events() <-chan store.Event { return s.events }
+func (s *readinessProbeSource) Close() error {
+	s.closed = true
+	close(s.events)
+	return nil
 }
 
 type traceCapturingEngine struct {
@@ -225,6 +249,19 @@ func TestSetupDependenciesRejectsScriptsEnabled(t *testing.T) {
 	assert.ErrorContains(t, err, "scripts are no longer supported")
 }
 
+func TestBuildRedisTLSConfigDerivesServerNameFromAddress(t *testing.T) {
+	tlsConfig, err := buildRedisTLSConfig(&Config{RedisTLSEnabled: true, RedisAddress: "[2001:db8::1]:6380"})
+	require.NoError(t, err)
+	assert.Equal(t, "2001:db8::1", tlsConfig.ServerName)
+	assert.Equal(t, uint16(tls.VersionTLS12), tlsConfig.MinVersion)
+
+	tlsConfig, err = buildRedisTLSConfig(&Config{
+		RedisTLSEnabled: true, RedisAddress: "redis.example:6380", RedisTLSServerName: "certificate.example",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "certificate.example", tlsConfig.ServerName)
+}
+
 func TestRunMainLoop(t *testing.T) {
 	// Reset the flag set before each test run
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -363,6 +400,21 @@ func TestRunMainLoopWiresMetricsObserver(t *testing.T) {
 	ready := httptest.NewRecorder()
 	metrics.Handler().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
 	assert.Equal(t, http.StatusServiceUnavailable, ready.Code)
+	metrics.SetRedisReady(true)
+	assert.False(t, metrics.Ready(), "shutdown must reset both dependency states")
+}
+
+func TestRunMainLoopVerifiesRedisBeforeReadiness(t *testing.T) {
+	source := &readinessProbeSource{events: make(chan store.Event)}
+	probe := &readinessProbeStore{pingErr: errors.New("command path unavailable"), source: source}
+	metrics := observability.NewMetrics()
+
+	err := runMainLoopWithObservability(context.Background(), &RexDependencies{
+		Store: probe, Engine: &runtime.Engine{},
+	}, &Config{RedisChannels: []string{"input"}, RedisHealthTimeout: time.Second}, metrics)
+	require.ErrorContains(t, err, "readiness check after subscription")
+	assert.True(t, source.closed)
+	assert.False(t, metrics.Ready())
 }
 
 func TestRedisReadinessTracksDisconnectAndReconnect(t *testing.T) {

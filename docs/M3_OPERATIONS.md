@@ -27,8 +27,9 @@ uppercase it, replace dots with underscores, and prefix `REX_`.
 `REX_REDIS_CHANNELS` is a comma-separated list. Durations use Go duration
 syntax such as `250ms`, `5s`, or `1m`.
 
-TLS verifies the server certificate and requires TLS 1.2 or newer. Set
-`server_name` when the Redis address is not the certificate name. Set `ca_file`
+TLS verifies the server certificate and requires TLS 1.2 or newer. When
+`server_name` is empty, REX derives it from the host in `redis.address`. Set
+`server_name` when that host is not the certificate name. Set `ca_file`
 to a PEM bundle for a private authority. REX has no setting to skip certificate
 verification. Logs include the Redis address, database, and whether TLS is in
 use; they omit usernames, passwords, fact values, and event payloads from Redis
@@ -48,9 +49,13 @@ check fails, and returns to `200` after connectivity recovers. Shutdown sets
 readiness to false and closes the subscription socket before waiting for its
 reader.
 
-The metrics endpoint reports disconnect, reconnect, and subscription error
-counters. `rex_event_processing_duration_seconds` is a histogram with fixed buckets from
-1 ms through 1 second plus `+Inf`. `rex_rule_outcomes_total` and
+Disconnect and reconnect notifications are edge-triggered: one disconnect and
+one event-source error are recorded for a continuous outage, followed by one
+reconnect when the subscription is restored. Repeated receive failures during
+the same outage do not inflate the counters. The metrics endpoint reports these
+dependency transition counters. `rex_event_processing_duration_seconds` is a
+histogram with fixed buckets from 1 ms through 1 second plus `+Inf`.
+`rex_rule_outcomes_total` and
 `rex_action_outcomes_total` use fixed outcome values, so rule names, fact names,
 action targets, channel names, and error messages cannot create unbounded metric
 series.

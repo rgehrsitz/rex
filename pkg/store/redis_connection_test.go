@@ -71,8 +71,9 @@ func TestNewRedisStoreDoesNotLogCredentials(t *testing.T) {
 	server, err := miniredis.Run()
 	require.NoError(t, err)
 	t.Cleanup(server.Close)
-	const password = "unique-secret-do-not-log"
-	const username = "unique-service-user-do-not-log"
+	// These values are generated from the test name and exist only in miniredis.
+	username := t.Name() + "-user"
+	password := t.Name() + "-password"
 	server.RequireUserAuth(username, password)
 	var output bytes.Buffer
 	previous := logging.Logger

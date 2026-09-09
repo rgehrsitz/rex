@@ -194,7 +194,7 @@ func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 // SetAndPublishFactContext updates and publishes a fact using the caller's context.
 func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, value interface{}) error {
 	group, _, _ := strings.Cut(key, ":")
-	if group == "" {
+	if strings.TrimSpace(group) == "" {
 		return fmt.Errorf("fact key %q has no publish channel before ':'", key)
 	}
 	data, err := json.Marshal(value)

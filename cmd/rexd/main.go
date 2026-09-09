@@ -293,7 +293,15 @@ func buildRedisTLSConfig(config *Config) (*tls.Config, error) {
 		}
 		return nil, nil
 	}
-	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: config.RedisTLSServerName}
+	serverName := config.RedisTLSServerName
+	if serverName == "" {
+		var err error
+		serverName, _, err = net.SplitHostPort(config.RedisAddress)
+		if err != nil {
+			return nil, fmt.Errorf("derive Redis TLS server name from address %q: %w", config.RedisAddress, err)
+		}
+	}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: serverName}
 	if config.RedisTLSCAFile == "" {
 		return tlsConfig, nil
 	}
@@ -342,9 +350,22 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 	if !ok {
 		return fmt.Errorf("store does not provide connectivity checks")
 	}
+	healthTimeout := config.RedisHealthTimeout
+	if healthTimeout <= 0 {
+		healthTimeout = 500 * time.Millisecond
+	}
+	healthCtx, cancelHealth := context.WithTimeout(ctx, healthTimeout)
+	err = checker.Ping(healthCtx)
+	cancelHealth()
+	if err != nil {
+		return fmt.Errorf("Redis readiness check after subscription: %w", err)
+	}
 	metrics.SetRedisReady(true)
 	metrics.SetSubscriptionReady(true)
-	defer metrics.SetReady(false)
+	defer func() {
+		metrics.SetSubscriptionReady(false)
+		metrics.SetRedisReady(false)
+	}()
 	monitorCtx, stopMonitor := context.WithCancel(ctx)
 	monitorDone := make(chan struct{})
 	go func() {
@@ -624,6 +645,9 @@ func consumeEvents(ctx context.Context, engine *runtime.Engine, events <-chan st
 }
 
 func monitorRedisConnectivity(ctx context.Context, checker connectivityChecker, metrics *observability.Metrics, interval, timeout time.Duration) {
+	if metrics == nil {
+		return
+	}
 	if interval <= 0 {
 		interval = time.Second
 	}
@@ -640,6 +664,9 @@ func monitorRedisConnectivity(ctx context.Context, checker connectivityChecker, 
 			checkCtx, cancel := context.WithTimeout(ctx, timeout)
 			err := checker.Ping(checkCtx)
 			cancel()
+			if ctx.Err() != nil {
+				return
+			}
 			if err != nil {
 				if metrics.SetRedisReady(false) {
 					metrics.RecordRedisDisconnect()

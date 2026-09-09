@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 )
@@ -124,6 +125,36 @@ func TestRedisEventSourceLifecycle(t *testing.T) {
 	require.NoError(t, source.Close())
 	_, ok := <-source.Events()
 	require.False(t, ok)
+}
+
+func TestRedisEventSourceDoesNotTreatIdleReadAsDisconnect(t *testing.T) {
+	server, err := miniredis.Run()
+	require.NoError(t, err)
+	defer server.Close()
+	s, err := NewRedisStore(context.Background(), RedisOptions{
+		Addr: server.Addr(), ReadTimeout: 25 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	defer s.Close()
+	source, err := s.OpenEvents(context.Background(), "input")
+	require.NoError(t, err)
+	defer source.Close()
+
+	// PubSub.Receive uses an explicit zero timeout in go-redis v9.22.0, so the
+	// command client's ReadTimeout must not turn an idle subscription into an outage.
+	select {
+	case event := <-source.Events():
+		t.Fatalf("idle subscription emitted an event: %+v", event)
+	case <-time.After(100 * time.Millisecond):
+	}
+	require.NoError(t, s.client.Publish(context.Background(), "input", `{"after_idle":true}`).Err())
+	select {
+	case event := <-source.Events():
+		require.NoError(t, event.Err)
+		require.Equal(t, `{"after_idle":true}`, event.Payload)
+	case <-time.After(time.Second):
+		t.Fatal("event not delivered after idle period")
+	}
 }
 
 func TestRedisEventSourceReportsDisconnectAndRecovers(t *testing.T) {

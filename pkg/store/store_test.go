@@ -245,9 +245,11 @@ func TestSetAndPublishFactRejectsUnroutableKeyBeforeWrite(t *testing.T) {
 	defer s.Close()
 	defer factStore.Close()
 
-	err := factStore.SetAndPublishFactContext(context.Background(), ":status", "hot")
-	require.ErrorContains(t, err, "no publish channel")
-	assert.False(t, s.Exists(":status"))
+	for _, key := range []string{"", "   ", ":status", "  :status"} {
+		err := factStore.SetAndPublishFactContext(context.Background(), key, "hot")
+		require.ErrorContains(t, err, "no publish channel")
+		assert.False(t, s.Exists(key))
+	}
 }
 
 func TestSetAndPublishFactContextPreservesEventMetadata(t *testing.T) {

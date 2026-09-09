@@ -36,22 +36,28 @@ type EventSubscriber interface {
 	OpenEvents(context.Context, ...string) (EventSource, error)
 }
 type redisEventSource struct {
-	events chan Event
-	cancel context.CancelFunc
-	done   chan struct{}
-	once   sync.Once
-	pubsub *redis.PubSub
+	events     chan Event
+	cancel     context.CancelFunc
+	done       chan struct{}
+	once       sync.Once
+	pubsubOnce sync.Once
+	pubsub     *redis.PubSub
 }
 
 func (s *redisEventSource) Events() <-chan Event { return s.events }
 func (s *redisEventSource) Close() error {
 	s.once.Do(func() {
 		s.cancel()
-		_ = s.pubsub.Close()
+		s.closePubSub()
 	})
 	<-s.done
 	return nil
 }
+
+func (s *redisEventSource) closePubSub() {
+	s.pubsubOnce.Do(func() { _ = s.pubsub.Close() })
+}
+
 func (s *RedisStore) OpenEvents(ctx context.Context, channels ...string) (EventSource, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	subscription, err := s.Subscribe(ctx, channels...)
@@ -63,7 +69,7 @@ func (s *RedisStore) OpenEvents(ctx context.Context, channels ...string) (EventS
 	go func() {
 		defer close(source.done)
 		defer close(source.events)
-		defer subscription.Close()
+		defer source.closePubSub()
 		failed := false
 		for {
 			received, err := subscription.Receive(ctx)
@@ -87,6 +93,14 @@ func (s *RedisStore) OpenEvents(ctx context.Context, channels ...string) (EventS
 			switch value := received.(type) {
 			case *redis.Subscription:
 				if failed && value.Count > 0 {
+					if !source.send(ctx, Event{State: SubscriptionConnected}) {
+						return
+					}
+					failed = false
+				}
+			case *redis.Pong:
+				// Pongs confirm transport recovery but are not application events.
+				if failed {
 					if !source.send(ctx, Event{State: SubscriptionConnected}) {
 						return
 					}
