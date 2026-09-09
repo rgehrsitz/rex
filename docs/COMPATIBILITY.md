@@ -11,7 +11,7 @@ turn an upstream dependency's broad compatibility claim into a Rex guarantee.
 | Source build toolchain | Go `1.26.6` | CI uses the toolchain pinned by `go.mod` | The `go` directive is `1.26.0`; the toolchain directive selects `1.26.6`. |
 | Redis transport | Redis Pub/Sub through `github.com/redis/go-redis/v9`, with verified TLS 1.2+ when enabled | Unit and integration-style tests use plain-text and TLS `miniredis`, including disconnect/reconnect | Validate a production Redis version and deployment topology in staging before treating it as supported for your environment; see [M3 operations](M3_OPERATIONS.md). |
 | Rules source | JSON rulesets accepted by the current `rexc` | Parser, compiler, and fuzz tests | Preserve the source ruleset with every deployed bytecode artifact. |
-| Bytecode | V4 for undeclared rulesets; v5 for typed declarations; v3 explicit compatibility | Compiler and runtime validation tests | `rexd` rejects versions 1, 2, and all unknown versions. Recompile retained JSON rulesets with the current `rexc`; see [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
+| Bytecode | V4 for undeclared rulesets; v5 for typed declarations; v6 for temporal conditions; v3 explicit compatibility | Compiler and runtime validation tests | `rexd` rejects versions 1, 2, and all unknown versions. Recompile retained JSON rulesets with the current `rexc`; see [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
 | Scripts | Removed on every platform and execution contract | Source, compiler-API, artifact-loader, and daemon-config rejection tests | Migrate calculations to producer facts or declarative rules; see [M6 migration](M6_SCRIPT_REMOVAL.md). |
 
 The upstream `go-redis` project publishes its own supported Redis versions.
@@ -38,3 +38,7 @@ retry, transaction, durable recovery, or exactly-once delivery is claimed.
 V5 adds the optional closed typed-fact namespace documented in the
 [M8.2 migration guide](M8_TYPED_FACTS.md). Source without declarations remains
 v4 and retains its existing artifact bytes.
+
+V6 adds event-driven processing-time conditions documented in the
+[M8.3 temporal guide](M8_TEMPORAL_RULES.md). Source without `for` remains v4 or
+v5 and retains its existing artifact bytes.

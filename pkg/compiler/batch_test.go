@@ -126,3 +126,72 @@ func TestLegacyCompilerRejectsTypedFacts(t *testing.T) {
 	_, err = GenerateBytecode(rules)
 	require.ErrorContains(t, err, "v5 batch compiler")
 }
+
+func TestTemporalArtifactContractAndValidation(t *testing.T) {
+	temporalSource := strings.Replace(v4Source, `"value":true}`, `"value":true,"for":"5m"}`, 1)
+	artifact, err := CompileBatch([]byte(temporalSource))
+	require.NoError(t, err)
+	require.Equal(t, TemporalVersion, binary.LittleEndian.Uint32(artifact))
+	rules, err := DecodeBatch(artifact)
+	require.NoError(t, err)
+	require.Equal(t, "5m", rules.Rules[0].Conditions.All[0].For)
+
+	typedTemporal := strings.Replace(v5Source, `"value":true}`, `"value":true,"for":"1s"}`, 1)
+	artifact, err = CompileBatch([]byte(typedTemporal))
+	require.NoError(t, err)
+	require.Equal(t, TemporalVersion, binary.LittleEndian.Uint32(artifact))
+
+	v6WithoutTemporal, err := CompileBatch([]byte(v4Source))
+	require.NoError(t, err)
+	binary.LittleEndian.PutUint32(v6WithoutTemporal, TemporalVersion)
+	_, err = DecodeBatch(v6WithoutTemporal)
+	require.ErrorContains(t, err, "v6 artifact requires temporal conditions")
+
+	for name, replacement := range map[string]string{
+		"empty":       `"for":""`,
+		"null":        `"for":null`,
+		"invalid":     `"for":"later"`,
+		"zero":        `"for":"0s"`,
+		"negative":    `"for":"-1s"`,
+		"over bound":  `"for":"8761h"`,
+		"wrong type":  `"for":5`,
+		"group field": `"for":"1s","all":[{"fact":"a","operator":"EQ","value":true}]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var source string
+			if name == "group field" {
+				source = strings.Replace(v4Source, `"all":[{"fact":"a","operator":"EQ","value":true}]`, replacement, 1)
+			} else {
+				source = strings.Replace(v4Source, `"value":true`, `"value":true,`+replacement, 1)
+			}
+			_, err := CompileBatch([]byte(source))
+			require.Error(t, err)
+		})
+	}
+
+	reserved := strings.Replace(temporalSource, `"target":"out"`, `"target":"__rex_temporal_user"`, 1)
+	_, err = CompileBatch([]byte(reserved))
+	require.ErrorContains(t, err, "reserved temporal state prefix")
+	reservedV4 := strings.Replace(v4Source, `"target":"out"`, `"target":"__rex_temporal_user"`, 1)
+	_, err = CompileBatch([]byte(reservedV4))
+	require.ErrorContains(t, err, "reserved temporal state prefix")
+
+	parsed, err := Parse([]byte(temporalSource))
+	require.NoError(t, err)
+	_, err = GenerateBytecode(parsed)
+	require.ErrorContains(t, err, "v6 batch compiler")
+}
+
+func TestTemporalConditionCountIsBounded(t *testing.T) {
+	var source strings.Builder
+	source.WriteString(`{"rules":[{"name":"bounded","conditions":{"all":[`)
+	for i := 0; i <= MaxTemporalConditions; i++ {
+		if i > 0 {
+			source.WriteByte(',')
+		}
+		source.WriteString(`{"fact":"a","operator":"EQ","value":true,"for":"1s"}`)
+	}
+	source.WriteString(`]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	_, err := CompileBatch([]byte(source.String()))
+	require.ErrorContains(t, err, "temporal conditions")
+}

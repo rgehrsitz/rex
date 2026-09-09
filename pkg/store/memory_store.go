@@ -25,6 +25,7 @@ type FactUpdate struct {
 type MemoryStore struct {
 	mu           sync.Mutex
 	facts        map[string]interface{}
+	internal     map[string]interface{}
 	publications []FactUpdate
 	closed       bool
 }
@@ -32,7 +33,7 @@ type MemoryStore struct {
 var _ ContextStore = (*MemoryStore)(nil)
 
 func NewMemoryStore(initial map[string]interface{}) (*MemoryStore, error) {
-	s := &MemoryStore{facts: make(map[string]interface{})}
+	s := &MemoryStore{facts: make(map[string]interface{}), internal: make(map[string]interface{})}
 	for k, v := range initial {
 		if err := s.SetFactContext(context.Background(), k, v); err != nil {
 			return nil, err
@@ -61,6 +62,9 @@ func (s *MemoryStore) write(ctx context.Context, key string, value interface{}, 
 	if s.closed {
 		return ErrMemoryStoreClosed
 	}
+	if IsInternalKey(key) {
+		return fmt.Errorf("fact key %q uses reserved internal state prefix", key)
+	}
 	value, err := copyJSON(value)
 	if err != nil {
 		return err
@@ -81,6 +85,9 @@ func (s *MemoryStore) SetAndPublishFactContext(ctx context.Context, key string, 
 	return s.write(ctx, key, value, true)
 }
 func (s *MemoryStore) GetFactContext(ctx context.Context, key string) (interface{}, error) {
+	if IsInternalKey(key) {
+		return nil, fmt.Errorf("fact key %q uses reserved internal state prefix", key)
+	}
 	values, err := s.MGetFactsContext(ctx, key)
 	return values[key], err
 }
@@ -92,6 +99,11 @@ func (s *MemoryStore) MGetFactsContext(ctx context.Context, keys ...string) (map
 	}
 	if s.closed {
 		return nil, ErrMemoryStoreClosed
+	}
+	for _, key := range keys {
+		if IsInternalKey(key) {
+			return nil, fmt.Errorf("fact key %q uses reserved internal state prefix", key)
+		}
 	}
 	out := make(map[string]interface{}, len(keys))
 	for _, k := range keys {

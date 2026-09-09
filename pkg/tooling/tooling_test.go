@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/runtime"
+	"rgehrsitz/rex/pkg/store"
 )
 
 func fixture(t *testing.T) ([]byte, Scenario) {
@@ -292,4 +293,42 @@ func TestTypedFactToolingContract(t *testing.T) {
 			require.Equal(t, "REX-L006", lint.Diagnostics[0].ID)
 		})
 	}
+}
+
+func TestTemporalReplayUsesExplicitProcessingTime(t *testing.T) {
+	source := []byte(`{"rules":[{"name":"sustained","conditions":{"all":[{"fact":"hot","operator":"EQ","value":true,"for":"5m"}]},"actions":[{"type":"updateStore","target":"alert","value":true}]}]}`)
+	scenario := Scenario{SchemaVersion: SchemaVersion, Name: "temporal", InitialState: map[string]interface{}{}, Events: []Input{
+		{ID: "start", At: "2026-09-09T12:00:00Z", Facts: map[string]interface{}{"hot": true}},
+		{ID: "before", At: "2026-09-09T12:04:59.999999999Z", Facts: map[string]interface{}{"hot": true}},
+		{ID: "boundary", At: "2026-09-09T12:05:00Z", Facts: map[string]interface{}{"hot": true}},
+	}}
+	bundle, err := NewBundle(source, scenario)
+	require.NoError(t, err)
+	require.Equal(t, compiler.TemporalVersion, bundle.Manifest.ExecutionContract)
+	report, err := Replay(context.Background(), bundle)
+	require.NoError(t, err)
+	require.Len(t, Actions(report), 1)
+	require.Equal(t, true, report.FinalState["alert"])
+
+	missing := scenario
+	missing.Events = append([]Input(nil), scenario.Events...)
+	missing.Events[0].At = ""
+	_, err = NewBundle(source, missing)
+	require.ErrorContains(t, err, "requires processing time")
+
+	regressing := scenario
+	regressing.Events = append([]Input(nil), scenario.Events...)
+	regressing.Events[1].At = "2026-09-09T11:59:59Z"
+	_, err = NewBundle(source, regressing)
+	require.ErrorContains(t, err, "precedes the prior event")
+
+	forged := scenario
+	forged.InitialState = map[string]interface{}{store.InternalStatePrefix + "forged": "2000-01-01T00:00:00Z"}
+	_, err = NewBundle(source, forged)
+	require.ErrorContains(t, err, "reserved internal state prefix")
+
+	nonTemporal, plain := fixture(t)
+	plain.Events[0].At = "2026-09-09T12:00:00Z"
+	_, err = NewBundle(nonTemporal, plain)
+	require.ErrorContains(t, err, "non-temporal replay")
 }

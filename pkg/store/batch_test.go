@@ -54,9 +54,43 @@ func TestBatchAdapterContracts(t *testing.T) {
 			value, err := adapter.GetFactContext(ctx, "never")
 			require.NoError(t, err)
 			require.Nil(t, value)
+			require.ErrorContains(t, adapter.SetFactContext(ctx, InternalStatePrefix+"forged", "2000-01-01T00:00:00Z"), "reserved internal state prefix")
+			_, err = adapter.GetFactContext(ctx, InternalStatePrefix+"forged")
+			require.ErrorContains(t, err, "reserved internal state prefix")
+			result, err = adapter.Commit(ctx, CommitRequest{Writes: []Write{{Key: InternalStatePrefix + "forged", Value: true}}})
+			require.ErrorContains(t, err, "invalid or duplicate commit target")
+			require.Equal(t, NotCommitted, result.Outcome)
+			internalKey := InternalStatePrefix + "cleanup_" + name
+			result, err = adapter.Commit(ctx, CommitRequest{Writes: []Write{{Key: internalKey, Value: "2026-09-09T12:00:00Z", Internal: true}}})
+			require.NoError(t, err)
+			require.Equal(t, Committed, result.Outcome)
+			cleaner, ok := adapter.(InternalStateCleaner)
+			require.True(t, ok)
+			require.NoError(t, cleaner.DeleteInternal(ctx, []string{internalKey}))
+			state, err := adapter.ReadSnapshot(ctx, []string{internalKey})
+			require.NoError(t, err)
+			require.Equal(t, Missing, state[internalKey].State)
 		})
 	}
 	require.Zero(t, redisStore.batchWriter().Options().MaxRetries, "dispatched v4 writes must never be automatically retried")
+}
+
+func TestMemoryInternalWritesArePrivate(t *testing.T) {
+	memory, err := NewMemoryStore(nil)
+	require.NoError(t, err)
+	result, err := memory.Commit(context.Background(), CommitRequest{ChainID: "timer", Writes: []Write{{Key: "__rex_temporal_test", Value: "2026-09-09T12:00:00Z", Internal: true}}})
+	require.NoError(t, err)
+	require.Equal(t, Committed, result.Outcome)
+	require.Empty(t, result.Applied)
+	require.Empty(t, snapshot(t, memory))
+	require.Empty(t, drain(t, memory))
+	state, err := memory.ReadSnapshot(context.Background(), []string{"__rex_temporal_test"})
+	require.NoError(t, err)
+	require.Equal(t, Fact{State: Present, Value: "2026-09-09T12:00:00Z"}, state["__rex_temporal_test"])
+	require.NoError(t, memory.DeleteInternal(context.Background(), []string{"__rex_temporal_test"}))
+	state, err = memory.ReadSnapshot(context.Background(), []string{"__rex_temporal_test"})
+	require.NoError(t, err)
+	require.Equal(t, Missing, state["__rex_temporal_test"].State)
 }
 
 type replyFailureHook struct {

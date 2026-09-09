@@ -129,6 +129,34 @@ type JournalStatus struct {
 	Terminal string
 }
 
+// PinProcessingTime records the first clock sample for an event and returns it
+// unchanged on every retry.
+func (d *RedisDurable) PinProcessingTime(ctx context.Context, eventID string, proposed time.Time) (time.Time, error) {
+	if proposed.IsZero() {
+		return time.Time{}, fmt.Errorf("durable processing time is required")
+	}
+	key := d.journalKey(eventID)
+	encoded := proposed.UTC().Format(time.RFC3339Nano)
+	stored, err := d.client.HSetNX(ctx, key, "processing_time", encoded).Result()
+	if err != nil {
+		return time.Time{}, infrastructureFailure("pin durable processing time", err)
+	}
+	if !stored {
+		encoded, err = d.client.HGet(ctx, key, "processing_time").Result()
+		if err != nil {
+			return time.Time{}, infrastructureFailure("read durable processing time", err)
+		}
+	}
+	at, err := time.Parse(time.RFC3339Nano, encoded)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("%w: invalid durable processing time", ErrDurableReconciliation)
+	}
+	if err := d.client.PExpire(ctx, key, d.options.JournalTTL).Err(); err != nil {
+		return time.Time{}, infrastructureFailure("refresh durable processing-time journal", err)
+	}
+	return at, nil
+}
+
 // RedisDurable owns the Streams consumer-group and journal protocol.
 type RedisDurable struct {
 	store   *RedisStore
@@ -259,7 +287,7 @@ func (d *RedisDurable) validateFactKey(key string) error {
 	if key == "" {
 		return fmt.Errorf("durable fact key is empty")
 	}
-	if key == d.options.Stream || key == d.options.OutputStream || key == d.options.DeadLetter || strings.HasPrefix(key, "rex:durable:") {
+	if key == d.options.Stream || key == d.options.OutputStream || key == d.options.DeadLetter || strings.HasPrefix(key, "rex:durable:") || IsInternalKey(key) {
 		return fmt.Errorf("durable fact key %q is reserved by the processing protocol", key)
 	}
 	return nil
@@ -604,16 +632,20 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 	facts := make(map[string]interface{}, len(request.Writes))
 	writeIDs := make(map[string]string, len(request.Writes))
 	for i, write := range request.Writes {
-		if err := d.validateFactKey(write.Key); err != nil {
-			return failed, err
+		if !write.Internal {
+			if err := d.validateFactKey(write.Key); err != nil {
+				return failed, err
+			}
 		}
 		var err error
 		encoded[i], err = json.Marshal(write.Value)
 		if err != nil {
 			return failed, err
 		}
-		facts[write.Key] = write.Value
-		writeIDs[write.Key] = stableDurableID("write", d.options.Namespace, metadata.EventID, metadata.ProgramID, strconv.Itoa(request.Round), write.Key)
+		if !write.Internal {
+			facts[write.Key] = write.Value
+			writeIDs[write.Key] = stableDurableID("write", d.options.Namespace, metadata.EventID, metadata.ProgramID, strconv.Itoa(request.Round), write.Key)
+		}
 	}
 	actionIDs := make([]string, len(request.Actions))
 	for i, action := range request.Actions {
@@ -636,15 +668,21 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 	if len(notification) > MaxEventBytes {
 		return failed, fmt.Errorf("durable output notification exceeds %d bytes", MaxEventBytes)
 	}
-	result := CommitResult{Outcome: Committed, Applied: make([]string, len(request.Writes))}
-	for i, write := range request.Writes {
-		result.Applied[i] = write.Key
+	result := CommitResult{Outcome: Committed}
+	for _, write := range request.Writes {
+		if !write.Internal {
+			result.Applied = append(result.Applied, write.Key)
+		}
 	}
 	marker, err := json.Marshal(result)
 	if err != nil {
 		return failed, err
 	}
 
+	watchKeys := []string{journal}
+	if len(facts) > 0 {
+		watchKeys = append(watchKeys, d.options.OutputStream)
+	}
 	for attempt := 0; attempt < 3; attempt++ {
 		err = d.client.Watch(ctx, func(tx *redis.Tx) error {
 			if value, err := tx.HGet(ctx, journal, field).Bytes(); err == nil {
@@ -657,28 +695,36 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 			} else if err != redis.Nil {
 				return err
 			}
-			kind, err := tx.Type(ctx, d.options.OutputStream).Result()
-			if err != nil {
-				return err
-			}
-			if kind != "none" && kind != "stream" {
-				return fmt.Errorf("%w: output key %q has type %s", errDurablePreflight, d.options.OutputStream, kind)
+			if len(facts) > 0 {
+				kind, err := tx.Type(ctx, d.options.OutputStream).Result()
+				if err != nil {
+					return err
+				}
+				if kind != "none" && kind != "stream" {
+					return fmt.Errorf("%w: output key %q has type %s", errDurablePreflight, d.options.OutputStream, kind)
+				}
 			}
 			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 				for i, write := range request.Writes {
-					pipe.Set(ctx, write.Key, encoded[i], 0)
+					if write.Delete {
+						pipe.Del(ctx, write.Key)
+					} else {
+						pipe.Set(ctx, write.Key, encoded[i], 0)
+					}
 				}
-				pipe.XAdd(ctx, &redis.XAddArgs{Stream: d.options.OutputStream, MaxLen: d.options.OutputMaxLen, Approx: true, Values: map[string]interface{}{
-					"protocol": durableProtocolVersion, "input_id": metadata.EventID,
-					"input_stream": d.options.Stream, "namespace": d.options.Namespace,
-					"program_id": metadata.ProgramID, "round": request.Round, "output_id": outputID, "payload": notification,
-				}})
+				if len(facts) > 0 {
+					pipe.XAdd(ctx, &redis.XAddArgs{Stream: d.options.OutputStream, MaxLen: d.options.OutputMaxLen, Approx: true, Values: map[string]interface{}{
+						"protocol": durableProtocolVersion, "input_id": metadata.EventID,
+						"input_stream": d.options.Stream, "namespace": d.options.Namespace,
+						"program_id": metadata.ProgramID, "round": request.Round, "output_id": outputID, "payload": notification,
+					}})
+				}
 				pipe.HSet(ctx, journal, field, marker)
 				pipe.PExpire(ctx, journal, d.options.JournalTTL)
 				return nil
 			})
 			return err
-		}, journal, d.options.OutputStream)
+		}, watchKeys...)
 		if err == nil {
 			return result, nil
 		}

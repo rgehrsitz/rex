@@ -243,7 +243,7 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 	hasAll := len(cog.All) > 0
 	hasAny := len(cog.Any) > 0
 	hasGroup := hasAll || hasAny
-	hasLeafFields := cog.Fact != "" || cog.Operator != "" || cog.Value != nil
+	hasLeafFields := cog.Fact != "" || cog.Operator != "" || cog.Value != nil || cog.For != ""
 	if hasGroup && hasLeafFields {
 		return logging.NewError(logging.ErrorTypeCompile, "condition cannot contain both leaf fields and a nested group", nil, nil)
 	}
@@ -256,6 +256,8 @@ func validateConditionOrGroup(cog *ConditionOrGroup) error {
 			return logging.NewError(logging.ErrorTypeCompile, "Empty or missing fact field", nil, nil)
 		} else if !isFactValid(cog.Fact) {
 			return logging.NewError(logging.ErrorTypeCompile, "Invalid condition fact", nil, map[string]interface{}{"fact": cog.Fact})
+		} else if strings.HasPrefix(cog.Fact, "__rex_temporal_") {
+			return logging.NewError(logging.ErrorTypeCompile, "Condition fact uses reserved temporal state prefix", nil, map[string]interface{}{"fact": cog.Fact})
 		}
 
 		if cog.Operator == "" {
@@ -309,6 +311,9 @@ func validateAction(action *Action) error {
 	}
 	if action.Target == "" {
 		return logging.NewError(logging.ErrorTypeCompile, "Empty or missing target field", nil, nil)
+	}
+	if strings.HasPrefix(action.Target, "__rex_temporal_") {
+		return logging.NewError(logging.ErrorTypeCompile, "Action target uses reserved temporal state prefix", nil, map[string]interface{}{"target": action.Target})
 	}
 	if err := validateBytecodeString("Action type", action.Type); err != nil {
 		return err

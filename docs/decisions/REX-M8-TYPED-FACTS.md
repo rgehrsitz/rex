@@ -1,6 +1,6 @@
 # REX-M8.2 typed fact contract
 
-Status: implemented locally; review pending (2026-09-09)
+Status: merged in PR #41 at `da2b03a` (2026-09-09)
 
 ## Decision
 

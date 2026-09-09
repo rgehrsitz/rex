@@ -15,9 +15,12 @@ v3 deployment that used scripts.
 
 Rulesets may opt into the v5 closed typed-fact contract with a top-level
 `facts` declaration map; see the [typed fact migration guide](docs/M8_TYPED_FACTS.md).
+Condition leaves may opt into the v6 processing-time contract with `for`, which
+requires the predicate to remain true for a bounded duration; see the
+[temporal rules guide](docs/M8_TEMPORAL_RULES.md).
 
 Use the [M5 authoring tools](docs/M5_TOOLING.md) to explain, lint, test, replay,
-and compare v4/v5 batch rulesets offline. `rexd --dry-run --bundle ...` emits simulated
+and compare v4/v5/v6 batch rulesets offline. `rexd --dry-run --bundle ...` emits simulated
 results without creating Redis connections.
 
 The planning documents have distinct roles:

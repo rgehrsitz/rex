@@ -1,0 +1,19 @@
+{
+  "facts": {
+    "temperature": {"type": "number"},
+    "alert": {"type": "boolean"}
+  },
+  "rules": [
+    {
+      "name": "sustained-high-temperature",
+      "conditions": {
+        "all": [
+          {"fact": "temperature", "operator": "GTE", "value": 30, "for": "5m"}
+        ]
+      },
+      "actions": [
+        {"type": "updateStore", "target": "alert", "value": true}
+      ]
+    }
+  ]
+}

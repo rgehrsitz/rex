@@ -60,9 +60,10 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1 and M8.2 are complete. Next: temporal rules. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1 and M8.2 are complete. M8.3 temporal rules are implemented locally. |
 | REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
-| REX-M8.2 | Typed fact declarations | M4, M5 | Complete locally | [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [local acceptance evidence](baselines/rex-m8.2/README.md). Review pending. |
+| REX-M8.2 | Typed fact declarations | M4, M5 | Complete | Merged in PR #41 (`da2b03a`). [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [acceptance evidence](baselines/rex-m8.2/README.md). |
+| REX-M8.3 | Temporal rules | M4, M5, M7 | Complete locally | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [local acceptance evidence](baselines/rex-m8.3/README.md). Review pending. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -434,9 +435,26 @@ package build, and release cross-build checks pass.
 - [x] Carry declarations and v5 through explanation, replay, reload, history,
   CLI diagnostics, the published schema, and migration fixtures.
 
-**Completed locally 2026-09-09:** focused compiler, runtime, durable-processing,
-tooling, and schema-agreement tests pass. Full repository acceptance checks are
-recorded in [the M8.2 evidence](baselines/rex-m8.2/README.md).
+**Merged 2026-09-09 in PR #41 (`da2b03a`):** compiler, runtime,
+durable-processing, tooling, schema-agreement, full repository, race, vet,
+vulnerability, CLI, and release cross-build checks passed.
+
+### REX-M8.3 — Temporal rules
+
+- [x] Add a bounded `for` duration to condition leaves; its presence selects
+  execution contract v6 while non-temporal v4/v5 artifacts remain unchanged.
+- [x] Define event-driven processing-time semantics with one clock sample per
+  chain and deterministic injected time for offline replay.
+- [x] Persist private timer state atomically with rule output and keep it out of
+  public facts, publications, derived rounds, and action identity.
+- [x] Reset timers on false, missing, null, or invalid predicates, including
+  nodes beyond an otherwise decisive Boolean sibling.
+- [x] Cover exact deadline behavior, restart/reload recovery, regressing clocks,
+  durable retry, resource bounds, and schema/compiler agreement.
+
+**Completed locally 2026-09-09:** focused compiler, runtime, memory/Redis,
+durable-processing, tooling, and schema tests pass. Full acceptance evidence is
+recorded in [the M8.3 evidence](baselines/rex-m8.3/README.md).
 
 ## Decisions to record before dependent implementation
 
@@ -454,6 +472,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D7 | Durable topology, ordering, retention | Start with a documented single Redis commit domain and one state owner per partition; choose supported versions, persistence settings, retention, and consumer recovery together. | Resolved for M7 in [REX-M7](decisions/REX-M7.md). |
 | D8 | Ruleset activation and durable version history | Poll an immutable artifact path; validate and configure before an event-boundary swap; archive exact bytes by program digest; defer while durable work is pending and retain history for at least the journal recovery window. | Resolved for M8.1 in [reload contract](decisions/REX-M8-RULESET-RELOAD.md). |
 | D9 | Typed fact namespace and compatibility | Make declarations an optional closed namespace; missing remains valid/unknown, null is opt-in, incompatible stored values become invalid, and declaration presence selects v5 while undeclared source remains v4. | Resolved for M8.2 in [typed fact contract](decisions/REX-M8-TYPED-FACTS.md). |
+| D10 | Temporal clock, persistence, and late events | Start with event-driven processing time, sample one injected clock value per chain, persist private bounded start times in the existing commit domain, and leave event-time/watermark semantics unsupported until separately designed. | Resolved for M8.3 in [temporal contract](decisions/REX-M8-TEMPORAL-RULES.md). |
 
 ## Review, validation, and completion discipline
 
