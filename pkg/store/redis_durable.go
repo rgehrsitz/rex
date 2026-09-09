@@ -82,8 +82,8 @@ func (o DurableOptions) validate() error {
 	if o.Stream == o.OutputStream || o.Stream == o.DeadLetter || o.OutputStream == o.DeadLetter {
 		return fmt.Errorf("durable input, output, and dead-letter streams must be distinct")
 	}
-	if strings.ContainsAny(o.Namespace, "{} \t\r\n") {
-		return fmt.Errorf("durable namespace contains unsupported characters")
+	if !validDurableNamespace(o.Namespace) {
+		return fmt.Errorf("durable namespace must be 1-64 ASCII letters, digits, underscores, or hyphens")
 	}
 	if o.ClaimIdle <= 0 || o.Block <= 0 || o.JournalTTL <= 0 || o.LockTTL <= 0 || o.MaxAttempts <= 0 {
 		return fmt.Errorf("durable recovery limits must be positive")
@@ -95,6 +95,18 @@ func (o DurableOptions) validate() error {
 		return fmt.Errorf("durable lock TTL must be at least 3ms")
 	}
 	return nil
+}
+
+func validDurableNamespace(namespace string) bool {
+	if len(namespace) == 0 || len(namespace) > 64 {
+		return false
+	}
+	for _, char := range namespace {
+		if (char < 'a' || char > 'z') && (char < 'A' || char > 'Z') && (char < '0' || char > '9') && char != '_' && char != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // DurableEvent is one stable Redis Stream delivery.
@@ -125,9 +137,31 @@ type RedisDurable struct {
 	ownerID string
 }
 
+type durableInfrastructureFailure struct {
+	op  string
+	err error
+}
+
+func (e durableInfrastructureFailure) Error() string {
+	return ErrDurableInfrastructure.Error() + ": " + e.op + ": " + e.err.Error()
+}
+func (e durableInfrastructureFailure) Unwrap() error { return e.err }
+func (e durableInfrastructureFailure) Is(target error) bool {
+	return target == ErrDurableInfrastructure
+}
+
+func infrastructureFailure(op string, err error) error {
+	return durableInfrastructureFailure{op: op, err: err}
+}
+
 // OpenDurable configures the store's durable snapshot/commit behavior and
 // creates the consumer group without discarding an existing stream backlog.
 func (s *RedisStore) OpenDurable(ctx context.Context, options DurableOptions) (*RedisDurable, error) {
+	s.durableMu.Lock()
+	defer s.durableMu.Unlock()
+	if s.durable != nil {
+		return nil, fmt.Errorf("durable processing is already open on this Redis store")
+	}
 	options = options.withDefaults()
 	if err := options.validate(); err != nil {
 		return nil, err
@@ -295,35 +329,54 @@ func durableEvent(message redis.XMessage) (DurableEvent, error) {
 // increments the bounded poison-attempt counter.
 func (d *RedisDurable) Begin(ctx context.Context, event DurableEvent, programID string) (JournalStatus, error) {
 	key := d.journalKey(event.ID)
-	values, err := d.client.HMGet(ctx, key, "payload", "program_id", "terminal", "attempts").Result()
-	if err != nil {
-		return JournalStatus{}, fmt.Errorf("%w: read event journal: %w", ErrDurableInfrastructure, err)
+	status := JournalStatus{}
+	for attempt := 0; attempt < 3; attempt++ {
+		err := d.client.Watch(ctx, func(tx *redis.Tx) error {
+			values, err := tx.HMGet(ctx, key, "payload", "program_id", "terminal", "attempts").Result()
+			if err != nil {
+				return err
+			}
+			if valueString(values[0]) != "" && valueString(values[0]) != event.Payload {
+				return fmt.Errorf("%w: durable event %s payload differs from its journal", ErrDurableReconciliation, event.ID)
+			}
+			if valueString(values[1]) != "" && valueString(values[1]) != programID {
+				return fmt.Errorf("%w: event %s requires program %s", ErrDurableProgramMismatch, event.ID, valueString(values[1]))
+			}
+			if terminal := valueString(values[2]); terminal != "" {
+				status.Attempts, _ = strconv.ParseInt(valueString(values[3]), 10, 64)
+				status.Terminal = terminal
+				return nil
+			}
+			var attempts *redis.IntCmd
+			_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.HSetNX(ctx, key, "payload", event.Payload)
+				pipe.HSetNX(ctx, key, "program_id", programID)
+				attempts = pipe.HIncrBy(ctx, key, "attempts", 1)
+				pipe.PExpire(ctx, key, d.options.JournalTTL)
+				return nil
+			})
+			if err == nil {
+				status.Attempts = attempts.Val()
+			}
+			return err
+		}, key)
+		if err == nil {
+			return status, nil
+		}
+		if errors.Is(err, ErrDurableReconciliation) || errors.Is(err, ErrDurableProgramMismatch) {
+			return JournalStatus{}, err
+		}
+		if !errors.Is(err, redis.TxFailedErr) {
+			return JournalStatus{}, infrastructureFailure("begin durable event", err)
+		}
 	}
-	if valueString(values[0]) != "" && valueString(values[0]) != event.Payload {
-		return JournalStatus{}, fmt.Errorf("%w: durable event %s payload differs from its journal", ErrDurableReconciliation, event.ID)
-	}
-	if valueString(values[1]) != "" && valueString(values[1]) != programID {
-		return JournalStatus{}, fmt.Errorf("%w: event %s requires program %s", ErrDurableProgramMismatch, event.ID, valueString(values[1]))
-	}
-	if terminal := valueString(values[2]); terminal != "" {
-		attempts, _ := strconv.ParseInt(valueString(values[3]), 10, 64)
-		return JournalStatus{Attempts: attempts, Terminal: terminal}, nil
-	}
-	pipe := d.client.TxPipeline()
-	pipe.HSetNX(ctx, key, "payload", event.Payload)
-	pipe.HSetNX(ctx, key, "program_id", programID)
-	attempts := pipe.HIncrBy(ctx, key, "attempts", 1)
-	pipe.PExpire(ctx, key, d.options.JournalTTL)
-	if _, err := pipe.Exec(ctx); err != nil {
-		return JournalStatus{}, fmt.Errorf("%w: begin durable event: %w", ErrDurableInfrastructure, err)
-	}
-	return JournalStatus{Attempts: attempts.Val(), Terminal: valueString(values[2])}, nil
+	return JournalStatus{}, infrastructureFailure("begin durable event", fmt.Errorf("transaction contention limit exceeded"))
 }
 
 // Acknowledge removes a terminal event from the consumer group's pending list.
 func (d *RedisDurable) Acknowledge(ctx context.Context, eventID string) error {
 	if err := d.client.XAck(ctx, d.options.Stream, d.options.Group, eventID).Err(); err != nil {
-		return fmt.Errorf("%w: acknowledge durable event: %w", ErrDurableInfrastructure, err)
+		return infrastructureFailure("acknowledge durable event", err)
 	}
 	return nil
 }
@@ -350,7 +403,10 @@ func (d *RedisDurable) Complete(ctx context.Context, eventID string) error {
 		return err
 	}, key)
 	if err != nil {
-		return fmt.Errorf("%w: complete durable event: %w", ErrDurableInfrastructure, err)
+		if errors.Is(err, ErrDurableReconciliation) {
+			return err
+		}
+		return infrastructureFailure("complete durable event", err)
 	}
 	return nil
 }
@@ -397,7 +453,10 @@ func (d *RedisDurable) DeadLetterEvent(ctx context.Context, event DurableEvent, 
 		return err
 	}, key, d.options.DeadLetter)
 	if err != nil {
-		return fmt.Errorf("%w: dead-letter durable event: %w", ErrDurableInfrastructure, err)
+		if errors.Is(err, ErrDurableReconciliation) {
+			return err
+		}
+		return infrastructureFailure("dead-letter durable event", err)
 	}
 	return nil
 }
@@ -460,10 +519,13 @@ func (d *RedisDurable) ApplyInput(ctx context.Context, eventID, programID string
 			return nil
 		}
 		if !errors.Is(err, redis.TxFailedErr) {
-			return fmt.Errorf("%w: input transaction outcome unknown: %w", ErrDurableInfrastructure, err)
+			if errors.Is(err, ErrDurableReconciliation) {
+				return err
+			}
+			return infrastructureFailure("input transaction outcome unknown", err)
 		}
 	}
-	return fmt.Errorf("%w: input transaction contention limit exceeded", ErrDurableInfrastructure)
+	return infrastructureFailure("input transaction", fmt.Errorf("contention limit exceeded"))
 }
 
 func (d *RedisDurable) readSnapshot(ctx context.Context, metadata durableEventContext, keys []string) (map[string]Fact, error) {
@@ -472,11 +534,11 @@ func (d *RedisDurable) readSnapshot(ctx context.Context, metadata durableEventCo
 	if encoded, err := d.client.HGet(ctx, key, field).Bytes(); err == nil {
 		return decodeSnapshot(encoded)
 	} else if err != redis.Nil {
-		return nil, fmt.Errorf("%w: read historical snapshot: %w", ErrDurableInfrastructure, err)
+		return nil, infrastructureFailure("read historical snapshot", err)
 	}
 	snapshot, err := d.store.readRedisSnapshot(ctx, keys)
 	if err != nil {
-		return nil, fmt.Errorf("%w: read snapshot: %w", ErrDurableInfrastructure, err)
+		return nil, infrastructureFailure("read snapshot", err)
 	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
@@ -484,7 +546,7 @@ func (d *RedisDurable) readSnapshot(ctx context.Context, metadata durableEventCo
 	}
 	stored, err := d.client.HSetNX(ctx, key, field, encoded).Result()
 	if err != nil {
-		return nil, fmt.Errorf("%w: record historical snapshot: %w", ErrDurableInfrastructure, err)
+		return nil, infrastructureFailure("record historical snapshot", err)
 	}
 	if stored {
 		_ = d.client.PExpire(ctx, key, d.options.JournalTTL).Err()
@@ -492,7 +554,7 @@ func (d *RedisDurable) readSnapshot(ctx context.Context, metadata durableEventCo
 	}
 	encoded, err = d.client.HGet(ctx, key, field).Bytes()
 	if err != nil {
-		return nil, fmt.Errorf("%w: recover historical snapshot: %w", ErrDurableInfrastructure, err)
+		return nil, infrastructureFailure("recover historical snapshot", err)
 	}
 	return decodeSnapshot(encoded)
 }
@@ -522,7 +584,7 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 		}
 		return result, nil
 	} else if err != redis.Nil {
-		return CommitResult{Outcome: Unknown}, fmt.Errorf("%w: read commit marker: %w", ErrDurableInfrastructure, err)
+		return CommitResult{Outcome: Unknown}, infrastructureFailure("read commit marker", err)
 	}
 
 	encoded := make([][]byte, len(request.Writes))
@@ -608,13 +670,16 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 			return result, nil
 		}
 		if !errors.Is(err, redis.TxFailedErr) {
-			if errors.Is(err, errDurablePreflight) {
-				return failed, fmt.Errorf("%w: %w", ErrDurableInfrastructure, err)
+			if errors.Is(err, ErrDurableReconciliation) {
+				return CommitResult{Outcome: Unknown}, err
 			}
-			return CommitResult{Outcome: Unknown}, fmt.Errorf("%w: durable transaction outcome unknown: %w", ErrDurableInfrastructure, err)
+			if errors.Is(err, errDurablePreflight) {
+				return failed, infrastructureFailure("durable transaction preflight", err)
+			}
+			return CommitResult{Outcome: Unknown}, infrastructureFailure("durable transaction outcome unknown", err)
 		}
 	}
-	return CommitResult{Outcome: NotCommitted}, fmt.Errorf("%w: durable transaction contention limit exceeded", ErrDurableInfrastructure)
+	return CommitResult{Outcome: NotCommitted}, infrastructureFailure("durable transaction", fmt.Errorf("contention limit exceeded"))
 }
 
 // ResolvesUnknownOnRetry reports whether this store has durable commit markers.

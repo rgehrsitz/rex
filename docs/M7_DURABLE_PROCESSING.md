@@ -22,7 +22,13 @@ Choose `lock_ttl` longer than expected transient Redis latency.
 Give every partition a unique namespace and three distinct input, output, and
 dead-letter stream keys. Those streams and every key beginning with
 `rex:durable:` are reserved and cannot be used as fact names or rule action
-targets.
+targets. Namespaces accept only 1-64 ASCII letters, digits, underscores, and
+hyphens. A `RedisStore` instance owns one durable partition and rejects a second
+open.
+
+While durable mode is active, route every external fact mutation through the
+input stream. Direct `SET` writes to REX-owned fact keys bypass ordering and
+snapshot history and are outside the recovery contract.
 
 Journal retention is the deduplication window. Set `journal_ttl` longer than the
 maximum input retention and any replay window. Do not trim an input stream past
@@ -82,6 +88,9 @@ Watch `/readyz` and these metrics during the drain:
 - `rex_dead_letters_total`: poison events removed from the ordered path
 - `rex_event_failures_total` and `rex_event_processing_duration_seconds`
 
+The worker samples consumer-group statistics at the Redis health-check interval
+(one query per second by default), rather than once per event.
+
 ## Recovery checks
 
 After an unclean stop, restart with the same artifact, stream, group, and
@@ -117,7 +126,9 @@ fail readiness and keep the input pending until an operator restores the
 dependency.
 
 Repair the producer or rule data before redrive. Append a new event and carry
-the old ID as provenance; never delete or rewrite the old journal:
+the old ID as provenance; never delete or rewrite the old journal. M7 uses this
+audited manual procedure after validating the repaired payload with the normal
+simulation tooling; a first-class redrive command is follow-up work:
 
 ```sh
 redis-cli XADD rex_events '*' payload '{"weather:temperature":30.5}' original_input_id 'OLD-ID'

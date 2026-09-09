@@ -672,6 +672,34 @@ func TestRunMainLoopDurableProcessesAndAcknowledges(t *testing.T) {
 
 const batchRuleForDurableTest = `{"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"GT","value":0},{"fact":"b","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
 
+type canceledLeaseRenewer struct{ started chan struct{} }
+
+func (r *canceledLeaseRenewer) OwnershipRenewInterval() time.Duration { return time.Nanosecond }
+func (r *canceledLeaseRenewer) RenewOwnership(ctx context.Context) error {
+	close(r.started)
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestMonitorDurableOwnershipIgnoresShutdownCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	failures := make(chan error, 1)
+	done := make(chan struct{})
+	renewer := &canceledLeaseRenewer{started: make(chan struct{})}
+	go func() {
+		defer close(done)
+		monitorDurableOwnership(ctx, cancel, renewer, failures)
+	}()
+	<-renewer.started
+	cancel()
+	<-done
+	select {
+	case err := <-failures:
+		t.Fatalf("shutdown reported as lease failure: %v", err)
+	default:
+	}
+}
+
 func TestV4MessageIsOneBatchAndOutputNotificationIsIgnored(t *testing.T) {
 	source := []byte(`{"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"GT","value":0},{"fact":"b","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
 	artifact, err := compiler.CompileBatch(source)

@@ -91,6 +91,11 @@ type durableStore interface {
 	OpenDurable(context.Context, store.DurableOptions) (*store.RedisDurable, error)
 }
 
+type durableOwnershipRenewer interface {
+	OwnershipRenewInterval() time.Duration
+	RenewOwnership(context.Context) error
+}
+
 var messageTraceSequence atomic.Uint64
 
 func main() {
@@ -468,6 +473,11 @@ func runDurableMainLoop(ctx context.Context, deps *RexDependencies, config *Conf
 	if stats, err := queue.Stats(ctx); err == nil {
 		metrics.SetDurableBacklog(stats.Pending, stats.Lag)
 	}
+	statsInterval := config.RedisHealthInterval
+	if statsInterval <= 0 {
+		statsInterval = time.Second
+	}
+	nextStats := time.Now().Add(statsInterval)
 
 	processCtx, stopProcessing := context.WithCancel(ctx)
 	defer stopProcessing()
@@ -522,8 +532,11 @@ func runDurableMainLoop(ctx context.Context, deps *RexDependencies, config *Conf
 		if result.DeadLettered {
 			metrics.RecordDurableDeadLetter()
 		}
-		if stats, err := queue.Stats(processCtx); err == nil {
-			metrics.SetDurableBacklog(stats.Pending, stats.Lag)
+		if !time.Now().Before(nextStats) {
+			if stats, err := queue.Stats(processCtx); err == nil {
+				metrics.SetDurableBacklog(stats.Pending, stats.Lag)
+			}
+			nextStats = time.Now().Add(statsInterval)
 		}
 		if processErr == nil {
 			metrics.SetSubscriptionReady(true)
@@ -547,7 +560,7 @@ func runDurableMainLoop(ctx context.Context, deps *RexDependencies, config *Conf
 	}
 }
 
-func monitorDurableOwnership(ctx context.Context, cancel context.CancelFunc, queue *store.RedisDurable, failures chan<- error) {
+func monitorDurableOwnership(ctx context.Context, cancel context.CancelFunc, queue durableOwnershipRenewer, failures chan<- error) {
 	interval := queue.OwnershipRenewInterval()
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -557,7 +570,14 @@ func monitorDurableOwnership(ctx context.Context, cancel context.CancelFunc, que
 			return
 		case <-ticker.C:
 			if err := queue.RenewOwnership(ctx); err != nil {
-				failures <- err
+				if ctx.Err() != nil {
+					return
+				}
+				select {
+				case failures <- err:
+				case <-ctx.Done():
+					return
+				}
 				cancel()
 				return
 			}

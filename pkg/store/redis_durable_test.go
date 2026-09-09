@@ -134,6 +134,20 @@ func TestRedisDurableRejectsInvalidLimitsAndOverlappingStreams(t *testing.T) {
 	options.OutputStream = options.Stream
 	_, err = redisStore.OpenDurable(context.Background(), options)
 	require.ErrorContains(t, err, "must be distinct")
+	options = durableTestOptions(t)
+	options.Namespace = "invalid:namespace*"
+	_, err = redisStore.OpenDurable(context.Background(), options)
+	require.ErrorContains(t, err, "ASCII letters")
+}
+
+func TestRedisDurableStoreCanOpenOnlyOnePartition(t *testing.T) {
+	server, redisStore := setupMiniredis(t)
+	defer server.Close()
+	defer redisStore.Close()
+	_, err := redisStore.OpenDurable(context.Background(), durableTestOptions(t))
+	require.NoError(t, err)
+	_, err = redisStore.OpenDurable(context.Background(), durableTestOptions(t))
+	require.ErrorContains(t, err, "already open")
 }
 
 func TestRedisDurableDeadLetterIsIdempotent(t *testing.T) {
@@ -150,6 +164,9 @@ func TestRedisDurableDeadLetterIsIdempotent(t *testing.T) {
 	processErr := errors.New("poison")
 	require.NoError(t, durable.DeadLetterEvent(ctx, event, "program-a", status.Attempts, processErr))
 	require.NoError(t, durable.DeadLetterEvent(ctx, event, "program-a", status.Attempts, processErr))
+	err = durable.Complete(ctx, event.ID)
+	require.ErrorIs(t, err, ErrDurableReconciliation)
+	require.NotErrorIs(t, err, ErrDurableInfrastructure)
 	require.Equal(t, int64(1), redisStore.client.XLen(ctx, options.DeadLetter).Val())
 	stats, err := durable.Stats(ctx)
 	require.NoError(t, err)

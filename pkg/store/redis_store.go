@@ -20,6 +20,7 @@ type RedisStore struct {
 	client      *redis.Client
 	batchOnce   sync.Once
 	batchClient *redis.Client
+	durableMu   sync.Mutex
 	durable     *RedisDurable
 }
 

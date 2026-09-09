@@ -16,6 +16,8 @@ logical inputs to both modes.
 The owner is enforced by an expiring, compare-and-renew Redis lease scoped to
 the configured durable namespace. Losing the lease fails readiness and stops
 the worker. Each partition therefore needs a unique namespace.
+One `RedisStore` can open one durable partition; a second open is rejected
+instead of silently retargeting snapshot and commit operations.
 
 Producers append one `payload` field containing the normal REX fact-event JSON.
 The Redis stream ID is the stable input identity. Redis acceptance is the
@@ -91,6 +93,9 @@ the ordered partition continue. Redrive requires an explicit operator command
 that appends a new input event and records the original ID; it never deletes or
 rewrites history.
 
+M7 redrive is an audited manual `XADD` procedure after payload validation. A
+first-class validated redrive command remains follow-up tooling work.
+
 Redis connectivity, transaction uncertainty, unsafe key types, and other
 storage failures are infrastructure failures rather than poison input. They fail
 readiness and remain pending without dead-lettering, even after the configured
@@ -113,6 +118,8 @@ uses an idle-claim threshold, and exports pending count, lag, retries,
 dead-letter count, and processing failures. Readiness requires Redis access,
 partition ownership, and the ability to make progress; liveness remains
 process-only.
+Queue statistics are sampled no more often than the Redis health-check interval
+(one query per second by default), independent of event throughput.
 
 The protocol follows the Redis guarantees documented for
 [Streams and consumer groups](https://redis.io/docs/latest/develop/data-types/streams/),
