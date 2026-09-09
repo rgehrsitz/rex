@@ -616,6 +616,14 @@ func TestGenerateBytecodeRejectsRetiredScripts(t *testing.T) {
 	}
 }
 
+func TestGenerateBytecodeRejectsUnroutableLegacyAction(t *testing.T) {
+	_, err := GenerateBytecode(&Ruleset{Rules: []Rule{{
+		Name:    "unroutable",
+		Actions: []Action{{Type: "updateStore", Target: ":status", Value: "hot"}},
+	}}})
+	require.ErrorContains(t, err, "no legacy publish channel")
+}
+
 func TestGenerateBytecodePreservesLabelLikeActionStrings(t *testing.T) {
 	tests := []string{
 		"L999" + strings.Repeat("x", 20),

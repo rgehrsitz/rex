@@ -4,12 +4,14 @@ package store
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/logging"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -20,26 +22,69 @@ type RedisStore struct {
 	batchClient *redis.Client
 }
 
-// NewRedisStore creates a new instance of RedisStore with the given address, password, and database number.
-// It establishes a connection to the Redis server and returns a pointer to the RedisStore.
-func NewRedisStore(addr, password string, db int) *RedisStore {
-	logging.Logger.Info().Str("addr", addr).Int("db", db).Msg("Connecting to Redis")
+// RedisOptions defines connection settings without owning caller credentials or
+// TLS configuration. TLSConfig is cloned by NewRedisStore.
+type RedisOptions struct {
+	Addr         string
+	Username     string
+	Password     string
+	DB           int
+	TLSConfig    *tls.Config
+	DialTimeout  time.Duration
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+}
 
-	client := redis.NewClient(&redis.Options{
-		Addr:     addr,
-		Password: password,
-		DB:       db,
-	})
-
-	_, err := client.Ping(context.Background()).Result()
-	if err != nil {
-		logging.Logger.Fatal().Err(err).Msg("Failed to connect to Redis")
+// NewRedisStore establishes and verifies a Redis connection using the caller's
+// cancellation and deadline. It never terminates the process.
+func NewRedisStore(ctx context.Context, options RedisOptions) (*RedisStore, error) {
+	if ctx == nil {
+		return nil, fmt.Errorf("redis startup context is required")
+	}
+	if options.Addr == "" {
+		return nil, fmt.Errorf("redis address is required")
+	}
+	if strings.Contains(options.Addr, "@") {
+		return nil, fmt.Errorf("redis address must not contain credentials; use username and password options")
+	}
+	logAddress := redisLogAddress(options.Addr)
+	logging.Logger.Info().Str("addr", logAddress).Int("db", options.DB).Bool("tls", options.TLSConfig != nil).Msg("Connecting to Redis")
+	var tlsConfig *tls.Config
+	if options.TLSConfig != nil {
+		tlsConfig = options.TLSConfig.Clone()
 	}
 
-	logging.Logger.Info().Msg("Successfully connected to Redis")
+	client := redis.NewClient(&redis.Options{
+		Addr:                  options.Addr,
+		Username:              options.Username,
+		Password:              options.Password,
+		DB:                    options.DB,
+		TLSConfig:             tlsConfig,
+		DialTimeout:           options.DialTimeout,
+		ReadTimeout:           options.ReadTimeout,
+		WriteTimeout:          options.WriteTimeout,
+		ContextTimeoutEnabled: true,
+	})
 
-	return &RedisStore{client: client}
+	if err := client.Ping(ctx).Err(); err != nil {
+		_ = client.Close()
+		return nil, fmt.Errorf("connect to Redis at %s: %w", logAddress, err)
+	}
+
+	logging.Logger.Info().Str("addr", logAddress).Int("db", options.DB).Bool("tls", tlsConfig != nil).Msg("Successfully connected to Redis")
+
+	return &RedisStore{client: client}, nil
 }
+
+func redisLogAddress(address string) string {
+	if separator := strings.LastIndex(address, "@"); separator >= 0 {
+		return address[separator+1:]
+	}
+	return address
+}
+
+// Ping checks current Redis connectivity with the caller's deadline.
+func (s *RedisStore) Ping(ctx context.Context) error { return s.client.Ping(ctx).Err() }
 
 // Close releases the Redis client resources held by the store.
 func (s *RedisStore) Close() error {
@@ -148,6 +193,10 @@ func (s *RedisStore) SetAndPublishFact(key string, value interface{}) error {
 
 // SetAndPublishFactContext updates and publishes a fact using the caller's context.
 func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, value interface{}) error {
+	group, _, _ := strings.Cut(key, ":")
+	if group == "" {
+		return fmt.Errorf("fact key %q has no publish channel before ':'", key)
+	}
 	data, err := json.Marshal(value)
 	if err != nil {
 		logging.Logger.Error().Err(err).Str("key", key).Interface("value", value).Msg("Failed to marshal fact value")
@@ -161,16 +210,15 @@ func (s *RedisStore) SetAndPublishFactContext(ctx context.Context, key string, v
 	// Set the value in Redis
 	err = s.client.Set(ctx, key, data, 0).Err()
 	if err != nil {
-		logging.Logger.Error().Err(err).Str("key", key).Str("data", string(data)).Msg("Failed to set fact in Redis")
+		logging.Logger.Error().Err(err).Str("key", key).Msg("Failed to set fact in Redis")
 		return err
 	}
 
 	// Need to break apart the key to get the group
-	group := strings.Split(key, ":")[0]
 	// Publish the value to a channel
 	err = s.client.Publish(ctx, group, string(event)).Err()
 	if err != nil {
-		logging.Logger.Error().Err(err).Str("group", group).Str("key", key).Str("event", string(event)).Msg("Failed to publish fact update")
+		logging.Logger.Error().Err(err).Str("group", group).Str("key", key).Msg("Failed to publish fact update")
 		return err
 	}
 	logging.Logger.Debug().Str("event", "fact_published").Str("channel", group).Str("fact_name", key).Msg("Published fact update")

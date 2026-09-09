@@ -126,6 +126,46 @@ func TestRedisEventSourceLifecycle(t *testing.T) {
 	require.False(t, ok)
 }
 
+func TestRedisEventSourceReportsDisconnectAndRecovers(t *testing.T) {
+	server, s := setupMiniredis(t)
+	defer s.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	source, err := s.OpenEvents(ctx, "input")
+	require.NoError(t, err)
+	defer source.Close()
+
+	server.Close()
+	select {
+	case event := <-source.Events():
+		require.ErrorContains(t, event.Err, "receive Redis event")
+	case <-time.After(3 * time.Second):
+		t.Fatal("subscription did not report disconnect")
+	}
+	require.NoError(t, server.Restart())
+	defer server.Close()
+
+	deadline := time.After(5 * time.Second)
+	ticker := time.NewTicker(50 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case event := <-source.Events():
+			if event.State == SubscriptionConnected {
+				continue
+			}
+			if event.Err == nil {
+				require.Equal(t, `{"recovered":true}`, event.Payload)
+				return
+			}
+		case <-ticker.C:
+			_ = s.client.Publish(ctx, "input", `{"recovered":true}`).Err()
+		case <-deadline:
+			t.Fatal("subscription did not recover")
+		}
+	}
+}
+
 // Opt-in: the runner must provide an isolated standalone Redis address. Keys
 // are unique and cleaned; no FLUSHDB/FLUSHALL or persisted services are used.
 func TestRealRedisBatchOutcomes(t *testing.T) {

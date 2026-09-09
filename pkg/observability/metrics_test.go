@@ -40,6 +40,9 @@ func TestMetricsHandlerReportsRuntimeCounters(t *testing.T) {
 	metrics.ActionSucceeded("updateStore")
 	metrics.ActionSkipped("updateStore")
 	metrics.ActionFailed("updateStore", errors.New("redis unavailable"))
+	metrics.RecordRedisDisconnect()
+	metrics.RecordRedisReconnect()
+	metrics.RecordEventSourceError()
 
 	response := httptest.NewRecorder()
 	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
@@ -55,4 +58,24 @@ func TestMetricsHandlerReportsRuntimeCounters(t *testing.T) {
 	assert.Contains(t, body, "rex_actions_skipped_total 1")
 	assert.Contains(t, body, "rex_action_failures_total 1")
 	assert.Contains(t, body, "rex_event_queue_lag_seconds NaN")
+	assert.Contains(t, body, `rex_event_processing_duration_seconds_bucket{le="0.025"} 1`)
+	assert.Contains(t, body, `rex_event_processing_duration_seconds_bucket{le="0.050"} 2`)
+	assert.Contains(t, body, `rex_event_processing_duration_seconds_bucket{le="+Inf"} 2`)
+	assert.Contains(t, body, "rex_event_processing_duration_seconds_count 2")
+	assert.Contains(t, body, "rex_redis_disconnects_total 1")
+	assert.Contains(t, body, "rex_redis_reconnects_total 1")
+	assert.Contains(t, body, "rex_event_source_errors_total 1")
+	assert.Contains(t, body, `rex_rule_outcomes_total{outcome="fired"} 1`)
+	assert.Contains(t, body, `rex_action_outcomes_total{outcome="failed"} 1`)
+}
+
+func TestEventLatencyHistogramPreservesSlowTail(t *testing.T) {
+	metrics := NewMetrics()
+	metrics.RecordEvent(2*time.Second, nil)
+
+	response := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	body := response.Body.String()
+	assert.Contains(t, body, `rex_event_processing_duration_seconds_bucket{le="1.000"} 0`)
+	assert.Contains(t, body, `rex_event_processing_duration_seconds_bucket{le="+Inf"} 1`)
 }

@@ -265,7 +265,10 @@ func measure(ctx context.Context, f fixture, o options, run int) (result, error)
 				return r, err
 			}
 		}
-		backend = store.NewRedisStore(o.address, "", 0)
+		backend, err = store.NewRedisStore(ctx, store.RedisOptions{Addr: o.address})
+		if err != nil {
+			return r, err
+		}
 	}
 	defer backend.Close()
 	for key, value := range facts {
