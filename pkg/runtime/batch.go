@@ -108,7 +108,7 @@ func LoadProgram(data []byte) (*Program, error) {
 						return false, err
 					}
 					identity := sha256.Sum256([]byte(fmt.Sprintf("%x/%d/%s", programDigest, i, nodePath)))
-					key := fmt.Sprintf("__rex_temporal_%x", identity)
+					key := fmt.Sprintf("%s%x", store.InternalStatePrefix, identity)
 					p.temporal[node] = temporalCondition{duration: duration, key: key}
 					p.dependencies[i] = append(p.dependencies[i], key)
 					nodeContainsTemporal = true

@@ -167,7 +167,7 @@ func (b Bundle) validate() (validatedBundle, error) {
 		seen[event.ID] = true
 		if program.Version() == compiler.TemporalVersion {
 			if event.At == "" {
-				return validatedBundle{}, fmt.Errorf("event %q requires processing time at for temporal replay", event.ID)
+				return validatedBundle{}, fmt.Errorf("event %q requires processing time in the \"at\" field for temporal replay", event.ID)
 			}
 			at, err := time.Parse(time.RFC3339Nano, event.At)
 			if err != nil {
