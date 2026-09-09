@@ -1,24 +1,54 @@
 package compiler
 
 import (
+	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
+	"math"
+	"sort"
 	"strings"
 	"unicode/utf8"
 )
 
-// BatchVersion is the current artifact/execution contract. Version remains the
-// legacy v3 jump-program version for explicitly compatible embedded callers.
+// BatchVersion is the untyped batch contract. TypedFactsVersion extends its
+// structured representation with fact declarations. Version remains the legacy
+// v3 jump-program version for explicitly compatible embedded callers.
 const BatchVersion uint32 = 4
+const TypedFactsVersion uint32 = 5
 const MaxProgramBytes = 8 << 20
 const MaxProgramRules = 10000
 const MaxConditionNodes = 100000
 const MaxDependencies = 65536
 const batchHeaderSize = 16
 
-// ParseBatch validates the bounded, script-free v4 source contract.
+// ErrTypedFactContract classifies source errors caused by v5 declarations.
+var ErrTypedFactContract = errors.New("typed fact contract")
+
+func IsTypedFactError(err error) bool { return errors.Is(err, ErrTypedFactContract) }
+
+func typedFactErrorf(format string, args ...interface{}) error {
+	return fmt.Errorf("%w: %s", ErrTypedFactContract, fmt.Sprintf(format, args...))
+}
+
+func IsBatchVersion(version uint32) bool {
+	return version == BatchVersion || version == TypedFactsVersion
+}
+
+func BatchArtifactVersion(data []byte) (uint32, error) {
+	if len(data) < batchHeaderSize {
+		return 0, fmt.Errorf("invalid batch artifact size")
+	}
+	version := binary.LittleEndian.Uint32(data)
+	if !IsBatchVersion(version) {
+		return 0, fmt.Errorf("unsupported batch artifact version %d", version)
+	}
+	return version, nil
+}
+
+// ParseBatch validates the bounded, script-free v4/v5 source contract.
 func ParseBatch(data []byte) (*Ruleset, error) {
 	if len(data) > MaxProgramBytes {
 		return nil, fmt.Errorf("program exceeds %d bytes", MaxProgramBytes)
@@ -53,6 +83,9 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 			depth--
 		}
 	}
+	if err := validateFactDeclarationShapes(data); err != nil {
+		return nil, err
+	}
 	rules, err := Parse(data)
 	if err != nil {
 		return nil, err
@@ -62,6 +95,9 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 	}
 	if len(rules.Rules) > MaxProgramRules {
 		return nil, fmt.Errorf("program exceeds %d rules", MaxProgramRules)
+	}
+	if err := validateFactDeclarations(rules); err != nil {
+		return nil, err
 	}
 
 	nodes := 0
@@ -108,8 +144,20 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 			return nil, fmt.Errorf("scripts are no longer supported: rule %q declares scripts", r.Name)
 		}
 		for actionIndex, a := range r.Actions {
+			if a.Value == nil {
+				return nil, fmt.Errorf("rule %q action %d: null action values are unsupported", r.Name, actionIndex)
+			}
 			if v, ok := a.Value.(string); ok && strings.HasPrefix(v, "{") && strings.HasSuffix(v, "}") {
 				return nil, fmt.Errorf("scripts are no longer supported: rule %q action %d calls %q", r.Name, actionIndex, v)
+			}
+			if rules.Facts != nil {
+				declaration, ok := rules.Facts[a.Target]
+				if !ok {
+					return nil, typedFactErrorf("rule %q action %d target %q is undeclared", r.Name, actionIndex, a.Target)
+				}
+				if !declaration.Accepts(a.Value) {
+					return nil, typedFactErrorf("rule %q action %d target %q requires %s", r.Name, actionIndex, a.Target, declaration.Type)
+				}
 			}
 		}
 	}
@@ -117,6 +165,121 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 		return nil, fmt.Errorf("program exceeds 65536 dependencies")
 	}
 	return rules, nil
+}
+
+func validateFactDeclarations(rules *Ruleset) error {
+	if rules.Facts == nil {
+		return nil
+	}
+	if len(rules.Facts) == 0 || len(rules.Facts) > MaxDependencies {
+		return typedFactErrorf("declarations must contain 1..%d facts", MaxDependencies)
+	}
+	names := make([]string, 0, len(rules.Facts))
+	for name := range rules.Facts {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		declaration := rules.Facts[name]
+		if err := validateBytecodeString("Fact declaration name", name); err != nil {
+			return typedFactErrorf("declaration %q: %v", name, err)
+		}
+		if !declaration.Valid() {
+			return typedFactErrorf("declaration %q has unsupported type %q", name, declaration.Type)
+		}
+	}
+	var check func([]*ConditionOrGroup) error
+	check = func(nodes []*ConditionOrGroup) error {
+		for _, node := range nodes {
+			if node.Fact != "" {
+				declaration, ok := rules.Facts[node.Fact]
+				if !ok {
+					return typedFactErrorf("condition fact %q is undeclared", node.Fact)
+				}
+				if !declaration.Accepts(node.Value) {
+					return typedFactErrorf("condition fact %q requires a %s constant", node.Fact, declaration.Type)
+				}
+			}
+			if err := check(node.All); err != nil {
+				return err
+			}
+			if err := check(node.Any); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, rule := range rules.Rules {
+		if err := check(rule.Conditions.All); err != nil {
+			return err
+		}
+		if err := check(rule.Conditions.Any); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateFactDeclarationShapes(data []byte) error {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil // The authoritative parser reports malformed JSON with location.
+	}
+	raw, present := root["facts"]
+	if !present {
+		return nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return typedFactErrorf("declarations must be an object")
+	}
+	var declarations map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &declarations); err != nil || declarations == nil {
+		return typedFactErrorf("declarations must be an object")
+	}
+	if len(declarations) == 0 || len(declarations) > MaxDependencies {
+		return typedFactErrorf("declarations must contain 1..%d facts", MaxDependencies)
+	}
+	names := make([]string, 0, len(declarations))
+	for name := range declarations {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		declarationJSON := declarations[name]
+		var declaration FactDeclaration
+		decoder := json.NewDecoder(bytes.NewReader(declarationJSON))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&declaration); err != nil {
+			return typedFactErrorf("declaration %q: %v", name, err)
+		}
+		if !declaration.Valid() {
+			return typedFactErrorf("declaration %q has unsupported type %q", name, declaration.Type)
+		}
+	}
+	return nil
+}
+
+func (d FactDeclaration) Valid() bool {
+	return d.Type == FactNumber || d.Type == FactString || d.Type == FactBoolean
+}
+
+func (d FactDeclaration) Accepts(value interface{}) bool {
+	if value == nil {
+		return d.Nullable
+	}
+	switch d.Type {
+	case FactNumber:
+		number, ok := value.(float64)
+		return ok && !math.IsNaN(number) && !math.IsInf(number, 0)
+	case FactString:
+		_, ok := value.(string)
+		return ok
+	case FactBoolean:
+		_, ok := value.(bool)
+		return ok
+	default:
+		return false
+	}
 }
 
 // CompileBatch preserves boolean grouping in a deterministic structured IR.
@@ -134,7 +297,11 @@ func CompileBatch(source []byte) ([]byte, error) {
 		return nil, fmt.Errorf("canonical program exceeds byte limit")
 	}
 	out := make([]byte, batchHeaderSize, len(payload)+batchHeaderSize)
-	binary.LittleEndian.PutUint32(out, BatchVersion)
+	version := BatchVersion
+	if rules.Facts != nil {
+		version = TypedFactsVersion
+	}
+	binary.LittleEndian.PutUint32(out, version)
 	binary.LittleEndian.PutUint32(out[4:], crc32.ChecksumIEEE(payload))
 	binary.LittleEndian.PutUint32(out[8:], uint32(len(payload)))
 	copy(out[12:], "REXB")
@@ -143,9 +310,10 @@ func CompileBatch(source []byte) ([]byte, error) {
 
 func DecodeBatch(data []byte) (*Ruleset, error) {
 	if len(data) < batchHeaderSize || len(data) > MaxProgramBytes+batchHeaderSize {
-		return nil, fmt.Errorf("invalid v4 artifact size")
+		return nil, fmt.Errorf("invalid batch artifact size")
 	}
-	if binary.LittleEndian.Uint32(data) != BatchVersion || string(data[12:16]) != "REXB" {
+	version := binary.LittleEndian.Uint32(data)
+	if !IsBatchVersion(version) || string(data[12:16]) != "REXB" {
 		return nil, fmt.Errorf("unsupported batch artifact header")
 	}
 	payload := data[batchHeaderSize:]
@@ -155,7 +323,17 @@ func DecodeBatch(data []byte) (*Ruleset, error) {
 	if binary.LittleEndian.Uint32(data[4:]) != crc32.ChecksumIEEE(payload) {
 		return nil, fmt.Errorf("batch artifact checksum mismatch")
 	}
-	return ParseBatch(payload)
+	rules, err := ParseBatch(payload)
+	if err != nil {
+		return nil, err
+	}
+	if version == BatchVersion && rules.Facts != nil {
+		return nil, fmt.Errorf("v4 artifact cannot contain typed fact declarations")
+	}
+	if version == TypedFactsVersion && rules.Facts == nil {
+		return nil, fmt.Errorf("v5 artifact requires typed fact declarations")
+	}
+	return rules, nil
 }
 
 // validateBatchShapes checks field presence that the shared legacy AST loses

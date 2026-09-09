@@ -10,6 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
+	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
 )
 
@@ -121,6 +122,30 @@ func TestProcessNextDurableNeverDeadLettersInfrastructureFailure(t *testing.T) {
 
 func fmtProgramMismatch() error {
 	return errors.Join(store.ErrDurableProgramMismatch, errors.New("different program"))
+}
+
+func TestProcessNextDurableValidatesTypedInputBeforePersistence(t *testing.T) {
+	source := []byte(`{"facts":{"a":{"type":"number"},"out":{"type":"boolean"}},"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"GT","value":0}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	artifact, err := compiler.CompileBatch(source)
+	require.NoError(t, err)
+	memory, err := store.NewMemoryStore(nil)
+	require.NoError(t, err)
+	engine, err := NewEngineFromBytes(artifact, memory, 0)
+	require.NoError(t, err)
+	queue := &durableQueueProbe{event: store.DurableEvent{ID: "typed-1", Payload: `{"a":"wrong"}`}, maxAttempts: 2}
+
+	result, err := engine.ProcessNextDurable(context.Background(), queue)
+	require.ErrorContains(t, err, "validate durable event")
+	require.True(t, result.RetryPending)
+	result, err = engine.ProcessNextDurable(context.Background(), queue)
+	require.NoError(t, err)
+	require.True(t, result.DeadLettered)
+	require.Equal(t, 1, queue.dead)
+	require.Zero(t, queue.inputs)
+	require.Zero(t, queue.completed)
+	facts, err := memory.Snapshot()
+	require.NoError(t, err)
+	require.Empty(t, facts)
 }
 
 func TestRealRedisDurablePoisonThenProgress(t *testing.T) {

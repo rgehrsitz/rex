@@ -20,11 +20,11 @@ func newBatchEngine(data []byte, backend store.ContextStore) (*Engine, error) {
 	}
 	reader, ok := backend.(store.SnapshotReader)
 	if !ok {
-		return nil, fmt.Errorf("v4 requires SnapshotReader adapter")
+		return nil, fmt.Errorf("batch execution requires SnapshotReader adapter")
 	}
 	writer, ok := backend.(store.Committer)
 	if !ok {
-		return nil, fmt.Errorf("v4 requires Committer adapter")
+		return nil, fmt.Errorf("batch execution requires Committer adapter")
 	}
 	coordinator, err := NewCoordinator(program, reader, writer, DefaultLimits())
 	if err != nil {
@@ -38,7 +38,7 @@ func newBatchEngine(data []byte, backend store.ContextStore) (*Engine, error) {
 func (e *Engine) ProgramID() string { return e.programID }
 func (e *Engine) BytecodeVersion() uint32 {
 	if e.coordinator != nil {
-		return compiler.BatchVersion
+		return e.coordinator.program.Version()
 	}
 	if len(e.bytecode) >= 4 {
 		return binary.LittleEndian.Uint32(e.bytecode)
@@ -46,7 +46,7 @@ func (e *Engine) BytecodeVersion() uint32 {
 	return 0
 }
 
-// Snapshot replaces mutable Engine.Facts. V4 retains no fact state; inspect the
+// Snapshot replaces mutable Engine.Facts. Batch execution retains no fact state; inspect the
 // explicit ChainResult returned by EvaluateBatch instead. V3 returns a copy.
 func (e *Engine) Snapshot() map[string]interface{} {
 	out := make(map[string]interface{}, len(e.facts))
@@ -74,10 +74,10 @@ func copyFactValue(v interface{}) interface{} {
 	}
 }
 
-// SetBatchLimits is initialization-only; v4 never permits unbounded limits.
+// SetBatchLimits is initialization-only; batch execution never permits unbounded limits.
 func (e *Engine) SetBatchLimits(limits Limits) error {
 	if e.coordinator == nil {
-		return fmt.Errorf("batch limits require v4")
+		return fmt.Errorf("batch limits require a batch artifact")
 	}
 	if err := limits.Validate(); err != nil {
 		return err
@@ -88,7 +88,7 @@ func (e *Engine) SetBatchLimits(limits Limits) error {
 }
 func (e *Engine) EvaluateBatch(ctx context.Context, event map[string]interface{}) (ChainResult, error) {
 	if e.coordinator == nil {
-		return ChainResult{}, fmt.Errorf("batch evaluation requires v4 artifact")
+		return ChainResult{}, fmt.Errorf("batch evaluation requires a batch artifact")
 	}
 	metadata, _ := eventcontext.MetadataFromContext(ctx)
 	if metadata.Kind == "committed_output" {

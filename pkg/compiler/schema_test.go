@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestV4SchemaParserAgreement(t *testing.T) {
+func TestSchemaParserAgreement(t *testing.T) {
 	_, sourceFile, _, ok := runtime.Caller(0)
 	require.True(t, ok)
 	packageDir := filepath.Dir(sourceFile)
@@ -38,6 +38,14 @@ func TestV4SchemaParserAgreement(t *testing.T) {
 		strings.Replace(v4Source, `"operator":"EQ"`, `"operator":"LT"`, 1),
 		strings.Replace(v4Source, `"operator":"EQ"`, `"operator":"NEQ"`, 1),
 		strings.Replace(v4Source, `"all":[`, `"all":[{"any":[]},`, 1),
+		v5Source,
+		strings.Replace(v5Source, `"facts":{"a":{"type":"boolean"},"out":{"type":"number"}}`, `"facts":null`, 1),
+		strings.Replace(v5Source, `"facts":{"a":{"type":"boolean"},"out":{"type":"number"}}`, `"facts":{}`, 1),
+		strings.Replace(v5Source, `"type":"boolean"`, `"type":"object"`, 1),
+		strings.Replace(v5Source, `"type":"boolean"`, `"type":"boolean","nullable":"yes"`, 1),
+		strings.Replace(v5Source, `"type":"boolean"`, `"type":"boolean","extra":true`, 1),
+		strings.Replace(v5Source, `"a":`, `"`+strings.Repeat("a", 256)+`":`, 1),
+		strings.Replace(strings.Replace(v5Source, `"type":"number"`, `"type":"number","nullable":true`, 1), `"value":1`, `"value":null`, 1),
 	}
 	for i, source := range cases {
 		var value interface{}
@@ -47,7 +55,7 @@ func TestV4SchemaParserAgreement(t *testing.T) {
 		require.Equal(t, schemaErr == nil, parserErr == nil, "case %d schema=%v parser=%v", i, schemaErr, parserErr)
 	}
 
-	corpusData, err := os.ReadFile(filepath.Join(packageDir, "testdata", "schema-v4.json"))
+	corpusData, err := os.ReadFile(filepath.Join(packageDir, "testdata", "schema-batch.json"))
 	require.NoError(t, err)
 	var corpus []struct {
 		Name     string          `json:"name"`

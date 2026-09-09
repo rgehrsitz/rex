@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "name": "typed-high-temperature",
+  "initial_state": {"note": null},
+  "events": [
+    {"id": "reading-1", "facts": {"temperature": 31.5}}
+  ],
+  "expect": {
+    "final_state": {"note": null, "temperature": 31.5, "alert": true},
+    "actions": [
+      {"rule": "high-temperature", "target": "alert", "value": true}
+    ]
+  }
+}

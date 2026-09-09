@@ -23,19 +23,25 @@ const (
 	Indeterminate Truth = "unknown"
 )
 
-// Program contains a private, immutable copy of a validated v4 artifact.
+// Program contains a private, immutable copy of a validated batch artifact.
 type Program struct {
 	rules        []compiler.Rule
 	dependents   map[string][]int
 	dependencies [][]string
+	declarations map[string]compiler.FactDeclaration
+	version      uint32
 }
 
 func LoadProgram(data []byte) (*Program, error) {
+	version, err := compiler.BatchArtifactVersion(data)
+	if err != nil {
+		return nil, err
+	}
 	rules, err := compiler.DecodeBatch(data)
 	if err != nil {
 		return nil, err
 	}
-	p := &Program{rules: rules.Rules, dependents: map[string][]int{}, dependencies: make([][]string, len(rules.Rules))}
+	p := &Program{rules: rules.Rules, declarations: rules.Facts, version: version, dependents: map[string][]int{}, dependencies: make([][]string, len(rules.Rules))}
 	nodes := 0
 	unique := map[string]bool{}
 	var visit func([]*compiler.ConditionOrGroup, map[string]bool) error
@@ -76,6 +82,19 @@ func LoadProgram(data []byte) (*Program, error) {
 		return nil, fmt.Errorf("program exceeds 65536 dependencies")
 	}
 	return p, nil
+}
+
+func (p *Program) Version() uint32 { return p.version }
+
+func (p *Program) FactDeclarations() map[string]compiler.FactDeclaration {
+	if p.declarations == nil {
+		return nil
+	}
+	out := make(map[string]compiler.FactDeclaration, len(p.declarations))
+	for name, declaration := range p.declarations {
+		out[name] = declaration
+	}
+	return out
 }
 
 type Limits struct {
@@ -159,6 +178,32 @@ func validateEvent(event map[string]interface{}, l Limits) error {
 		size += n
 		if size > l.EventBytes {
 			return fmt.Errorf("event exceeds byte limit")
+		}
+	}
+	return nil
+}
+
+func (p *Program) validateEvent(event map[string]interface{}, limits Limits) error {
+	if err := validateEvent(event, limits); err != nil {
+		return err
+	}
+	return p.validateFactTypes(event)
+}
+
+func (p *Program) validateFactTypes(facts map[string]interface{}) error {
+	if p.declarations == nil {
+		return nil
+	}
+	for name, value := range facts {
+		declaration, ok := p.declarations[name]
+		if !ok {
+			return fmt.Errorf("typed fact contract: fact %q is undeclared", name)
+		}
+		if !declaration.Accepts(value) {
+			if value == nil {
+				return fmt.Errorf("typed fact contract: fact %q is null; expected %s", name, declaration.Type)
+			}
+			return fmt.Errorf("typed fact contract: fact %q must be %s", name, declaration.Type)
 		}
 	}
 	return nil
@@ -267,7 +312,7 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 	if err := limits.Validate(); err != nil {
 		return empty, budget, err
 	}
-	if err := validateEvent(event, limits); err != nil {
+	if err := p.validateEvent(event, limits); err != nil {
 		return empty, budget, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -294,6 +339,11 @@ func (p *Program) Evaluate(ctx context.Context, snapshot map[string]store.Fact, 
 			f.Value = nil
 		default:
 			return empty, budget, fmt.Errorf("invalid snapshot state for %q", k)
+		}
+		if declaration, ok := p.declarations[k]; ok {
+			if (f.State == store.Present && !declaration.Accepts(f.Value)) || (f.State == store.Null && !declaration.Nullable) {
+				f = store.Fact{State: store.Invalid}
+			}
 		}
 		n, err := fieldBytes(k, f.Value, limits.SnapshotBytes)
 		if err != nil {
@@ -467,7 +517,7 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		}
 		result.ChainID = hex.EncodeToString(id[:])
 	}
-	if err := validateEvent(event, c.limits); err != nil {
+	if err := c.program.validateEvent(event, c.limits); err != nil {
 		return result, err
 	}
 	for round := 0; len(event) > 0; round++ {
@@ -477,7 +527,7 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		if err := validateEvent(event, c.limits); err != nil {
+		if err := c.program.validateEvent(event, c.limits); err != nil {
 			return result, err
 		}
 		roundCtx := store.WithEvaluationRound(ctx, round)
@@ -506,7 +556,7 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 		for _, w := range eval.Writes {
 			next[w.Key] = w.Value
 		}
-		if err := validateEvent(next, c.limits); err != nil {
+		if err := c.program.validateEvent(next, c.limits); err != nil {
 			return result, fmt.Errorf("derived event: %w", err)
 		}
 		if err := ctx.Err(); err != nil {
@@ -551,10 +601,32 @@ func (c *Coordinator) Process(ctx context.Context, chainID string, event map[str
 	return result, nil
 }
 
-// ValidateEvent checks a proposed input against v4 scalar and payload limits.
+// ValidateEvent checks a proposed input against batch scalar and payload limits.
 func ValidateEvent(event map[string]interface{}, limits Limits) error {
 	if err := limits.Validate(); err != nil {
 		return err
 	}
 	return validateEvent(event, limits)
+}
+
+// ValidateProgramEvent applies both generic v4/v5 bounds and any v5 typed fact
+// declarations. Missing declarations are a closed-world input error.
+func ValidateProgramEvent(program *Program, event map[string]interface{}, limits Limits) error {
+	if program == nil {
+		return fmt.Errorf("program is required")
+	}
+	if err := limits.Validate(); err != nil {
+		return err
+	}
+	return program.validateEvent(event, limits)
+}
+
+// ValidateProgramFacts applies a v5 declaration contract to an arbitrary fact
+// set such as replay initial state. Empty sets are valid because missing is a
+// first-class fact state.
+func ValidateProgramFacts(program *Program, facts map[string]interface{}) error {
+	if program == nil {
+		return fmt.Errorf("program is required")
+	}
+	return program.validateFactTypes(facts)
 }

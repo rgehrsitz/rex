@@ -39,7 +39,7 @@ configured approximate maximum lengths.
 
 ## Configuration and cutover
 
-Compile and validate a v4 artifact first. Durable mode rejects v3 artifacts.
+Compile and validate a v4 or v5 batch artifact first. Durable mode rejects v3 artifacts.
 Configure one producer and one consumer together:
 
 ```json
@@ -90,6 +90,13 @@ Watch `/readyz` and these metrics during the drain:
 
 The worker samples consumer-group statistics at the Redis health-check interval
 (one query per second by default), rather than once per event.
+
+A v5 event with an undeclared fact, wrong type, or disallowed null is rejected
+before its input facts are journaled or committed to state. It follows the same
+bounded poison policy as malformed input: each delivery consumes an attempt and
+the event moves to `dead_letter_stream` at `max_attempts`. Monitor the dead-letter
+and retry metrics during a typed producer rollout; validation failures are not
+silently dropped.
 
 ## Recovery checks
 

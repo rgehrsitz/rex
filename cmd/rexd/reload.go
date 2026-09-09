@@ -121,8 +121,8 @@ func (r *rulesetReloader) reload(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("validate reload candidate: %w", err)
 	}
-	if candidate.BytecodeVersion() != 4 {
-		return "", fmt.Errorf("ruleset reload requires a v4 artifact")
+	if !compiler.IsBatchVersion(candidate.BytecodeVersion()) {
+		return "", fmt.Errorf("ruleset reload requires a batch artifact")
 	}
 	if err := configureEngine(candidate, r.config); err != nil {
 		return "", fmt.Errorf("configure reload candidate: %w", err)
@@ -203,8 +203,8 @@ func (r *rulesetReloader) loadHistory() error {
 			return fmt.Errorf("read historical ruleset %s: %w", path, err)
 		}
 		engine, err := runtime.NewEngineFromBytes(data, r.store, r.config.PriorityThreshold)
-		if err != nil || engine.BytecodeVersion() != 4 {
-			return fmt.Errorf("load historical ruleset %s: valid v4 artifact required", path)
+		if err != nil || !compiler.IsBatchVersion(engine.BytecodeVersion()) {
+			return fmt.Errorf("load historical ruleset %s: valid batch artifact required", path)
 		}
 		if filepath.Base(path) != engine.ProgramID()+".bytecode" {
 			return fmt.Errorf("historical ruleset %s does not match its program digest", path)

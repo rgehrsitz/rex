@@ -6,6 +6,7 @@ import (
 	"sort"
 	"sync"
 
+	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/store"
 )
 
@@ -44,8 +45,8 @@ func (m *EngineManager) BytecodeVersion() uint32 {
 // Register makes an archived program available to pinned durable retries
 // without changing the program used for new events.
 func (m *EngineManager) Register(engine *Engine) error {
-	if engine == nil || engine.ProgramID() == "" || engine.BytecodeVersion() != 4 {
-		return fmt.Errorf("historical engine must contain a v4 program ID")
+	if engine == nil || engine.ProgramID() == "" || !compiler.IsBatchVersion(engine.BytecodeVersion()) {
+		return fmt.Errorf("historical engine must contain a batch program ID")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -60,8 +61,8 @@ func (m *EngineManager) Register(engine *Engine) error {
 // Swap waits for the current event boundary and then publishes candidate for
 // all subsequently received events.
 func (m *EngineManager) Swap(candidate *Engine) error {
-	if candidate == nil || candidate.ProgramID() == "" || candidate.BytecodeVersion() != 4 {
-		return fmt.Errorf("reload candidate must be a validated v4 engine")
+	if candidate == nil || candidate.ProgramID() == "" || !compiler.IsBatchVersion(candidate.BytecodeVersion()) {
+		return fmt.Errorf("reload candidate must be a validated batch engine")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()

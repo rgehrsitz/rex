@@ -1,9 +1,9 @@
 # REX-M5 authoring tools
 
 All commands below run locally without Redis. Build `rexc` and `rexd` from this
-revision; the new tools require execution contract v4. The legacy `-legacy-v3`
+revision; the tools support batch execution contracts v4 and v5. The legacy `-legacy-v3`
 compiler remains available but v3 replay/jump disassembly is not supported by
-these tools. V4 explain describes structured IR: v4 has no bytecode jumps.
+these tools. Batch explain describes structured IR: v4/v5 have no bytecode jumps.
 
 ## Explain and compile
 

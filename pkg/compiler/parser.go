@@ -316,6 +316,9 @@ func validateAction(action *Action) error {
 	if err := validateBytecodeString("Action target", action.Target); err != nil {
 		return err
 	}
+	if action.Value == nil {
+		return logging.NewError(logging.ErrorTypeCompile, "Null action values are unsupported", nil, map[string]interface{}{"action_type": action.Type})
+	}
 	if value, ok := action.Value.(string); ok {
 		if err := validateBytecodeString("Action string value", value); err != nil {
 			return err

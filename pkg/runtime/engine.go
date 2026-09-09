@@ -49,7 +49,7 @@ func (e *Engine) SetScriptsEnabled(enabled bool) error {
 
 // SetMaxActionsPerEvaluation caps actions executed for one rule evaluation.
 // A non-positive limit disables the cap only for legacy v3 embedded uses.
-// V4 limits must remain positive; use SetBatchLimits for validated configuration.
+// Batch limits must remain positive; use SetBatchLimits for validated configuration.
 func (e *Engine) SetMaxActionsPerEvaluation(limit int) error {
 	if e.coordinator != nil {
 		limits := e.coordinator.limits
@@ -87,7 +87,7 @@ func NewEngineFromBytes(bytecode []byte, store store.ContextStore, priorityThres
 		return nil, fmt.Errorf("artifact exceeds byte limit")
 	}
 	bytecode = append([]byte(nil), bytecode...)
-	if len(bytecode) >= 4 && binary.LittleEndian.Uint32(bytecode) == compiler.BatchVersion {
+	if len(bytecode) >= 4 && compiler.IsBatchVersion(binary.LittleEndian.Uint32(bytecode)) {
 		return newBatchEngine(bytecode, store)
 	}
 	if err := validateBytecode(bytecode); err != nil {
@@ -222,6 +222,15 @@ func NewEngineFromBytes(bytecode []byte, store store.ContextStore, priorityThres
 	logging.Logger.Info().Msg("Engine initialized from bytecode")
 
 	return engine, nil
+}
+
+// ValidateBatchEvent checks an event against the loaded batch contract without
+// reading or writing state. Durable adapters use it before persisting input.
+func (e *Engine) ValidateBatchEvent(event map[string]interface{}) error {
+	if e.coordinator == nil {
+		return fmt.Errorf("event validation requires a batch artifact")
+	}
+	return e.coordinator.program.validateEvent(event, e.coordinator.limits)
 }
 
 func (e *Engine) ProcessFactUpdate(factName string, factValue interface{}) {
