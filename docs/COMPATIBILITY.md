@@ -9,7 +9,7 @@ turn an upstream dependency's broad compatibility claim into a Rex guarantee.
 | --- | --- | --- | --- |
 | Release binaries | Linux, macOS, and Windows on `amd64` and `arm64` | Every tagged release cross-builds every listed archive | Download the archive matching the target OS and CPU. |
 | Source build toolchain | Go `1.26.6` | CI uses the toolchain pinned by `go.mod` | The `go` directive is `1.26.0`; the toolchain directive selects `1.26.6`. |
-| Redis transport | Redis Pub/Sub through `github.com/redis/go-redis/v9` | Unit and integration-style tests use `miniredis` | Validate a production Redis version and deployment topology in staging before treating it as supported for your environment. |
+| Redis transport | Redis Pub/Sub through `github.com/redis/go-redis/v9`, with verified TLS 1.2+ when enabled | Unit and integration-style tests use plain-text and TLS `miniredis`, including disconnect/reconnect | Validate a production Redis version and deployment topology in staging before treating it as supported for your environment; see [M3 operations](M3_OPERATIONS.md). |
 | Rules source | JSON rulesets accepted by the current `rexc` | Parser, compiler, and fuzz tests | Preserve the source ruleset with every deployed bytecode artifact. |
 | Bytecode | V4 default; v3 explicit compatibility | Compiler and runtime validation tests | `rexd` rejects versions 1, 2, and all unknown versions. Recompile retained JSON rulesets with the current `rexc`; see [bytecode compatibility](BYTECODE_COMPATIBILITY.md). |
 | Scripts | Removed on every platform and execution contract | Source, compiler-API, artifact-loader, and daemon-config rejection tests | Migrate calculations to producer facts or declarative rules; see [M6 migration](M6_SCRIPT_REMOVAL.md). |

@@ -2,8 +2,7 @@
 
 Created: 2026-09-07. Last planning review: 2026-09-08.
 
-Status: REX-M0, M1, M2, M4, M5, and M6 are complete; REX-M3 remains an
-independent operational-hardening lane.
+Status: REX-M0 through M6 are complete. REX-M7 is the next milestone.
 
 ## Purpose and authority
 
@@ -55,8 +54,8 @@ complete only when its acceptance criteria and linked evidence are present.
 | --- | --- | --- | --- | --- |
 | REX-M0 | Record an implementation baseline | None | Complete | [Local baseline report](baselines/rex-m0/README.md): checks, 108 measured runs, source fingerprints, and review budgets. Next: M1. |
 | REX-M1 | Improve lookup and Redis efficiency | M0 | Complete | [Implementation and performance report](baselines/rex-m1/README.md): equivalent outputs, no budget flags, and documented map-memory tradeoff. Next: M2. |
-| REX-M2 | Establish an independent semantics safety net | M0 | Complete | [Current-v3 safety net](../internal/semantics/README.md): memory store, 12 scenarios, 128 seeds, truth tables, mutation checks, and disassembly goldens. Local validation complete; review pending. Next: M4. |
-| REX-M3 | Harden deployment and operational visibility | M0 | Planned | Fix startup errors, TLS/secrets, readiness, and latency visibility. |
+| REX-M2 | Establish an independent semantics safety net | M0 | Complete | [PR #34](https://github.com/rgehrsitz/rex/pull/34); [current-v3 safety net](../internal/semantics/README.md): memory store, scenarios, generated cases, truth tables, mutation checks, and disassembly goldens. |
+| REX-M3 | Harden deployment and operational visibility | M0 | Complete | [Operations contract](M3_OPERATIONS.md): recoverable startup, verified TLS/env configuration, continuous readiness, bounded metrics, routing validation, and Pub/Sub limits. Local lifecycle and full-repository validation complete; review pending. Next: M7. |
 | REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Complete | [PR #35](https://github.com/rgehrsitz/rex/pull/35), `f6e036c`; [migration](M4_MIGRATION.md). |
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
@@ -176,21 +175,21 @@ tests; deterministic disassembly fixtures. Public CLI polish belongs to M5.
 **Outcome:** startup and dependency failures are recoverable and visible, and
 operators can identify slow or stalled processing.
 
-- [ ] Make Redis construction return `(*RedisStore, error)`, pass startup
+- [x] Make Redis construction return `(*RedisStore, error)`, pass startup
   cancellation/deadlines, update factories, and close resources on failure
   (REX-010).
-- [ ] Add verified TLS configuration and documented environment-variable mapping
+- [x] Add verified TLS configuration and documented environment-variable mapping
   for credentials and connection settings; define precedence and redact secrets
   (REX-011).
-- [ ] Make readiness track ongoing subscription/connectivity and processing
+- [x] Make readiness track ongoing subscription/connectivity and processing
   readiness, including disconnect/reconnect transitions. Keep liveness separate.
-- [ ] Add latency histograms and bounded-cardinality rule/action outcome metrics.
+- [x] Add latency histograms and bounded-cardinality rule/action outcome metrics.
   Make detailed traces configurable without hiding failures.
-- [ ] Document and enforce routing from output facts to configured channels;
+- [x] Document and enforce routing from output facts to configured channels;
   report unreachable outputs before deployment where statically detectable.
-- [ ] Document payload limits and overload behavior for Pub/Sub. Expose available
+- [x] Document payload limits and overload behavior for Pub/Sub. Expose available
   drop/disconnect signals; retain unavailable queue lag as unavailable.
-- [ ] Resolve or explicitly disposition remaining REX-013 tool/CI housekeeping
+- [x] Resolve or explicitly disposition remaining REX-013 tool/CI housekeeping
   using the current repository state rather than repeating historical findings.
 
 **Acceptance criteria:** connection refusal, invalid TLS, canceled startup,
@@ -201,6 +200,18 @@ metric labels remain bounded. Update audit findings individually with evidence.
 
 **Suggested PRs:** constructor/context; TLS and environment configuration;
 readiness; metrics; routing/limits. Keep dependency upgrades separate.
+
+**Completed locally 2026-09-08:** Redis startup now returns errors under caller
+deadlines, supports verified TLS and environment-injected credentials, and
+cleans up partial initialization. Readiness follows real disconnect/reconnect
+transitions while liveness remains process-only. Direct Pub/Sub reads remove the
+client library's buffered-send timeout/drop path and close deterministically.
+Fixed-bucket latency and bounded outcome metrics expose slow tails without
+dynamic labels. Legacy empty-prefix outputs fail before mutation; other v3 and
+v4 routes, payload limits, backpressure, and Pub/Sub limitations are recorded in
+the [operations contract](M3_OPERATIONS.md). Actual refusal, cancellation, TLS,
+disconnect/reconnect, and shutdown paths have regression coverage. Add the PR
+and merge revision after review.
 
 ## REX-M4 — Introduce deterministic batch evaluation and adapter boundaries
 

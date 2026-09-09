@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"errors"
 	"flag"
 	"fmt"
 	"math"
@@ -31,8 +33,8 @@ import (
 // Mock implementations for testing purposes
 type MockStoreFactory struct{}
 
-func (f *MockStoreFactory) NewStore(addr, password string, db int) store.ContextStore {
-	return store.NewRedisStore(addr, password, db)
+func (f *MockStoreFactory) NewStore(ctx context.Context, options store.RedisOptions) (store.ContextStore, error) {
+	return store.NewRedisStore(ctx, options)
 }
 
 type MockEngineFactory struct{}
@@ -44,6 +46,28 @@ func (f *MockEngineFactory) NewEngine(bytecodeFile string, store store.ContextSt
 
 type actionCountingStore struct {
 	publishCount int
+}
+
+type readinessProbeStore struct {
+	actionCountingStore
+	pingErr error
+	source  *readinessProbeSource
+}
+
+type readinessProbeSource struct {
+	events chan store.Event
+	closed bool
+}
+
+func (s *readinessProbeStore) Ping(context.Context) error { return s.pingErr }
+func (s *readinessProbeStore) OpenEvents(context.Context, ...string) (store.EventSource, error) {
+	return s.source, nil
+}
+func (s *readinessProbeSource) Events() <-chan store.Event { return s.events }
+func (s *readinessProbeSource) Close() error {
+	s.closed = true
+	close(s.events)
+	return nil
 }
 
 type traceCapturingEngine struct {
@@ -159,6 +183,29 @@ func TestParseConfigDefaultsScriptsDisabled(t *testing.T) {
 	assert.True(t, config.TraceConditions)
 }
 
+func TestParseConfigEnvironmentOverridesFile(t *testing.T) {
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	t.Setenv("REX_REDIS_ADDRESS", "env.example:6380")
+	t.Setenv("REX_REDIS_USERNAME", "env-user")
+	t.Setenv("REX_REDIS_PASSWORD", "env-secret")
+	t.Setenv("REX_REDIS_CHANNELS", "one, two")
+	t.Setenv("REX_REDIS_TLS_ENABLED", "true")
+	t.Setenv("REX_REDIS_TLS_SERVER_NAME", "redis.internal")
+
+	path := t.TempDir() + "/config.json"
+	require.NoError(t, os.WriteFile(path, []byte(`{"redis":{"address":"file.example:6379","username":"file-user","password":"file-secret","channels":["file"]}}`), 0o600))
+	config, err := parseConfig([]string{"rexd", "--config", path})
+	require.NoError(t, err)
+	assert.Equal(t, "env.example:6380", config.RedisAddress)
+	assert.Equal(t, "env-user", config.RedisUsername)
+	assert.Equal(t, "env-secret", config.RedisPassword)
+	assert.Equal(t, []string{"one", "two"}, config.RedisChannels)
+	assert.True(t, config.RedisTLSEnabled)
+	assert.Equal(t, "redis.internal", config.RedisTLSServerName)
+}
+
 func TestSetupDependencies(t *testing.T) {
 	// Reset the flag set before each test run
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
@@ -177,7 +224,7 @@ func TestSetupDependencies(t *testing.T) {
 		MaxEventHops:            16,
 	}
 
-	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{})
+	deps, err := setupDependencies(context.Background(), config, &MockStoreFactory{}, &MockEngineFactory{})
 	require.NoError(t, err)
 
 	assert.NotNil(t, deps.Store)
@@ -197,9 +244,22 @@ func TestSetupDependenciesRejectsScriptsEnabled(t *testing.T) {
 		MaxEventHops:            16,
 	}
 
-	deps, err := setupDependencies(config, &MockStoreFactory{}, &MockEngineFactory{})
+	deps, err := setupDependencies(context.Background(), config, &MockStoreFactory{}, &MockEngineFactory{})
 	assert.Nil(t, deps)
 	assert.ErrorContains(t, err, "scripts are no longer supported")
+}
+
+func TestBuildRedisTLSConfigDerivesServerNameFromAddress(t *testing.T) {
+	tlsConfig, err := buildRedisTLSConfig(&Config{RedisTLSEnabled: true, RedisAddress: "[2001:db8::1]:6380"})
+	require.NoError(t, err)
+	assert.Equal(t, "2001:db8::1", tlsConfig.ServerName)
+	assert.Equal(t, uint16(tls.VersionTLS12), tlsConfig.MinVersion)
+
+	tlsConfig, err = buildRedisTLSConfig(&Config{
+		RedisTLSEnabled: true, RedisAddress: "redis.example:6380", RedisTLSServerName: "certificate.example",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "certificate.example", tlsConfig.ServerName)
 }
 
 func TestRunMainLoop(t *testing.T) {
@@ -215,8 +275,10 @@ func TestRunMainLoop(t *testing.T) {
 		RedisChannels: []string{"rex_updates"},
 	}
 
+	redisStore, err := store.NewRedisStore(context.Background(), store.RedisOptions{Addr: mr.Addr()})
+	require.NoError(t, err)
 	deps := &RexDependencies{
-		Store:  store.NewRedisStore(mr.Addr(), "", 0),
+		Store:  redisStore,
 		Engine: &runtime.Engine{},
 	}
 
@@ -313,7 +375,8 @@ func TestRunMainLoopWiresMetricsObserver(t *testing.T) {
 		}}},
 		Actions: []compiler.Action{{Type: "updateStore", Target: "status", Value: "hot"}},
 	}}}, factStore)
-	redisStore := store.NewRedisStore(mr.Addr(), "", 0)
+	redisStore, err := store.NewRedisStore(context.Background(), store.RedisOptions{Addr: mr.Addr()})
+	require.NoError(t, err)
 	defer redisStore.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -334,6 +397,55 @@ func TestRunMainLoopWiresMetricsObserver(t *testing.T) {
 	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
 	assert.Contains(t, response.Body.String(), "rex_rules_fired_total 1")
 	assert.Contains(t, response.Body.String(), "rex_actions_succeeded_total 1")
+	ready := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(ready, httptest.NewRequest(http.MethodGet, "/readyz", nil))
+	assert.Equal(t, http.StatusServiceUnavailable, ready.Code)
+	metrics.SetRedisReady(true)
+	assert.False(t, metrics.Ready(), "shutdown must reset both dependency states")
+}
+
+func TestRunMainLoopVerifiesRedisBeforeReadiness(t *testing.T) {
+	source := &readinessProbeSource{events: make(chan store.Event)}
+	probe := &readinessProbeStore{pingErr: errors.New("command path unavailable"), source: source}
+	metrics := observability.NewMetrics()
+
+	err := runMainLoopWithObservability(context.Background(), &RexDependencies{
+		Store: probe, Engine: &runtime.Engine{},
+	}, &Config{RedisChannels: []string{"input"}, RedisHealthTimeout: time.Second}, metrics)
+	require.ErrorContains(t, err, "readiness check after subscription")
+	assert.True(t, source.closed)
+	assert.False(t, metrics.Ready())
+}
+
+func TestRedisReadinessTracksDisconnectAndReconnect(t *testing.T) {
+	mr, err := miniredis.Run()
+	require.NoError(t, err)
+	redisStore, err := store.NewRedisStore(context.Background(), store.RedisOptions{
+		Addr: mr.Addr(), DialTimeout: 20 * time.Millisecond, ReadTimeout: 50 * time.Millisecond,
+	})
+	require.NoError(t, err)
+	defer redisStore.Close()
+	metrics := observability.NewMetrics()
+	metrics.SetRedisReady(true)
+	metrics.SetSubscriptionReady(true)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		monitorRedisConnectivity(ctx, redisStore, metrics, 20*time.Millisecond, 50*time.Millisecond)
+	}()
+	defer func() { cancel(); <-done }()
+
+	mr.Close()
+	require.Eventually(t, func() bool { return !metrics.Ready() }, 3*time.Second, 20*time.Millisecond)
+	require.NoError(t, mr.Restart())
+	defer mr.Close()
+	require.Eventually(t, metrics.Ready, 3*time.Second, 20*time.Millisecond)
+
+	response := httptest.NewRecorder()
+	metrics.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	assert.Contains(t, response.Body.String(), "rex_redis_disconnects_total 1")
+	assert.Contains(t, response.Body.String(), "rex_redis_reconnects_total 1")
 }
 
 func TestStartObservabilityServerServesHealthEndpoint(t *testing.T) {

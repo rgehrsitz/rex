@@ -49,7 +49,8 @@ func setupMiniredis(t *testing.T) (*miniredis.Miniredis, *RedisStore) {
 		t.Fatalf("Failed to create miniredis: %v", err)
 	}
 
-	store := NewRedisStore(s.Addr(), "", 0)
+	store, err := NewRedisStore(context.Background(), RedisOptions{Addr: s.Addr()})
+	require.NoError(t, err)
 	return s, store
 }
 
@@ -237,6 +238,18 @@ func TestSetAndPublishFact(t *testing.T) {
 	storedValue, err := s.Get(key)
 	assert.NoError(t, err)
 	assert.Equal(t, `"`+value+`"`, storedValue) // miniredis stores strings with quotes
+}
+
+func TestSetAndPublishFactRejectsUnroutableKeyBeforeWrite(t *testing.T) {
+	s, factStore := setupMiniredis(t)
+	defer s.Close()
+	defer factStore.Close()
+
+	for _, key := range []string{"", "   ", ":status", "  :status"} {
+		err := factStore.SetAndPublishFactContext(context.Background(), key, "hot")
+		require.ErrorContains(t, err, "no publish channel")
+		assert.False(t, s.Exists(key))
+	}
 }
 
 func TestSetAndPublishFactContextPreservesEventMetadata(t *testing.T) {

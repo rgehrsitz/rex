@@ -40,11 +40,11 @@ The relevant baseline checks previously passed: `go test ./...`,
 | REX-006 | Script timeout does not stop JavaScript execution | Resolved by removing scripting in M6 | Complete |
 | REX-007 | Priority has no execution-order effect; documentation disagrees | Fixed and verified 2026-08-30 | P1 |
 | REX-008 | Bytecode jump targets are not semantically validated | Fixed and verified 2026-08-30 | P1 |
-| REX-009 | Actions perform an unnecessary post-write Redis `GET` | Fixed and verified in local M1 snapshot, 2026-09-07; integration pending | P2 performance |
-| REX-010 | Redis startup exits through the logger instead of returning an error | Confirmed by inspection | P1 |
-| REX-011 | TLS and environment-based Redis credentials are unsupported | Confirmed by inspection | P1 for managed Redis |
-| REX-012 | Local facts are unbounded and channel routing is convention-only | Confirmed by inspection | P2 / design decision |
-| REX-013 | CodeQL and Dependabot housekeeping are incomplete | Partially resolved 2026-08-30 | P2 |
+| REX-009 | Actions perform an unnecessary post-write Redis `GET` | Fixed in M1 and merged in `79b64fa` | P2 performance |
+| REX-010 | Redis startup exits through the logger instead of returning an error | Resolved locally in REX-M3; review pending | P1 |
+| REX-011 | TLS and environment-based Redis credentials are unsupported | Resolved locally in REX-M3; review pending | P1 for managed Redis |
+| REX-012 | Local facts are unbounded and channel routing is convention-only | V4 state fixed in M4; legacy routing hardened in M3 | P2 / design decision |
+| REX-013 | CodeQL and Dependabot housekeeping are incomplete | Resolved by current CI and REX-M3 disposition | P2 |
 | REX-014 | Unresolved compiler labels can produce unloadable bytecode | Fixed and verified 2026-08-30 | P1 |
 
 ### Important dialect clarification
@@ -220,6 +220,12 @@ the caller's normal error path and defers.
 **Required work:** return `(*RedisStore, error)` from construction, update the
 factory interface, and add a connection-failure test.
 
+**REX-M3 local resolution (2026-09-08):** `NewRedisStore` returns an error and
+uses the caller's context for its startup `PING`. The daemon factory propagates
+that error, applies a connection deadline, and closes the store after later
+initialization failures. Actual refusal and canceled-startup tests cover the
+failure path; the library no longer calls a fatal logger.
+
 ### REX-011: managed Redis configuration is incomplete
 
 The Redis client has no TLS configuration, and daemon configuration does not
@@ -230,6 +236,13 @@ that require TLS and makes secret injection unnecessarily difficult.
 **Required work:** add a documented TLS mode and environment-variable mapping
 for Redis credentials; test configuration parsing without exposing secrets in
 logs.
+
+**REX-M3 local resolution (2026-09-08):** daemon configuration supports Redis
+username/password environment injection, connection and health deadlines, TLS
+1.2 or newer, server-name verification, system roots, and an optional private
+CA bundle. Environment values override file values and defaults. TLS handshake,
+invalid-name, precedence, and credential-redaction tests exercise the contract.
+See [M3 operations](M3_OPERATIONS.md).
 
 ### Delivery and event semantics decision
 
@@ -248,7 +261,7 @@ Before M1, after every `SetAndPublishFactContext`, the engine performed
 for each action. The store also emitted a standard-library `log.Printf` on every publish,
 bypassing configured structured logging.
 
-**Resolution (local M1 snapshot, 2026-09-07):** the verification read is removed.
+**Resolution (M1, merged in `79b64fa`):** the verification read is removed.
 Publication diagnostics use configured zerolog at debug level and omit arbitrary
 event values. Regression assertions fail on the saved M0 source and pass with
 M1; real Redis counters verify zero GETs with identical SET/PUBLISH/action counts.
@@ -271,13 +284,16 @@ Historical v3 findings (preserved for compatibility):
   enforce the documented `group:key` form and configuration may omit that
   channel. Add validation/linting and an explicit routing contract.
 
-**M4 local resolution (review pending):** v4 retains no event facts and bounds
+**M4 resolution (merged in `f6e036c`):** v4 retains no event facts and bounds
 per-event, per-round, and chain work/state. The public mutable field is removed;
 legacy inspection returns a copy and v4 returns explicit chain results. The
 10,000-name churn regression leaves v4 retained facts empty. V4 derived rounds
 run locally, with committed notifications on `rex_results`; migration of legacy
 prefix-channel consumers is explicit. Legacy v3 still retains unbounded facts
-and its original routing behavior. See [M4 migration](M4_MIGRATION.md).
+and its prefix routing behavior. M3 rejects empty-prefix legacy targets during
+compilation and again before store mutation, and documents which remaining
+subscriber reachability questions require deployment knowledge. See
+[M4 migration](M4_MIGRATION.md) and [M3 operations](M3_OPERATIONS.md).
 
 ### REX-013: small repository maintenance
 
@@ -293,8 +309,15 @@ and its original routing behavior. See [M4 migration](M4_MIGRATION.md).
 darwin/arm64 or linux/amd64. The two non-reachable dependency advisories and
 the passing hosted CodeQL run for base commit `dddcdbac40af` are recorded in
 the [M0 report](baselines/rex-m0/README.md). The previously installed scanner
-was not replaced, and hosted CodeQL has not checked the pending working-tree
-changes. REX-013 therefore remains partially resolved.
+was not replaced.
+
+**REX-M3 disposition (2026-09-08):** repository-owned housekeeping is complete.
+CI installs its Go toolchain from `go.mod`, runs `govulncheck` through the pinned
+GitHub Action, and runs CodeQL on pull requests, main, and a schedule. Dependabot
+covers Go modules and GitHub Actions. A developer's separately installed global
+scanner is outside repository state and is not a release input; local reproduction
+uses a temporary pinned tool as recorded by M0. Hosted checks remain a PR gate,
+not an unfinished source change.
 
 ## Semantics safety net (after P0)
 

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"testing"
 
 	"rgehrsitz/rex/pkg/compiler"
@@ -16,7 +17,10 @@ func setupMiniRedis(b *testing.B) (*miniredis.Miniredis, *store.RedisStore) {
 		b.Fatalf("Failed to create miniredis: %v", err)
 	}
 
-	redisStore := store.NewRedisStore(s.Addr(), "", 0)
+	redisStore, err := store.NewRedisStore(context.Background(), store.RedisOptions{Addr: s.Addr()})
+	if err != nil {
+		b.Fatal(err)
+	}
 	return s, redisStore
 }
 

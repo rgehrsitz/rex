@@ -133,8 +133,17 @@ The configuration file is in JSON format and supports the following options:
   },
   "redis": {
     "address": "localhost:6379",
+    "username": "",
     "password": "",
     "database": 0,
+    "connect_timeout": "5s",
+    "health_check_interval": "1s",
+    "health_check_timeout": "500ms",
+    "tls": {
+      "enabled": false,
+      "server_name": "",
+      "ca_file": ""
+    },
     "channels": ["weather", "system", "network", "energy", "water"]
   },
   "engine": {
@@ -149,6 +158,14 @@ The configuration file is in JSON format and supports the following options:
   }
 }
 ```
+
+Every setting can be supplied as an environment variable by uppercasing its
+path, replacing dots with underscores, and adding `REX_`. For example,
+`redis.password` is `REX_REDIS_PASSWORD` and `redis.tls.ca_file` is
+`REX_REDIS_TLS_CA_FILE`. Environment variables override the configuration file,
+which overrides built-in defaults. Comma-separate `REX_REDIS_CHANNELS` values.
+See the [M3 operations guide](docs/M3_OPERATIONS.md) for TLS, readiness,
+routing, limits, and metrics.
 
 `scripts_enabled` remains only as an M6 migration tripwire: `false` is accepted,
 while `true` fails startup. See the [M6 migration guide](docs/M6_SCRIPT_REMOVAL.md).
@@ -196,10 +213,15 @@ they no longer write event payloads through the standard-library logger.
 Set `observability.enabled` to `true` to expose local HTTP endpoints at `observability.address` (default: `127.0.0.1:8080`):
 
 - `/healthz` confirms that the daemon process is serving HTTP.
-- `/readyz` returns `200` only after the Redis subscription is active; otherwise it returns `503`.
-- `/metrics` emits Prometheus text-format counters for received and failed events, event-processing duration, rule fires, and action outcomes.
+- `/readyz` returns `200` only while the Redis subscription and periodic
+  connectivity checks are healthy; it returns `503` during startup,
+  disconnection, and shutdown.
+- `/metrics` emits Prometheus text-format counters and an event-processing
+  latency histogram. Rule and action outcome labels use fixed value sets.
 
-The endpoint is disabled by default so an upgrade does not unexpectedly open a port. Redis Pub/Sub has no retained queue or producer timestamp, so `rex_event_queue_lag_seconds` is emitted as `NaN` rather than a misleading value. Use the processing-duration metrics for this transport; queue lag requires a queued transport such as Redis Streams.
+The endpoint is disabled by default so an upgrade does not unexpectedly open a
+port. Redis Pub/Sub has no retained queue, producer timestamp, or broker-side
+drop counter, so queue lag and drop metrics are emitted as `NaN`.
 
 ### Cycle Safety
 

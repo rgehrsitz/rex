@@ -8,8 +8,17 @@
   },
   "redis": {
     "address": "localhost:6379",
+    "username": "",
     "password": "",
     "database": 0,
+    "connect_timeout": "5s",
+    "health_check_interval": "1s",
+    "health_check_timeout": "500ms",
+    "tls": {
+      "enabled": false,
+      "server_name": "",
+      "ca_file": ""
+    },
     "channels": [
       "weather",
       "system",

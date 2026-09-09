@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
+
+	"github.com/redis/go-redis/v9"
 )
 
 const MaxEventBytes = 1 << 20
@@ -13,7 +16,18 @@ type Event struct {
 	Channel string
 	Payload string
 	Err     error
+	State   SubscriptionState
 }
+
+// SubscriptionState marks explicit transport state transitions. The empty
+// value identifies ordinary data and payload-rejection events.
+type SubscriptionState string
+
+const (
+	SubscriptionDisconnected SubscriptionState = "disconnected"
+	SubscriptionConnected    SubscriptionState = "connected"
+)
+
 type EventSource interface {
 	Events() <-chan Event
 	Close() error
@@ -22,14 +36,28 @@ type EventSubscriber interface {
 	OpenEvents(context.Context, ...string) (EventSource, error)
 }
 type redisEventSource struct {
-	events chan Event
-	cancel context.CancelFunc
-	done   chan struct{}
-	once   sync.Once
+	events     chan Event
+	cancel     context.CancelFunc
+	done       chan struct{}
+	once       sync.Once
+	pubsubOnce sync.Once
+	pubsub     *redis.PubSub
 }
 
 func (s *redisEventSource) Events() <-chan Event { return s.events }
-func (s *redisEventSource) Close() error         { s.once.Do(s.cancel); <-s.done; return nil }
+func (s *redisEventSource) Close() error {
+	s.once.Do(func() {
+		s.cancel()
+		s.closePubSub()
+	})
+	<-s.done
+	return nil
+}
+
+func (s *redisEventSource) closePubSub() {
+	s.pubsubOnce.Do(func() { _ = s.pubsub.Close() })
+}
+
 func (s *RedisStore) OpenEvents(ctx context.Context, channels ...string) (EventSource, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	subscription, err := s.Subscribe(ctx, channels...)
@@ -37,34 +65,68 @@ func (s *RedisStore) OpenEvents(ctx context.Context, channels ...string) (EventS
 		cancel()
 		return nil, err
 	}
-	source := &redisEventSource{events: make(chan Event), cancel: cancel, done: make(chan struct{})}
+	source := &redisEventSource{events: make(chan Event), cancel: cancel, done: make(chan struct{}), pubsub: subscription}
 	go func() {
 		defer close(source.done)
 		defer close(source.events)
-		defer subscription.Close()
+		defer source.closePubSub()
+		failed := false
 		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msg, ok := <-subscription.Channel():
-				if !ok {
+			received, err := subscription.Receive(ctx)
+			if err != nil {
+				if ctx.Err() != nil {
 					return
 				}
-				if msg == nil {
-					continue
+				if !failed && !source.send(ctx, Event{Err: fmt.Errorf("receive Redis event: %w", err), State: SubscriptionDisconnected}) {
+					return
 				}
-				event := Event{Channel: msg.Channel, Payload: msg.Payload}
-				if len(msg.Payload) > MaxEventBytes {
+				failed = true
+				timer := time.NewTimer(100 * time.Millisecond)
+				select {
+				case <-ctx.Done():
+					timer.Stop()
+					return
+				case <-timer.C:
+				}
+				continue
+			}
+			switch value := received.(type) {
+			case *redis.Subscription:
+				if failed && value.Count > 0 {
+					if !source.send(ctx, Event{State: SubscriptionConnected}) {
+						return
+					}
+					failed = false
+				}
+			case *redis.Pong:
+				// Pongs confirm transport recovery but are not application events.
+				if failed {
+					if !source.send(ctx, Event{State: SubscriptionConnected}) {
+						return
+					}
+					failed = false
+				}
+			case *redis.Message:
+				failed = false
+				event := Event{Channel: value.Channel, Payload: value.Payload}
+				if len(value.Payload) > MaxEventBytes {
 					event.Payload = ""
 					event.Err = fmt.Errorf("event exceeds %d bytes", MaxEventBytes)
 				}
-				select {
-				case source.events <- event:
-				case <-ctx.Done():
+				if !source.send(ctx, event) {
 					return
 				}
 			}
 		}
 	}()
 	return source, nil
+}
+
+func (s *redisEventSource) send(ctx context.Context, event Event) bool {
+	select {
+	case s.events <- event:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }

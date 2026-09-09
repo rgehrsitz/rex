@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -38,9 +40,16 @@ type Config struct {
 	LogTimeFormat           string
 	TraceConditions         bool
 	RedisAddress            string
+	RedisUsername           string
 	RedisPassword           string
 	RedisDB                 int
 	RedisChannels           []string
+	RedisTLSEnabled         bool
+	RedisTLSServerName      string
+	RedisTLSCAFile          string
+	RedisConnectTimeout     time.Duration
+	RedisHealthInterval     time.Duration
+	RedisHealthTimeout      time.Duration
 	PriorityThreshold       int
 	ScriptsEnabled          bool
 	AllowLegacyV3           bool
@@ -59,7 +68,7 @@ type RexDependencies struct {
 
 // StoreFactory is an interface for creating a store
 type StoreFactory interface {
-	NewStore(addr, password string, db int) store.ContextStore
+	NewStore(context.Context, store.RedisOptions) (store.ContextStore, error)
 }
 
 // EngineFactory is an interface for creating an engine
@@ -69,6 +78,10 @@ type EngineFactory interface {
 
 type factUpdateProcessor interface {
 	ProcessFactUpdateContext(ctx context.Context, factName string, factValue interface{}) error
+}
+
+type connectivityChecker interface {
+	Ping(context.Context) error
 }
 
 var messageTraceSequence atomic.Uint64
@@ -95,7 +108,7 @@ func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFa
 		return fmt.Errorf("failed to configure logger: %w", err)
 	}
 
-	deps, err := setupDependencies(config, storeFactory, engineFactory)
+	deps, err := setupDependencies(ctx, config, storeFactory, engineFactory)
 	if err != nil {
 		return fmt.Errorf("failed to setup dependencies: %w", err)
 	}
@@ -119,6 +132,10 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.address", "localhost:6379")
 	viper.SetDefault("redis.database", 0)
 	viper.SetDefault("redis.channels", []string{"rex_updates"})
+	viper.SetDefault("redis.tls.enabled", false)
+	viper.SetDefault("redis.connect_timeout", "5s")
+	viper.SetDefault("redis.health_check_interval", "1s")
+	viper.SetDefault("redis.health_check_timeout", "500ms")
 	viper.SetDefault("engine.priority_threshold", 1)
 	viper.SetDefault("engine.scripts_enabled", false)
 	viper.SetDefault("engine.allow_legacy_v3", false)
@@ -135,6 +152,9 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("engine.max_event_hops", 16)
 	viper.SetDefault("observability.enabled", false)
 	viper.SetDefault("observability.address", "127.0.0.1:8080")
+	viper.SetEnvPrefix("REX")
+	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	viper.AutomaticEnv()
 
 	if *configFile == "" {
 		viper.SetConfigName("rex_config")
@@ -152,16 +172,23 @@ func parseConfig(args []string) (*Config, error) {
 		logging.Logger.Info().Msg("No configuration file found, using defaults")
 	}
 
-	return &Config{
+	config := &Config{
 		BytecodeFile:            viper.GetString("bytecode_file"),
 		LogLevel:                viper.GetString("logging.level"),
 		LogDestination:          viper.GetString("logging.output"),
 		LogTimeFormat:           viper.GetString("logging.time_format"),
 		TraceConditions:         viper.GetBool("logging.trace_conditions"),
 		RedisAddress:            viper.GetString("redis.address"),
+		RedisUsername:           viper.GetString("redis.username"),
 		RedisPassword:           viper.GetString("redis.password"),
 		RedisDB:                 viper.GetInt("redis.database"),
-		RedisChannels:           viper.GetStringSlice("redis.channels"),
+		RedisChannels:           configStringSlice("redis.channels"),
+		RedisTLSEnabled:         viper.GetBool("redis.tls.enabled"),
+		RedisTLSServerName:      viper.GetString("redis.tls.server_name"),
+		RedisTLSCAFile:          viper.GetString("redis.tls.ca_file"),
+		RedisConnectTimeout:     viper.GetDuration("redis.connect_timeout"),
+		RedisHealthInterval:     viper.GetDuration("redis.health_check_interval"),
+		RedisHealthTimeout:      viper.GetDuration("redis.health_check_timeout"),
 		PriorityThreshold:       viper.GetInt("engine.priority_threshold"),
 		ScriptsEnabled:          viper.GetBool("engine.scripts_enabled"),
 		AllowLegacyV3:           viper.GetBool("engine.allow_legacy_v3"),
@@ -170,50 +197,124 @@ func parseConfig(args []string) (*Config, error) {
 		MaxEventHops:            viper.GetInt("engine.max_event_hops"),
 		ObservabilityEnabled:    viper.GetBool("observability.enabled"),
 		ObservabilityAddress:    viper.GetString("observability.address"),
-	}, nil
+	}
+	if config.RedisAddress == "" {
+		return nil, fmt.Errorf("redis.address is required")
+	}
+	if len(config.RedisChannels) == 0 {
+		return nil, fmt.Errorf("redis.channels must contain at least one channel")
+	}
+	if config.RedisConnectTimeout <= 0 {
+		return nil, fmt.Errorf("redis.connect_timeout must be greater than zero")
+	}
+	if config.RedisHealthInterval <= 0 || config.RedisHealthTimeout <= 0 {
+		return nil, fmt.Errorf("Redis health check interval and timeout must be greater than zero")
+	}
+	return config, nil
 }
 
-func setupDependencies(config *Config, storeFactory StoreFactory, engineFactory EngineFactory) (*RexDependencies, error) {
+func configStringSlice(key string) []string {
+	values := viper.GetStringSlice(key)
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		for _, item := range strings.Split(value, ",") {
+			if item = strings.TrimSpace(item); item != "" {
+				result = append(result, item)
+			}
+		}
+	}
+	return result
+}
+
+func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFactory, engineFactory EngineFactory) (*RexDependencies, error) {
 	// Reject the retired capability before allocating a store or engine.
 	if config.ScriptsEnabled {
 		return nil, fmt.Errorf("scripts are no longer supported; migrate to declarative v4 rules")
 	}
-	store := storeFactory.NewStore(config.RedisAddress, config.RedisPassword, config.RedisDB)
-
-	engine, err := engineFactory.NewEngine(config.BytecodeFile, store, config.PriorityThreshold)
+	tlsConfig, err := buildRedisTLSConfig(config)
 	if err != nil {
-		_ = store.Close()
+		return nil, err
+	}
+	connectTimeout := config.RedisConnectTimeout
+	if connectTimeout <= 0 {
+		connectTimeout = 5 * time.Second
+	}
+	connectCtx, cancel := context.WithTimeout(ctx, connectTimeout)
+	defer cancel()
+	redisStore, err := storeFactory.NewStore(connectCtx, store.RedisOptions{
+		Addr: config.RedisAddress, Username: config.RedisUsername, Password: config.RedisPassword,
+		DB: config.RedisDB, TLSConfig: tlsConfig, DialTimeout: connectTimeout,
+		ReadTimeout: connectTimeout, WriteTimeout: connectTimeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize store: %w", err)
+	}
+
+	engine, err := engineFactory.NewEngine(config.BytecodeFile, redisStore, config.PriorityThreshold)
+	if err != nil {
+		_ = redisStore.Close()
 		return nil, fmt.Errorf("failed to initialize engine: %w", err)
 	}
 	if engine.BytecodeVersion() == 3 && !config.AllowLegacyV3 {
-		_ = store.Close()
+		_ = redisStore.Close()
 		return nil, fmt.Errorf("v3 requires engine.allow_legacy_v3; recompile for v4")
 	}
 	if engine.BytecodeVersion() == 4 {
 		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
-			_ = store.Close()
+			_ = redisStore.Close()
 			return nil, err
 		}
 	}
 	if err := engine.SetScriptsEnabled(config.ScriptsEnabled); err != nil {
-		_ = store.Close()
+		_ = redisStore.Close()
 		return nil, err
 	}
 	engine.SetConditionTracing(config.TraceConditions)
 	if config.MaxActionsPerEvaluation <= 0 {
-		_ = store.Close()
+		_ = redisStore.Close()
 		return nil, fmt.Errorf("engine.max_actions_per_evaluation must be greater than zero")
 	}
 	if config.MaxEventHops < 0 {
-		_ = store.Close()
+		_ = redisStore.Close()
 		return nil, fmt.Errorf("engine.max_event_hops must be zero or greater")
 	}
 	engine.SetMaxActionsPerEvaluation(config.MaxActionsPerEvaluation)
 
 	return &RexDependencies{
-		Store:  store,
+		Store:  redisStore,
 		Engine: engine,
 	}, nil
+}
+
+func buildRedisTLSConfig(config *Config) (*tls.Config, error) {
+	if !config.RedisTLSEnabled {
+		if config.RedisTLSServerName != "" || config.RedisTLSCAFile != "" {
+			return nil, fmt.Errorf("redis.tls.enabled must be true when TLS server_name or ca_file is configured")
+		}
+		return nil, nil
+	}
+	serverName := config.RedisTLSServerName
+	if serverName == "" {
+		var err error
+		serverName, _, err = net.SplitHostPort(config.RedisAddress)
+		if err != nil {
+			return nil, fmt.Errorf("derive Redis TLS server name from address %q: %w", config.RedisAddress, err)
+		}
+	}
+	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS12, ServerName: serverName}
+	if config.RedisTLSCAFile == "" {
+		return tlsConfig, nil
+	}
+	pem, err := os.ReadFile(config.RedisTLSCAFile)
+	if err != nil {
+		return nil, fmt.Errorf("read Redis TLS CA file: %w", err)
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("Redis TLS CA file contains no valid certificates")
+	}
+	tlsConfig.RootCAs = roots
+	return tlsConfig, nil
 }
 
 func runMainLoop(ctx context.Context, deps *RexDependencies, config *Config) error {
@@ -245,8 +346,36 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 		return fmt.Errorf("failed to subscribe to Redis channels: %w", err)
 	}
 	defer source.Close()
-	metrics.SetReady(true)
-	defer metrics.SetReady(false)
+	checker, ok := deps.Store.(connectivityChecker)
+	if !ok {
+		return fmt.Errorf("store does not provide connectivity checks")
+	}
+	healthTimeout := config.RedisHealthTimeout
+	if healthTimeout <= 0 {
+		healthTimeout = 500 * time.Millisecond
+	}
+	healthCtx, cancelHealth := context.WithTimeout(ctx, healthTimeout)
+	err = checker.Ping(healthCtx)
+	cancelHealth()
+	if err != nil {
+		return fmt.Errorf("Redis readiness check after subscription: %w", err)
+	}
+	metrics.SetRedisReady(true)
+	metrics.SetSubscriptionReady(true)
+	defer func() {
+		metrics.SetSubscriptionReady(false)
+		metrics.SetRedisReady(false)
+	}()
+	monitorCtx, stopMonitor := context.WithCancel(ctx)
+	monitorDone := make(chan struct{})
+	go func() {
+		defer close(monitorDone)
+		monitorRedisConnectivity(monitorCtx, checker, metrics, config.RedisHealthInterval, config.RedisHealthTimeout)
+	}()
+	defer func() {
+		stopMonitor()
+		<-monitorDone
+	}()
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -458,8 +587,8 @@ func sortedKeys(values map[string]interface{}) []string {
 // RealStoreFactory implements StoreFactory
 type RealStoreFactory struct{}
 
-func (f *RealStoreFactory) NewStore(addr, password string, db int) store.ContextStore {
-	return store.NewRedisStore(addr, password, db)
+func (f *RealStoreFactory) NewStore(ctx context.Context, options store.RedisOptions) (store.ContextStore, error) {
+	return store.NewRedisStore(ctx, options)
 }
 
 // RealEngineFactory implements EngineFactory
@@ -480,6 +609,23 @@ func consumeEvents(ctx context.Context, engine *runtime.Engine, events <-chan st
 			if !ok {
 				return nil
 			}
+			if event.State == store.SubscriptionDisconnected {
+				if metrics != nil {
+					if metrics.SetSubscriptionReady(false) {
+						metrics.RecordRedisDisconnect()
+					}
+					metrics.RecordEventSourceError()
+				}
+				logging.Logger.Error().Err(event.Err).Msg("Redis event subscription disconnected")
+				continue
+			}
+			if event.State == store.SubscriptionConnected {
+				if metrics != nil && metrics.SetSubscriptionReady(true) {
+					metrics.RecordRedisReconnect()
+				}
+				logging.Logger.Info().Msg("Redis event subscription restored")
+				continue
+			}
 			started := time.Now()
 			err := event.Err
 			if err == nil {
@@ -493,6 +639,44 @@ func consumeEvents(ctx context.Context, engine *runtime.Engine, events <-chan st
 			}
 			if errors.Is(err, runtime.ErrReconciliationRequired) {
 				return err
+			}
+		}
+	}
+}
+
+func monitorRedisConnectivity(ctx context.Context, checker connectivityChecker, metrics *observability.Metrics, interval, timeout time.Duration) {
+	if metrics == nil {
+		return
+	}
+	if interval <= 0 {
+		interval = time.Second
+	}
+	if timeout <= 0 {
+		timeout = 500 * time.Millisecond
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			checkCtx, cancel := context.WithTimeout(ctx, timeout)
+			err := checker.Ping(checkCtx)
+			cancel()
+			if ctx.Err() != nil {
+				return
+			}
+			if err != nil {
+				if metrics.SetRedisReady(false) {
+					metrics.RecordRedisDisconnect()
+					logging.Logger.Error().Err(err).Msg("Redis connectivity check failed")
+				}
+				continue
+			}
+			if metrics.SetRedisReady(true) {
+				metrics.RecordRedisReconnect()
+				logging.Logger.Info().Msg("Redis connectivity restored")
 			}
 		}
 	}

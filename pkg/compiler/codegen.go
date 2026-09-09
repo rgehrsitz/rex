@@ -85,6 +85,14 @@ func generateBytecode(ruleset *Ruleset, resolveLabels labelResolver) (BytecodeFi
 	if err := validateNoScriptCapabilities(ruleset); err != nil {
 		return BytecodeFile{}, err
 	}
+	for _, rule := range ruleset.Rules {
+		for _, action := range rule.Actions {
+			group, _, _ := strings.Cut(action.Target, ":")
+			if action.Type == "updateStore" && strings.TrimSpace(group) == "" {
+				return BytecodeFile{}, fmt.Errorf("rule %q action target %q has no legacy publish channel before ':'", rule.Name, action.Target)
+			}
+		}
+	}
 	var bytecode []byte
 
 	for _, rule := range ruleset.Rules {
