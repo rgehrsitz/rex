@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"hash/crc32"
 	"math"
@@ -22,6 +23,15 @@ const MaxProgramRules = 10000
 const MaxConditionNodes = 100000
 const MaxDependencies = 65536
 const batchHeaderSize = 16
+
+// ErrTypedFactContract classifies source errors caused by v5 declarations.
+var ErrTypedFactContract = errors.New("typed fact contract")
+
+func IsTypedFactError(err error) bool { return errors.Is(err, ErrTypedFactContract) }
+
+func typedFactErrorf(format string, args ...interface{}) error {
+	return fmt.Errorf("%w: %s", ErrTypedFactContract, fmt.Sprintf(format, args...))
+}
 
 func IsBatchVersion(version uint32) bool {
 	return version == BatchVersion || version == TypedFactsVersion
@@ -72,6 +82,9 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 		if c == '}' || c == ']' {
 			depth--
 		}
+	}
+	if err := validateFactDeclarationShapes(data); err != nil {
+		return nil, err
 	}
 	rules, err := Parse(data)
 	if err != nil {
@@ -131,16 +144,19 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 			return nil, fmt.Errorf("scripts are no longer supported: rule %q declares scripts", r.Name)
 		}
 		for actionIndex, a := range r.Actions {
+			if a.Value == nil {
+				return nil, fmt.Errorf("rule %q action %d: null action values are unsupported", r.Name, actionIndex)
+			}
 			if v, ok := a.Value.(string); ok && strings.HasPrefix(v, "{") && strings.HasSuffix(v, "}") {
 				return nil, fmt.Errorf("scripts are no longer supported: rule %q action %d calls %q", r.Name, actionIndex, v)
 			}
 			if rules.Facts != nil {
 				declaration, ok := rules.Facts[a.Target]
 				if !ok {
-					return nil, fmt.Errorf("typed fact contract: rule %q action %d target %q is undeclared", r.Name, actionIndex, a.Target)
+					return nil, typedFactErrorf("rule %q action %d target %q is undeclared", r.Name, actionIndex, a.Target)
 				}
 				if !declaration.Accepts(a.Value) {
-					return nil, fmt.Errorf("typed fact contract: rule %q action %d target %q requires %s", r.Name, actionIndex, a.Target, declaration.Type)
+					return nil, typedFactErrorf("rule %q action %d target %q requires %s", r.Name, actionIndex, a.Target, declaration.Type)
 				}
 			}
 		}
@@ -156,7 +172,7 @@ func validateFactDeclarations(rules *Ruleset) error {
 		return nil
 	}
 	if len(rules.Facts) == 0 || len(rules.Facts) > MaxDependencies {
-		return fmt.Errorf("typed fact declarations must contain 1..%d facts", MaxDependencies)
+		return typedFactErrorf("declarations must contain 1..%d facts", MaxDependencies)
 	}
 	names := make([]string, 0, len(rules.Facts))
 	for name := range rules.Facts {
@@ -166,10 +182,10 @@ func validateFactDeclarations(rules *Ruleset) error {
 	for _, name := range names {
 		declaration := rules.Facts[name]
 		if err := validateBytecodeString("Fact declaration name", name); err != nil {
-			return fmt.Errorf("typed fact declaration %q: %w", name, err)
+			return typedFactErrorf("declaration %q: %v", name, err)
 		}
 		if !declaration.Valid() {
-			return fmt.Errorf("typed fact declaration %q has unsupported type %q", name, declaration.Type)
+			return typedFactErrorf("declaration %q has unsupported type %q", name, declaration.Type)
 		}
 	}
 	var check func([]*ConditionOrGroup) error
@@ -178,10 +194,10 @@ func validateFactDeclarations(rules *Ruleset) error {
 			if node.Fact != "" {
 				declaration, ok := rules.Facts[node.Fact]
 				if !ok {
-					return fmt.Errorf("typed fact contract: condition fact %q is undeclared", node.Fact)
+					return typedFactErrorf("condition fact %q is undeclared", node.Fact)
 				}
 				if !declaration.Accepts(node.Value) {
-					return fmt.Errorf("typed fact contract: condition fact %q requires a %s constant", node.Fact, declaration.Type)
+					return typedFactErrorf("condition fact %q requires a %s constant", node.Fact, declaration.Type)
 				}
 			}
 			if err := check(node.All); err != nil {
@@ -199,6 +215,45 @@ func validateFactDeclarations(rules *Ruleset) error {
 		}
 		if err := check(rule.Conditions.Any); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateFactDeclarationShapes(data []byte) error {
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil // The authoritative parser reports malformed JSON with location.
+	}
+	raw, present := root["facts"]
+	if !present {
+		return nil
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return typedFactErrorf("declarations must be an object")
+	}
+	var declarations map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &declarations); err != nil || declarations == nil {
+		return typedFactErrorf("declarations must be an object")
+	}
+	if len(declarations) == 0 || len(declarations) > MaxDependencies {
+		return typedFactErrorf("declarations must contain 1..%d facts", MaxDependencies)
+	}
+	names := make([]string, 0, len(declarations))
+	for name := range declarations {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		declarationJSON := declarations[name]
+		var declaration FactDeclaration
+		decoder := json.NewDecoder(bytes.NewReader(declarationJSON))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&declaration); err != nil {
+			return typedFactErrorf("declaration %q: %v", name, err)
+		}
+		if !declaration.Valid() {
+			return typedFactErrorf("declaration %q has unsupported type %q", name, declaration.Type)
 		}
 	}
 	return nil
@@ -285,14 +340,10 @@ func DecodeBatch(data []byte) (*Ruleset, error) {
 // (for example, an explicitly empty all beside a populated any).
 func validateBatchShapes(data []byte) error {
 	var root struct {
-		Facts json.RawMessage              `json:"facts"`
 		Rules []map[string]json.RawMessage `json:"rules"`
 	}
 	if err := json.Unmarshal(data, &root); err != nil {
 		return err
-	}
-	if root.Facts != nil && bytes.Equal(bytes.TrimSpace(root.Facts), []byte("null")) {
-		return fmt.Errorf("typed fact declarations must be an object")
 	}
 	var group func(json.RawMessage, bool) error
 	group = func(raw json.RawMessage, leafAllowed bool) error {

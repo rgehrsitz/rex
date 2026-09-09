@@ -42,7 +42,9 @@ also checked before each subsequent round.
 The v3 compatibility compiler rejects typed declarations, including validate-only
 CLI use. Loaders, reload history, explanation, simulation, and durable processing
 accept both v4 and v5. Durable processing validates decoded input before the
-queue's `ApplyInput` persistence boundary.
+queue's `ApplyInput` persistence boundary. A typed validation failure is a
+poison event: it consumes the configured bounded durable attempts, remains out
+of fact state, and then moves to the dead-letter stream for operator review.
 
 ## Compatibility and rollout
 

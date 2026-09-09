@@ -57,7 +57,14 @@ func Explain(artifact []byte) (Explanation, error) {
 	if err != nil {
 		return Explanation{}, err
 	}
-	out := Explanation{SchemaVersion: SchemaVersion, ArtifactSHA256: Digest(artifact), ExecutionContract: version, Representation: "structured condition IR; batch artifacts have no jump instructions", Rules: []RuleInfo{}, Facts: rules.Facts}
+	facts := make(map[string]compiler.FactDeclaration, len(rules.Facts))
+	for name, declaration := range rules.Facts {
+		facts[name] = declaration
+	}
+	if rules.Facts == nil {
+		facts = nil
+	}
+	out := Explanation{SchemaVersion: SchemaVersion, ArtifactSHA256: Digest(artifact), ExecutionContract: version, Representation: "structured condition IR; batch artifacts have no jump instructions", Rules: []RuleInfo{}, Facts: facts}
 	for i, r := range rules.Rules {
 		out.Rules = append(out.Rules, RuleInfo{r.Name, i, r.Priority, Dependencies(r), r.Conditions, r.Actions})
 	}
@@ -99,21 +106,13 @@ func Lint(source []byte, channels []string) LintReport {
 			}
 		}
 	}
-	parsed, err := compiler.Parse(source)
+	parsed, err := compiler.ParseBatch(source)
 	if err != nil {
 		if undefinedScript && strings.Contains(err.Error(), "scripts are no longer supported") {
 			return out
 		}
 		id := "REX-L001"
-		if strings.Contains(err.Error(), "typed fact") {
-			id = "REX-L006"
-		}
-		add(id, "error", "", err.Error())
-		return out
-	}
-	if _, err := compiler.ParseBatch(source); err != nil {
-		id := "REX-L001"
-		if strings.Contains(err.Error(), "typed fact") {
+		if compiler.IsTypedFactError(err) {
 			id = "REX-L006"
 		}
 		add(id, "error", "", err.Error())

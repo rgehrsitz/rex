@@ -281,7 +281,15 @@ func TestTypedFactToolingContract(t *testing.T) {
 	_, err = NewBundle(source, badEvent)
 	require.ErrorContains(t, err, "undeclared")
 
-	lint := Lint([]byte(strings.Replace(string(source), `"type":"number"`, `"type":"object"`, 1)), nil)
-	require.Len(t, lint.Diagnostics, 1)
-	require.Equal(t, "REX-L006", lint.Diagnostics[0].ID)
+	for name, invalid := range map[string]string{
+		"unsupported type": strings.Replace(string(source), `"type":"number"`, `"type":"object"`, 1),
+		"nullable type":    strings.Replace(string(source), `"type":"number"`, `"type":"number","nullable":"yes"`, 1),
+		"extra field":      strings.Replace(string(source), `"type":"number"`, `"type":"number","extra":true`, 1),
+	} {
+		t.Run("lint "+name, func(t *testing.T) {
+			lint := Lint([]byte(invalid), nil)
+			require.Len(t, lint.Diagnostics, 1)
+			require.Equal(t, "REX-L006", lint.Diagnostics[0].ID)
+		})
+	}
 }

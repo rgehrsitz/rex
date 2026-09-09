@@ -105,11 +105,17 @@ func TestTypedFactCompilerValidation(t *testing.T) {
 		"condition constant mismatch": strings.Replace(v5Source, `"value":true`, `"value":"true"`, 1),
 		"undeclared action target":    strings.Replace(v5Source, `"target":"out"`, `"target":"missing"`, 1),
 		"action value mismatch":       strings.Replace(v5Source, `"value":1`, `"value":"one"`, 1),
+		"nullable null action":        strings.Replace(strings.Replace(v5Source, `"type":"number"`, `"type":"number","nullable":true`, 1), `"value":1`, `"value":null`, 1),
 	}
 	for name, source := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, err := CompileBatch([]byte(source))
-			require.ErrorContains(t, err, "typed fact")
+			require.Error(t, err)
+			if name == "nullable null action" {
+				require.ErrorContains(t, err, "Null action values are unsupported")
+			} else {
+				require.True(t, IsTypedFactError(err), "%v", err)
+			}
 		})
 	}
 }

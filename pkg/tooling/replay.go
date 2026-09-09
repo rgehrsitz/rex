@@ -108,62 +108,73 @@ func NewBundle(source []byte, scenario Scenario) (Bundle, error) {
 	_, err = b.Validate()
 	return b, err
 }
+
+type validatedBundle struct {
+	artifact []byte
+	program  *runtime.Program
+}
+
 func (b Bundle) Validate() ([]byte, error) {
+	validated, err := b.validate()
+	return validated.artifact, err
+}
+
+func (b Bundle) validate() (validatedBundle, error) {
 	if b.SchemaVersion != SchemaVersion || b.Manifest.SchemaVersion != SchemaVersion || !compiler.IsBatchVersion(b.Manifest.ExecutionContract) {
-		return nil, fmt.Errorf("unsupported replay schema or execution contract; tooling requires schema 1 and a supported batch artifact")
+		return validatedBundle{}, fmt.Errorf("unsupported replay schema or execution contract; tooling requires schema 1 and a supported batch artifact")
 	}
 	if b.Scenario.SchemaVersion != SchemaVersion {
-		return nil, fmt.Errorf("unsupported scenario schema")
+		return validatedBundle{}, fmt.Errorf("unsupported scenario schema")
 	}
 	if b.Scenario.Name == "" || len(b.Scenario.Name) > 255 || b.Scenario.InitialState == nil || b.Scenario.Events == nil || b.Scenario.Limits == nil {
-		return nil, fmt.Errorf("replay requires name, complete initial_state, ordered events and explicit limits")
+		return validatedBundle{}, fmt.Errorf("replay requires name, complete initial_state, ordered events and explicit limits")
 	}
 	if err := b.Scenario.Limits.Validate(); err != nil {
-		return nil, err
+		return validatedBundle{}, err
 	}
 	if len(b.Scenario.Events) > MaxEvents {
-		return nil, fmt.Errorf("replay exceeds %d events", MaxEvents)
+		return validatedBundle{}, fmt.Errorf("replay exceeds %d events", MaxEvents)
 	}
 	artifact, err := compiler.CompileBatch([]byte(b.Source))
 	if err != nil {
-		return nil, err
+		return validatedBundle{}, err
 	}
 	program, err := runtime.LoadProgram(artifact)
 	if err != nil {
-		return nil, err
+		return validatedBundle{}, err
 	}
 	if err := runtime.ValidateProgramFacts(program, b.Scenario.InitialState); err != nil {
-		return nil, fmt.Errorf("initial state: %w", err)
+		return validatedBundle{}, fmt.Errorf("initial state: %w", err)
 	}
 	if len(b.Scenario.InitialState) > 65536 {
-		return nil, fmt.Errorf("initial state exceeds fact limit")
+		return validatedBundle{}, fmt.Errorf("initial state exceeds fact limit")
 	}
 	initial, err := json.Marshal(b.Scenario.InitialState)
 	if err != nil {
-		return nil, err
+		return validatedBundle{}, err
 	}
 	if len(initial) > store.MaxSnapshotBytes {
-		return nil, fmt.Errorf("initial state exceeds byte limit")
+		return validatedBundle{}, fmt.Errorf("initial state exceeds byte limit")
 	}
 	seen := map[string]bool{}
 	for _, event := range b.Scenario.Events {
 		if event.ID == "" || len(event.ID) > 255 || seen[event.ID] || event.Facts == nil {
-			return nil, fmt.Errorf("events require unique nonempty ids and facts")
+			return validatedBundle{}, fmt.Errorf("events require unique nonempty ids and facts")
 		}
 		seen[event.ID] = true
 		if err := runtime.ValidateProgramEvent(program, event.Facts, *b.Scenario.Limits); err != nil {
-			return nil, fmt.Errorf("event %q: %w", event.ID, err)
+			return validatedBundle{}, fmt.Errorf("event %q: %w", event.ID, err)
 		}
 		for key, value := range event.Facts {
 			if key == "" || len(key) > 255 || !store.Scalar(value) {
-				return nil, fmt.Errorf("event %q contains invalid scalar fact %q", event.ID, key)
+				return validatedBundle{}, fmt.Errorf("event %q contains invalid scalar fact %q", event.ID, key)
 			}
 		}
 	}
 	if b.Manifest != NewManifest([]byte(b.Source), artifact) {
-		return nil, fmt.Errorf("replay source/artifact digest or provenance mismatch")
+		return validatedBundle{}, fmt.Errorf("replay source/artifact digest or provenance mismatch")
 	}
-	return artifact, nil
+	return validatedBundle{artifact: artifact, program: program}, nil
 }
 
 type EventResult struct {
@@ -184,11 +195,7 @@ type Report struct {
 // Replay uses the production coordinator and evaluator with a private memory
 // adapter. No caller can inject a transport or external committer here.
 func Replay(ctx context.Context, b Bundle) (Report, error) {
-	artifact, err := b.Validate()
-	if err != nil {
-		return Report{}, err
-	}
-	p, err := runtime.LoadProgram(artifact)
+	validated, err := b.validate()
 	if err != nil {
 		return Report{}, err
 	}
@@ -197,7 +204,7 @@ func Replay(ctx context.Context, b Bundle) (Report, error) {
 		return Report{}, err
 	}
 	defer memory.Close()
-	coordinator, err := runtime.NewCoordinator(p, memory, memory, *b.Scenario.Limits)
+	coordinator, err := runtime.NewCoordinator(validated.program, memory, memory, *b.Scenario.Limits)
 	if err != nil {
 		return Report{}, err
 	}
@@ -208,7 +215,7 @@ func Replay(ctx context.Context, b Bundle) (Report, error) {
 			return r, err
 		}
 		// Validate before persisting input without consuming evaluation work.
-		if err := runtime.ValidateProgramEvent(p, event.Facts, *b.Scenario.Limits); err != nil {
+		if err := runtime.ValidateProgramEvent(validated.program, event.Facts, *b.Scenario.Limits); err != nil {
 			return r, fmt.Errorf("event %q: %w", event.ID, err)
 		}
 		for key, value := range event.Facts {

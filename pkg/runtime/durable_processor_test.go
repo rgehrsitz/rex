@@ -132,11 +132,15 @@ func TestProcessNextDurableValidatesTypedInputBeforePersistence(t *testing.T) {
 	require.NoError(t, err)
 	engine, err := NewEngineFromBytes(artifact, memory, 0)
 	require.NoError(t, err)
-	queue := &durableQueueProbe{event: store.DurableEvent{ID: "typed-1", Payload: `{"a":"wrong"}`}, maxAttempts: 3}
+	queue := &durableQueueProbe{event: store.DurableEvent{ID: "typed-1", Payload: `{"a":"wrong"}`}, maxAttempts: 2}
 
 	result, err := engine.ProcessNextDurable(context.Background(), queue)
 	require.ErrorContains(t, err, "validate durable event")
 	require.True(t, result.RetryPending)
+	result, err = engine.ProcessNextDurable(context.Background(), queue)
+	require.NoError(t, err)
+	require.True(t, result.DeadLettered)
+	require.Equal(t, 1, queue.dead)
 	require.Zero(t, queue.inputs)
 	require.Zero(t, queue.completed)
 	facts, err := memory.Snapshot()
