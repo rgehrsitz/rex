@@ -59,8 +59,9 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Complete | [PR #35](https://github.com/rgehrsitz/rex/pull/35), `f6e036c`; [migration](M4_MIGRATION.md). |
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
-| REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [Recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [local acceptance evidence](baselines/rex-m7/README.md). Implementation and Redis 7.4.2 fault suite complete; review pending. Next: scope the first M8 capability. |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | Planned | Start with ruleset reloads; split each capability into its own proposal. |
+| REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1 ruleset reload is implemented locally; review pending. Next: typed fact declarations. |
+| REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete locally | [Reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [local acceptance evidence](baselines/rex-m8.1/README.md). Review pending. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -399,6 +400,26 @@ release or a reason to delay foundation work.
 | Additional transports | M4; M7 for durable guarantees | Pass adapter contract tests and document ordering/delivery differences. |
 | Webhooks and other external actions | M5, M7 | Outbox dispatch, stable idempotency keys, timeout/retry/dead-letter policy, and destination-specific guarantees. |
 
+### REX-M8.1 — Safe ruleset reload and rollback
+
+- [x] Restrict reload to validated v4 artifacts and retain the active engine on
+  read, validation, configuration, history, or durable-backlog failure.
+- [x] Serialize swaps with event processing so one event cannot observe two
+  programs.
+- [x] Archive exact artifact bytes by SHA-256 program ID and load bounded history
+  at startup for durable retries.
+- [x] Read a durable event's pinned program before evaluation and select the
+  matching archived engine; stop safely when the required artifact is absent.
+- [x] Defer activation while the durable consumer group has pending work.
+- [x] Expose bounded success, failure, and deferral counters and document rollout,
+  rollback, retention, and failure handling.
+
+**Completed locally 2026-09-09:** runtime and daemon tests cover event-boundary
+serialization, historical durable selection, invalid-candidate isolation,
+artifact archival, activation, capacity recovery, history integrity, and
+pending-work deferral. Full repository, race, vet, vulnerability, offline CLI,
+package build, and release cross-build checks pass.
+
 ## Decisions to record before dependent implementation
 
 Add the final choice, rationale, examples, and deciding PR/document to this table.
@@ -413,6 +434,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D5 | Derived rounds and resource budgets | Outputs feed a subsequent ordered round; enforce action, event, chain/fan-out, payload, and state limits. Define chain IDs, budget ownership, and restart behavior. | Resolved in [D5](decisions/REX-M4.md); persistence remains M7. |
 | D6 | Script capability and determinism | Isolated bounded workers if retaining general JavaScript; explicit time/randomness inputs or recorded results for replay. Document supported platforms and host-access limits. | Resolved by removal in [REX-M6](decisions/REX-M6.md). |
 | D7 | Durable topology, ordering, retention | Start with a documented single Redis commit domain and one state owner per partition; choose supported versions, persistence settings, retention, and consumer recovery together. | Resolved for M7 in [REX-M7](decisions/REX-M7.md). |
+| D8 | Ruleset activation and durable version history | Poll an immutable artifact path; validate and configure before an event-boundary swap; archive exact bytes by program digest; defer while durable work is pending and retain history for at least the journal recovery window. | Resolved for M8.1 in [reload contract](decisions/REX-M8-RULESET-RELOAD.md). |
 
 ## Review, validation, and completion discipline
 

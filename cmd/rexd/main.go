@@ -59,14 +59,18 @@ type Config struct {
 	BatchLimits             runtime.Limits
 	MaxActionsPerEvaluation int
 	MaxEventHops            int
+	ReloadInterval          time.Duration
+	ReloadHistoryDir        string
+	ReloadHistoryMaxFiles   int
 	ObservabilityEnabled    bool
 	ObservabilityAddress    string
 }
 
 // RexDependencies represents the external dependencies of the application
 type RexDependencies struct {
-	Store  store.ContextStore
-	Engine *runtime.Engine
+	Store   store.ContextStore
+	Engine  *runtime.Engine
+	Manager *runtime.EngineManager
 }
 
 // StoreFactory is an interface for creating a store
@@ -125,10 +129,10 @@ func run(ctx context.Context, args []string, storeFactory StoreFactory, engineFa
 		return fmt.Errorf("failed to setup dependencies: %w", err)
 	}
 	defer deps.Store.Close()
-	defer deps.Engine.Shutdown()
+	defer deps.Manager.Shutdown()
 
 	metrics := observability.NewMetrics()
-	deps.Engine.SetExecutionObserver(metrics)
+	deps.Manager.SetExecutionObserver(metrics)
 	return runMainLoopWithObservability(ctx, deps, config, metrics)
 }
 
@@ -174,6 +178,8 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("engine.batch.staged_bytes", defaults.StagedBytes)
 	viper.SetDefault("engine.max_actions_per_evaluation", runtime.DefaultMaxActionsPerEvaluation)
 	viper.SetDefault("engine.max_event_hops", 16)
+	viper.SetDefault("engine.reload.interval", "0s")
+	viper.SetDefault("engine.reload.history_max_files", 32)
 	viper.SetDefault("observability.enabled", false)
 	viper.SetDefault("observability.address", "127.0.0.1:8080")
 	viper.SetEnvPrefix("REX")
@@ -230,6 +236,9 @@ func parseConfig(args []string) (*Config, error) {
 		BatchLimits:             runtime.Limits{EventBytes: viper.GetInt("engine.batch.event_bytes"), EventFacts: viper.GetInt("engine.batch.event_facts"), SnapshotBytes: viper.GetInt("engine.batch.snapshot_bytes"), ActionsPerRule: viper.GetInt("engine.max_actions_per_evaluation"), ActionsPerRound: viper.GetInt("engine.batch.actions_per_round"), ChainActions: viper.GetInt("engine.batch.chain_actions"), ChainWork: viper.GetInt("engine.batch.chain_work"), Rounds: viper.GetInt("engine.batch.rounds"), StagedBytes: viper.GetInt("engine.batch.staged_bytes")},
 		MaxActionsPerEvaluation: viper.GetInt("engine.max_actions_per_evaluation"),
 		MaxEventHops:            viper.GetInt("engine.max_event_hops"),
+		ReloadInterval:          viper.GetDuration("engine.reload.interval"),
+		ReloadHistoryDir:        viper.GetString("engine.reload.history_dir"),
+		ReloadHistoryMaxFiles:   viper.GetInt("engine.reload.history_max_files"),
 		ObservabilityEnabled:    viper.GetBool("observability.enabled"),
 		ObservabilityAddress:    viper.GetString("observability.address"),
 	}
@@ -252,6 +261,12 @@ func parseConfig(args []string) (*Config, error) {
 	}
 	if config.RedisConnectTimeout <= 0 {
 		return nil, fmt.Errorf("redis.connect_timeout must be greater than zero")
+	}
+	if config.ReloadInterval < 0 {
+		return nil, fmt.Errorf("engine.reload.interval must be zero or greater")
+	}
+	if config.ReloadInterval > 0 && (config.ReloadHistoryDir == "" || config.ReloadHistoryMaxFiles <= 0) {
+		return nil, fmt.Errorf("engine.reload.history_dir and a positive history_max_files are required when reload is enabled")
 	}
 	if config.RedisHealthInterval <= 0 || config.RedisHealthTimeout <= 0 {
 		return nil, fmt.Errorf("Redis health check interval and timeout must be greater than zero")
@@ -309,17 +324,10 @@ func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFa
 		_ = redisStore.Close()
 		return nil, fmt.Errorf("Redis Streams durable processing requires a v4 artifact")
 	}
-	if engine.BytecodeVersion() == 4 {
-		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
-			_ = redisStore.Close()
-			return nil, err
-		}
-	}
-	if err := engine.SetScriptsEnabled(config.ScriptsEnabled); err != nil {
+	if err := configureEngine(engine, config); err != nil {
 		_ = redisStore.Close()
 		return nil, err
 	}
-	engine.SetConditionTracing(config.TraceConditions)
 	if config.MaxActionsPerEvaluation <= 0 {
 		_ = redisStore.Close()
 		return nil, fmt.Errorf("engine.max_actions_per_evaluation must be greater than zero")
@@ -328,12 +336,32 @@ func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFa
 		_ = redisStore.Close()
 		return nil, fmt.Errorf("engine.max_event_hops must be zero or greater")
 	}
-	engine.SetMaxActionsPerEvaluation(config.MaxActionsPerEvaluation)
+	manager, err := runtime.NewEngineManager(engine)
+	if err != nil {
+		_ = redisStore.Close()
+		return nil, err
+	}
+	if config.ReloadInterval > 0 && engine.BytecodeVersion() != 4 {
+		_ = redisStore.Close()
+		return nil, fmt.Errorf("ruleset reload requires a v4 artifact")
+	}
 
 	return &RexDependencies{
-		Store:  redisStore,
-		Engine: engine,
+		Store: redisStore, Engine: engine, Manager: manager,
 	}, nil
+}
+
+func configureEngine(engine *runtime.Engine, config *Config) error {
+	if engine.BytecodeVersion() == 4 {
+		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
+			return err
+		}
+	}
+	if err := engine.SetScriptsEnabled(config.ScriptsEnabled); err != nil {
+		return err
+	}
+	engine.SetConditionTracing(config.TraceConditions)
+	return engine.SetMaxActionsPerEvaluation(config.MaxActionsPerEvaluation)
 }
 
 func buildRedisTLSConfig(config *Config) (*tls.Config, error) {
@@ -377,7 +405,14 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 	if metrics == nil {
 		metrics = observability.NewMetrics()
 	}
-	deps.Engine.SetExecutionObserver(metrics)
+	if deps.Manager == nil {
+		manager, err := runtime.NewEngineManager(deps.Engine)
+		if err != nil {
+			return err
+		}
+		deps.Manager = manager
+	}
+	deps.Manager.SetExecutionObserver(metrics)
 
 	server, err := startObservabilityServer(config, metrics)
 	if err != nil {
@@ -435,7 +470,10 @@ func runMainLoopWithObservability(ctx context.Context, deps *RexDependencies, co
 	defer signal.Stop(sigChan)
 
 	logging.Logger.Info().Msg("REX runtime engine started")
-	return consumeEvents(ctx, deps.Engine, source.Events(), sigChan, metrics, config.MaxEventHops)
+	if err := startRulesetReload(ctx, deps, config, metrics, nil); err != nil {
+		return err
+	}
+	return consumeEvents(ctx, deps.Manager, source.Events(), sigChan, metrics, config.MaxEventHops)
 }
 
 func runDurableMainLoop(ctx context.Context, deps *RexDependencies, config *Config, metrics *observability.Metrics, checker connectivityChecker) error {
@@ -457,6 +495,9 @@ func runDurableMainLoop(ctx context.Context, deps *RexDependencies, config *Conf
 			logging.Logger.Error().Err(err).Msg("Failed to release durable partition")
 		}
 	}()
+	if err := startRulesetReload(ctx, deps, config, metrics, queue); err != nil {
+		return err
+	}
 
 	healthCtx, cancelHealth := context.WithTimeout(ctx, config.RedisHealthTimeout)
 	err = checker.Ping(healthCtx)
@@ -516,7 +557,7 @@ func runDurableMainLoop(ctx context.Context, deps *RexDependencies, config *Conf
 		}
 
 		started := time.Now()
-		result, processErr := deps.Engine.ProcessNextDurable(processCtx, queue)
+		result, processErr := deps.Manager.ProcessNextDurable(processCtx, queue)
 		if processCtx.Err() != nil {
 			continue
 		}
@@ -618,15 +659,15 @@ func shutdownObservabilityServer(server *http.Server) {
 	}
 }
 
-func consumeMessages(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal) error {
+func consumeMessages(ctx context.Context, engine factUpdateProcessor, messages <-chan *redis.Message, signals <-chan os.Signal) error {
 	return consumeMessagesWithOptions(ctx, engine, messages, signals, nil, 16)
 }
 
-func consumeMessagesWithMetrics(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal, metrics *observability.Metrics) error {
+func consumeMessagesWithMetrics(ctx context.Context, engine factUpdateProcessor, messages <-chan *redis.Message, signals <-chan os.Signal, metrics *observability.Metrics) error {
 	return consumeMessagesWithOptions(ctx, engine, messages, signals, metrics, 16)
 }
 
-func consumeMessagesWithOptions(ctx context.Context, engine *runtime.Engine, messages <-chan *redis.Message, signals <-chan os.Signal, metrics *observability.Metrics, maxEventHops int) error {
+func consumeMessagesWithOptions(ctx context.Context, engine factUpdateProcessor, messages <-chan *redis.Message, signals <-chan os.Signal, metrics *observability.Metrics, maxEventHops int) error {
 	for {
 		select {
 		case msg, ok := <-messages:
@@ -668,7 +709,7 @@ func processMessageWithMaxEventHops(ctx context.Context, engine factUpdateProces
 		}
 		return processLegacyMessage(ctx, engine, msg)
 	}
-	if batch, ok := engine.(*runtime.Engine); ok && batch.BytecodeVersion() == 4 && metadata.Kind == "committed_output" {
+	if batch, ok := engine.(interface{ BytecodeVersion() uint32 }); ok && batch.BytecodeVersion() == 4 && metadata.Kind == "committed_output" {
 		return nil
 	}
 	if metadata.Kind != "" {
@@ -798,7 +839,7 @@ func (f *RealEngineFactory) NewEngine(bytecodeFile string, store store.ContextSt
 	return runtime.NewEngineFromFile(bytecodeFile, store, priorityThreshold)
 }
 
-func consumeEvents(ctx context.Context, engine *runtime.Engine, events <-chan store.Event, signals <-chan os.Signal, metrics *observability.Metrics, maxHops int) error {
+func consumeEvents(ctx context.Context, engine factUpdateProcessor, events <-chan store.Event, signals <-chan os.Signal, metrics *observability.Metrics, maxHops int) error {
 	for {
 		select {
 		case <-ctx.Done():
