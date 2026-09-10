@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/store"
 )
@@ -72,11 +71,11 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 		return result, queue.Acknowledge(ctx, event.ID)
 	}
 	processingTime := time.Time{}
-	if e.BytecodeVersion() == compiler.TemporalVersion {
+	if e.HasTemporalConditions() {
 		temporalQueue, ok := queue.(ProcessingTimeDurableQueue)
 		if !ok {
 			result.RetryPending = true
-			return result, errors.Join(store.ErrDurableInfrastructure, fmt.Errorf("v6 durable processing requires a processing-time journal"))
+			return result, errors.Join(store.ErrDurableInfrastructure, fmt.Errorf("temporal durable processing requires a processing-time journal"))
 		}
 		proposed, sampleErr := e.coordinator.processingTime()
 		if sampleErr != nil {
@@ -102,6 +101,8 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 			metadata.Hop = 0
 			if validationErr := e.ValidateBatchEvent(facts); validationErr != nil {
 				receiveErr = fmt.Errorf("validate durable event: %w", validationErr)
+			} else if validationErr := e.validateDurableTargets(facts); validationErr != nil {
+				receiveErr = validationErr
 			} else if applyErr := queue.ApplyInput(ctx, event.ID, e.programID, facts); applyErr != nil {
 				receiveErr = applyErr
 			} else {
@@ -132,4 +133,23 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 	}
 	result.Processed = true
 	return result, nil
+}
+
+// Durable inputs are persisted before snapshots, so they must not overwrite
+// targets whose prior persisted value determines change-only suppression.
+func (e *Engine) validateDurableTargets(facts map[string]interface{}) error {
+	program := e.coordinator.program
+	if !program.HasChangeOnly() {
+		return nil
+	}
+	rejected := ""
+	for key := range facts {
+		if program.changeTargetSet[key] && (rejected == "" || key < rejected) {
+			rejected = key
+		}
+	}
+	if rejected != "" {
+		return fmt.Errorf("durable event includes change-only target %q", rejected)
+	}
+	return nil
 }

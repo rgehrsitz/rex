@@ -28,9 +28,8 @@ interval. REX is event driven, so it does not wake itself when five minutes pass
 another event affecting the rule must arrive.
 
 After the deadline, the condition is level-triggered: every later qualifying
-event fires again until a reset. Use consumer idempotency for external effects;
-the roadmap's separate change-only emission capability will provide opt-in
-single-transition behavior.
+event fires again until a reset. Add `emit: "on_change"` to suppress an equal
+persisted output; this composes the temporal rule into v7.
 
 `for` accepts positive Go durations such as `250ms`, `30s`, `5m`, or `24h`, up
 to 365 days. A ruleset containing it compiles as v6. It can also use v5-style

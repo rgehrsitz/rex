@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/stretchr/testify/require"
 	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/eventcontext"
@@ -109,6 +110,175 @@ func TestBatchConflictsAndCoalescing(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestChangeOnlyEmissionUsesPersistedTargetState(t *testing.T) {
+	source := `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	p := batchProgram(t, source)
+	require.Equal(t, compiler.ChangeOnlyVersion, p.Version())
+	require.True(t, p.HasChangeOnly())
+
+	tests := []struct {
+		name       string
+		snapshot   store.Fact
+		event      map[string]interface{}
+		suppressed bool
+	}{
+		{"equal", store.Fact{State: store.Present, Value: true}, map[string]interface{}{"trigger": true}, true},
+		{"different", store.Fact{State: store.Present, Value: false}, map[string]interface{}{"trigger": true}, false},
+		{"missing", store.Fact{State: store.Missing}, map[string]interface{}{"trigger": true}, false},
+		{"null", store.Fact{State: store.Null}, map[string]interface{}{"trigger": true}, false},
+		{"invalid", store.Fact{State: store.Invalid}, map[string]interface{}{"trigger": true}, false},
+		{"event target cannot mask persisted difference", store.Fact{State: store.Present, Value: false}, map[string]interface{}{"trigger": true, "out": true}, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			evaluation, budget, err := p.Evaluate(context.Background(), map[string]store.Fact{"out": test.snapshot}, test.event, DefaultLimits(), Budget{}, true)
+			require.NoError(t, err)
+			require.Equal(t, []string{"change"}, evaluation.Rules)
+			require.Equal(t, 1, budget.Actions, "suppressed proposals still consume the action budget")
+			require.Len(t, evaluation.Actions, 1)
+			require.Equal(t, test.suppressed, evaluation.Actions[0].Suppressed)
+			if test.suppressed {
+				require.Empty(t, evaluation.Writes)
+			} else {
+				require.Equal(t, []store.Write{{Key: "out", Value: true}}, evaluation.Writes)
+			}
+		})
+	}
+}
+
+func TestChangeOnlyCoalescingAndConflictPolicy(t *testing.T) {
+	tests := []struct {
+		name       string
+		secondEmit string
+		second     string
+		wantError  bool
+		wantSkip   bool
+	}{
+		{"all change-only", `,"emit":"on_change"`, "true", false, true},
+		{"mixed policy preserves write", "", "true", false, false},
+		{"conflict remains an error", `,"emit":"on_change"`, "false", true, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := `{"rules":[{"name":"first","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]},{"name":"second"` + test.secondEmit + `,"conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":` + test.second + `}]}]}`
+			evaluation, _, err := batchProgram(t, source).Evaluate(context.Background(), map[string]store.Fact{"out": {State: store.Present, Value: true}}, map[string]interface{}{"trigger": true}, DefaultLimits(), Budget{}, true)
+			if test.wantError {
+				require.ErrorContains(t, err, "conflicting writes")
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, evaluation.Actions, 2)
+			if test.wantSkip {
+				require.Empty(t, evaluation.Writes)
+				require.True(t, evaluation.Actions[0].Suppressed)
+				require.True(t, evaluation.Actions[1].Suppressed)
+			} else {
+				require.Len(t, evaluation.Writes, 1)
+				require.False(t, evaluation.Actions[0].Suppressed)
+				require.False(t, evaluation.Actions[1].Suppressed)
+			}
+		})
+	}
+}
+
+func TestChangeOnlySurvivesRestartAndSelfHealsExternalDrift(t *testing.T) {
+	source := `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	s := probe(t, nil)
+	process := func(chain string) ChainResult {
+		coordinator, err := NewCoordinator(batchProgram(t, source), s, s, DefaultLimits())
+		require.NoError(t, err)
+		result, err := coordinator.Process(context.Background(), chain, map[string]interface{}{"trigger": true})
+		require.NoError(t, err)
+		return result
+	}
+
+	first := process("first")
+	require.Equal(t, 1, s.commits)
+	require.Len(t, first.Rounds, 2)
+
+	second := process("after-restart")
+	require.Equal(t, 1, s.commits)
+	require.Len(t, second.Rounds, 1)
+	require.True(t, second.Rounds[0].Evaluation.Actions[0].Suppressed)
+	require.Empty(t, second.Rounds[0].Evaluation.Writes)
+
+	require.NoError(t, s.SetFactContext(context.Background(), "out", false))
+	process("external-drift")
+	require.Equal(t, 2, s.commits)
+}
+
+func TestChangeOnlyRedisSnapshotSurvivesRestart(t *testing.T) {
+	server, err := miniredis.Run()
+	require.NoError(t, err)
+	defer server.Close()
+	backend, err := store.NewRedisStore(context.Background(), store.RedisOptions{Addr: server.Addr()})
+	require.NoError(t, err)
+	defer backend.Close()
+	require.NoError(t, backend.SetFactContext(context.Background(), "out", false))
+	source := `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	process := func(chain string) ChainResult {
+		coordinator, err := NewCoordinator(batchProgram(t, source), backend, backend, DefaultLimits())
+		require.NoError(t, err)
+		result, err := coordinator.Process(context.Background(), chain, map[string]interface{}{"trigger": true})
+		require.NoError(t, err)
+		return result
+	}
+	first := process("redis-first")
+	require.Len(t, first.Rounds, 2)
+	require.Equal(t, store.Committed, first.Rounds[0].Commit.Outcome)
+	second := process("redis-restart")
+	require.Len(t, second.Rounds, 1)
+	require.True(t, second.Rounds[0].Evaluation.Actions[0].Suppressed)
+	require.Equal(t, store.NotCommitted, second.Rounds[0].Commit.Outcome)
+}
+
+func TestDefaultEmissionStillRepeatsEqualWrites(t *testing.T) {
+	p := batchProgram(t, `{"rules":[{"name":"default","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	evaluation, _, err := p.Evaluate(context.Background(), map[string]store.Fact{"out": {State: store.Present, Value: true}}, map[string]interface{}{"trigger": true}, DefaultLimits(), Budget{}, true)
+	require.NoError(t, err)
+	require.Len(t, evaluation.Writes, 1)
+	require.False(t, evaluation.Actions[0].Suppressed)
+}
+
+func TestChangeOnlyReportsSkippedActionOutcome(t *testing.T) {
+	source := []byte(`{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	artifact, err := compiler.CompileBatch(source)
+	require.NoError(t, err)
+	s := probe(t, map[string]interface{}{"out": true})
+	engine, err := newBatchEngine(artifact, s)
+	require.NoError(t, err)
+	observer := &recordingExecutionObserver{}
+	engine.SetExecutionObserver(observer)
+	result, err := engine.EvaluateBatch(context.Background(), map[string]interface{}{"trigger": true})
+	require.NoError(t, err)
+	require.Len(t, result.Rounds, 1)
+	require.Equal(t, []string{"change"}, observer.rulesFired)
+	require.Equal(t, []string{"updateStore"}, observer.actionsSkipped)
+	require.Empty(t, observer.actionsSucceeded)
+}
+
+func TestV7ComposesTemporalAndChangeOnlyCapabilities(t *testing.T) {
+	source := `{"rules":[{"name":"sustained","emit":"on_change","conditions":{"all":[{"fact":"hot","operator":"EQ","value":true,"for":"5m"}]},"actions":[{"type":"updateStore","target":"alert","value":true}]}]}`
+	p := batchProgram(t, source)
+	require.Equal(t, compiler.ChangeOnlyVersion, p.Version())
+	require.True(t, p.HasTemporal())
+	require.True(t, p.HasChangeOnly())
+	start := time.Date(2026, 9, 9, 12, 0, 0, 0, time.UTC)
+	first, _, err := p.EvaluateAt(context.Background(), map[string]store.Fact{"alert": {State: store.Present, Value: true}}, map[string]interface{}{"hot": true}, DefaultLimits(), Budget{}, true, start)
+	require.NoError(t, err)
+	require.Len(t, first.Writes, 1)
+	require.True(t, first.Writes[0].Internal)
+	tracker := first.Writes[0]
+	boundary, _, err := p.EvaluateAt(context.Background(), map[string]store.Fact{
+		"alert":     {State: store.Present, Value: true},
+		tracker.Key: {State: store.Present, Value: tracker.Value},
+	}, map[string]interface{}{"hot": true}, DefaultLimits(), Budget{}, true, start.Add(5*time.Minute))
+	require.NoError(t, err)
+	require.Equal(t, []string{"sustained"}, boundary.Rules)
+	require.Empty(t, boundary.Writes)
+	require.True(t, boundary.Actions[0].Suppressed)
 }
 func TestBatchFailureOutcomes(t *testing.T) {
 	for _, outcome := range []store.CommitOutcome{store.NotCommitted, store.Partial, store.Unknown} {
@@ -493,4 +663,14 @@ func TestTypedFactRuntimeContract(t *testing.T) {
 	require.Equal(t, Indeterminate, evaluation.RuleResults[0].Result)
 	require.Equal(t, store.Invalid, evaluation.Conditions[1].State)
 	require.Empty(t, evaluation.Actions)
+}
+
+func TestChangeOnlyTargetAloneDoesNotSelectRule(t *testing.T) {
+	p := batchProgram(t, `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	ids, keys := p.candidates(map[string]interface{}{"out": false})
+	require.Empty(t, ids)
+	require.Empty(t, keys)
+	ids, keys = p.candidates(map[string]interface{}{"trigger": true})
+	require.Equal(t, []int{0}, ids)
+	require.Equal(t, []string{"out"}, keys)
 }

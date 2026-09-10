@@ -25,6 +25,7 @@ type durableQueueProbe struct {
 	dead         int
 	beginErr     error
 	applyErr     error
+	completeErr  error
 	inputs       int
 	begunProgram string
 	pinnedTime   time.Time
@@ -75,7 +76,10 @@ func (q *durableQueueProbe) ApplyInput(context.Context, string, string, map[stri
 	q.inputs++
 	return q.applyErr
 }
-func (q *durableQueueProbe) Complete(context.Context, string) error { q.completed++; return nil }
+func (q *durableQueueProbe) Complete(context.Context, string) error {
+	q.completed++
+	return q.completeErr
+}
 func (q *durableQueueProbe) DeadLetterEvent(context.Context, store.DurableEvent, string, int64, error) error {
 	q.dead++
 	q.terminal = "dead_lettered"
@@ -104,6 +108,41 @@ func TestProcessNextDurableCompletesValidEvent(t *testing.T) {
 	facts, err := memory.Snapshot()
 	require.NoError(t, err)
 	require.Equal(t, true, facts["out"])
+}
+
+func TestProcessNextDurableCompletesChangeOnlyEventWithoutOutputCommit(t *testing.T) {
+	source := `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	memory, err := store.NewMemoryStore(map[string]interface{}{"out": true})
+	require.NoError(t, err)
+	coordinator, err := NewCoordinator(batchProgram(t, source), memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	engine := &Engine{coordinator: coordinator, programID: "program-change"}
+	queue := &durableQueueProbe{event: store.DurableEvent{ID: "1-0", Payload: `{"trigger":true}`}, maxAttempts: 3}
+
+	result, err := engine.ProcessNextDurable(context.Background(), queue)
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+	require.Equal(t, 1, queue.completed)
+}
+
+func TestProcessNextDurableRetriesAllSuppressedEventAfterCompletionFailure(t *testing.T) {
+	source := `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	memory, err := store.NewMemoryStore(map[string]interface{}{"out": true})
+	require.NoError(t, err)
+	coordinator, err := NewCoordinator(batchProgram(t, source), memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	engine := &Engine{coordinator: coordinator, programID: "program-change"}
+	queue := &durableQueueProbe{event: store.DurableEvent{ID: "1-0", Payload: `{"trigger":true}`}, maxAttempts: 3, completeErr: errors.New("lost completion")}
+
+	result, err := engine.ProcessNextDurable(context.Background(), queue)
+	require.ErrorContains(t, err, "lost completion")
+	require.True(t, result.RetryPending)
+	require.False(t, result.Processed)
+	queue.completeErr = nil
+	result, err = engine.ProcessNextDurable(context.Background(), queue)
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+	require.Equal(t, 2, queue.completed)
 }
 
 func TestProcessNextDurableBoundsPoisonRetries(t *testing.T) {
@@ -265,4 +304,27 @@ func TestRealRedisDurablePoisonThenProgress(t *testing.T) {
 	value, err := redisStore.GetFactContext(ctx, "out")
 	require.NoError(t, err)
 	require.Equal(t, true, value)
+}
+
+func TestDurableRejectsChangeOnlyTargetBeforePersistence(t *testing.T) {
+	source := `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	memory, err := store.NewMemoryStore(map[string]interface{}{"out": false})
+	require.NoError(t, err)
+	defer memory.Close()
+	coordinator, err := NewCoordinator(batchProgram(t, source), memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	engine := &Engine{coordinator: coordinator, programID: "change"}
+	queue := &durableQueueProbe{event: store.DurableEvent{ID: "1-0", Payload: `{"trigger":true,"out":true}`}, maxAttempts: 2}
+	result, err := engine.ProcessNextDurable(context.Background(), queue)
+	require.ErrorContains(t, err, "includes change-only target")
+	require.True(t, result.RetryPending)
+	require.Zero(t, queue.inputs)
+	require.Zero(t, queue.completed)
+	result, err = engine.ProcessNextDurable(context.Background(), queue)
+	require.NoError(t, err)
+	require.True(t, result.DeadLettered)
+	require.Zero(t, queue.inputs)
+	facts, err := memory.Snapshot()
+	require.NoError(t, err)
+	require.Equal(t, map[string]interface{}{"out": false}, facts)
 }

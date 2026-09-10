@@ -1,0 +1,20 @@
+{
+  "facts": {
+    "temperature": {"type": "number"},
+    "alert": {"type": "boolean"}
+  },
+  "rules": [
+    {
+      "name": "high-temperature-alert",
+      "emit": "on_change",
+      "conditions": {
+        "all": [
+          {"fact": "temperature", "operator": "GTE", "value": 30}
+        ]
+      },
+      "actions": [
+        {"type": "updateStore", "target": "alert", "value": true}
+      ]
+    }
+  ]
+}

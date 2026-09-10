@@ -1,16 +1,20 @@
 package compiler
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"github.com/stretchr/testify/require"
+	"hash/crc32"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 const v4Source = `{"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":1}]}]}`
 const v5Source = `{"facts":{"a":{"type":"boolean"},"out":{"type":"number"}},"rules":[{"name":"r","conditions":{"all":[{"fact":"a","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":1}]}]}`
+const v7Source = `{"rules":[{"name":"r","emit":"on_change","conditions":{"all":[{"fact":"a","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":1}]}]}`
 
 func TestBatchArtifactCompatibilityAndDeterminism(t *testing.T) {
 	a, err := CompileBatch([]byte(v4Source))
@@ -54,6 +58,8 @@ func FuzzDecodeBatch(f *testing.F) {
 	f.Add(artifact)
 	typedArtifact, _ := CompileBatch([]byte(v5Source))
 	f.Add(typedArtifact)
+	changeOnlyArtifact, _ := CompileBatch([]byte(v7Source))
+	f.Add(changeOnlyArtifact)
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, data []byte) { _, _ = DecodeBatch(data) })
 }
@@ -80,6 +86,7 @@ func TestTypedFactArtifactContract(t *testing.T) {
 	typed, err := CompileBatch([]byte(v5Source))
 	require.NoError(t, err)
 	require.Equal(t, TypedFactsVersion, binary.LittleEndian.Uint32(typed))
+	require.Equal(t, "f6af69a3fdffd86dbd3175d180a71d7dc253700f0da3aeea8a00bf903bdadbd2", fmt.Sprintf("%x", sha256.Sum256(typed)), "v5 artifact bytes are a compatibility contract")
 	rules, err := DecodeBatch(typed)
 	require.NoError(t, err)
 	require.Equal(t, FactBoolean, rules.Facts["a"].Type)
@@ -182,6 +189,14 @@ func TestTemporalArtifactContractAndValidation(t *testing.T) {
 	require.ErrorContains(t, err, "v6 batch compiler")
 }
 
+func TestV6ExampleArtifactBytesRemainCompatible(t *testing.T) {
+	source := []byte(`{"facts":{"temperature":{"type":"number"},"alert":{"type":"boolean"}},"rules":[{"name":"sustained-high-temperature","conditions":{"all":[{"fact":"temperature","operator":"GTE","value":30,"for":"5m"}]},"actions":[{"type":"updateStore","target":"alert","value":true}]}]}`)
+	artifact, err := CompileBatch(source)
+	require.NoError(t, err)
+	require.Equal(t, TemporalVersion, binary.LittleEndian.Uint32(artifact))
+	require.Equal(t, "62e72984a8511cdb9b8cd7851e68d7bd619c431ef8fb485050c327f620310c93", fmt.Sprintf("%x", sha256.Sum256(artifact)), "v6 artifact bytes are a compatibility contract")
+}
+
 func TestTemporalConditionCountIsBounded(t *testing.T) {
 	var source strings.Builder
 	source.WriteString(`{"rules":[{"name":"bounded","conditions":{"all":[`)
@@ -194,4 +209,56 @@ func TestTemporalConditionCountIsBounded(t *testing.T) {
 	source.WriteString(`]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
 	_, err := CompileBatch([]byte(source.String()))
 	require.ErrorContains(t, err, "temporal conditions")
+}
+
+func TestChangeOnlyArtifactContractAndCapabilities(t *testing.T) {
+	artifact, err := CompileBatch([]byte(v7Source))
+	require.NoError(t, err)
+	again, err := CompileBatch([]byte(v7Source))
+	require.NoError(t, err)
+	require.Equal(t, artifact, again)
+	require.Equal(t, ChangeOnlyVersion, binary.LittleEndian.Uint32(artifact))
+	rules, err := DecodeBatch(artifact)
+	require.NoError(t, err)
+	require.Equal(t, "on_change", rules.Rules[0].Emit)
+	require.Equal(t, []string{CapabilityChangeOnly}, rules.Capabilities)
+	badCapabilities := append([]byte(nil), artifact...)
+	index := bytes.Index(badCapabilities[batchHeaderSize:], []byte(CapabilityChangeOnly))
+	require.NotEqual(t, -1, index)
+	badCapabilities[batchHeaderSize+index] = 'X'
+	binary.LittleEndian.PutUint32(badCapabilities[4:], crc32.ChecksumIEEE(badCapabilities[batchHeaderSize:]))
+	_, err = DecodeBatch(badCapabilities)
+	require.ErrorContains(t, err, "capabilities")
+
+	combined := `{"facts":{"a":{"type":"boolean"},"out":{"type":"number"}},"rules":[{"name":"r","emit":"on_change","conditions":{"all":[{"fact":"a","operator":"EQ","value":true,"for":"1m"}]},"actions":[{"type":"updateStore","target":"out","value":1}]}]}`
+	artifact, err = CompileBatch([]byte(combined))
+	require.NoError(t, err)
+	rules, err = DecodeBatch(artifact)
+	require.NoError(t, err)
+	require.Equal(t, []string{CapabilityChangeOnly, CapabilityTemporal, CapabilityTypedFacts}, rules.Capabilities)
+
+	v6WithChangeOnly := append([]byte(nil), artifact...)
+	binary.LittleEndian.PutUint32(v6WithChangeOnly, TemporalVersion)
+	_, err = DecodeBatch(v6WithChangeOnly)
+	require.Error(t, err)
+	v7WithoutChangeOnly, err := CompileBatch([]byte(v4Source))
+	require.NoError(t, err)
+	binary.LittleEndian.PutUint32(v7WithoutChangeOnly, ChangeOnlyVersion)
+	_, err = DecodeBatch(v7WithoutChangeOnly)
+	require.ErrorContains(t, err, "v7 artifact capabilities")
+}
+
+func TestChangeOnlySourceValidationAndLegacyRejection(t *testing.T) {
+	for _, source := range []string{
+		strings.Replace(v7Source, `"on_change"`, `"always"`, 1),
+		strings.Replace(v7Source, `"on_change"`, `"sometimes"`, 1),
+		strings.Replace(v7Source, `{"rules":`, `{"capabilities":["change_only"],"rules":`, 1),
+	} {
+		_, err := CompileBatch([]byte(source))
+		require.Error(t, err)
+	}
+	rules, err := Parse([]byte(v7Source))
+	require.NoError(t, err)
+	_, err = GenerateBytecode(rules)
+	require.ErrorContains(t, err, "v7 batch compiler")
 }

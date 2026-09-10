@@ -18,9 +18,11 @@ Rulesets may opt into the v5 closed typed-fact contract with a top-level
 Condition leaves may opt into the v6 processing-time contract with `for`, which
 requires the predicate to remain true for a bounded duration; see the
 [temporal rules guide](docs/M8_TEMPORAL_RULES.md).
+Rules may opt into v7 `emit: "on_change"` behavior to suppress outputs already
+present in persisted state; see the [change-only emission guide](docs/M8_CHANGE_ONLY.md).
 
 Use the [M5 authoring tools](docs/M5_TOOLING.md) to explain, lint, test, replay,
-and compare v4/v5/v6 batch rulesets offline. `rexd --dry-run --bundle ...` emits simulated
+and compare v4/v5/v6/v7 batch rulesets offline. `rexd --dry-run --bundle ...` emits simulated
 results without creating Redis connections.
 
 The planning documents have distinct roles:

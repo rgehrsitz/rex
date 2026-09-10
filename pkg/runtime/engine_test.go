@@ -332,7 +332,7 @@ func TestNewEngineFromFileRejectsInvalidBytecode(t *testing.T) {
 		{
 			name: "unsupported version",
 			mutate: func(data []byte) []byte {
-				binary.LittleEndian.PutUint32(data[0:4], compiler.TemporalVersion+1)
+				binary.LittleEndian.PutUint32(data[0:4], compiler.ChangeOnlyVersion+1)
 				return data
 			},
 			recalculateChecksum: true,

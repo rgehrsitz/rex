@@ -2,8 +2,9 @@
 package compiler
 
 type Ruleset struct {
-	Facts map[string]FactDeclaration `json:"facts,omitempty"`
-	Rules []Rule                     `json:"rules"`
+	Capabilities []string                   `json:"capabilities,omitempty"`
+	Facts        map[string]FactDeclaration `json:"facts,omitempty"`
+	Rules        []Rule                     `json:"rules"`
 }
 
 type FactType string
@@ -31,6 +32,7 @@ type Script struct {
 type Rule struct {
 	Name       string         `json:"name"`
 	Priority   int            `json:"priority"`
+	Emit       string         `json:"emit,omitempty"`
 	Conditions ConditionGroup `json:"conditions"`
 	Actions    []Action       `json:"actions"`
 	// Scripts is a retired capability. Any non-nil value is rejected.

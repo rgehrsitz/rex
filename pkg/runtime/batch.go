@@ -35,6 +35,8 @@ type Program struct {
 	temporal              map[*compiler.ConditionOrGroup]temporalCondition
 	hasTemporal           map[*compiler.ConditionOrGroup]bool
 	hasTemporalConditions bool
+	changeTargets         []map[string]bool
+	changeTargetSet       map[string]bool
 }
 
 type temporalCondition struct {
@@ -51,8 +53,8 @@ func LoadProgram(data []byte) (*Program, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &Program{rules: rules.Rules, declarations: rules.Facts, version: version, dependents: map[string][]int{}, dependencies: make([][]string, len(rules.Rules))}
-	if version == compiler.TemporalVersion {
+	p := &Program{rules: rules.Rules, declarations: rules.Facts, version: version, dependents: map[string][]int{}, dependencies: make([][]string, len(rules.Rules)), changeTargets: make([]map[string]bool, len(rules.Rules))}
+	if compiler.HasTemporalConditions(rules) {
 		p.temporal = map[*compiler.ConditionOrGroup]temporalCondition{}
 		p.hasTemporal = map[*compiler.ConditionOrGroup]bool{}
 		p.hasTemporalConditions = true
@@ -88,9 +90,24 @@ func LoadProgram(data []byte) (*Program, error) {
 		if err := visit(r.Conditions.Any, facts); err != nil {
 			return nil, err
 		}
+		// Only condition facts select rules; output targets are snapshot-only dependencies.
+		for fact := range facts {
+			p.dependents[fact] = append(p.dependents[fact], i)
+		}
+		if r.Emit == compiler.EmitOnChange {
+			if p.changeTargetSet == nil {
+				p.changeTargetSet = map[string]bool{}
+			}
+			p.changeTargets[i] = map[string]bool{}
+			for _, action := range r.Actions {
+				facts[action.Target] = true
+				p.changeTargets[i][action.Target] = true
+				p.changeTargetSet[action.Target] = true
+				unique[action.Target] = true
+			}
+		}
 		for fact := range facts {
 			p.dependencies[i] = append(p.dependencies[i], fact)
-			p.dependents[fact] = append(p.dependents[fact], i)
 		}
 		if !p.hasTemporalConditions {
 			sort.Strings(p.dependencies[i])
@@ -143,6 +160,24 @@ func LoadProgram(data []byte) (*Program, error) {
 
 func (p *Program) Version() uint32 { return p.version }
 
+// HasTemporal reports whether the program contains processing-time conditions.
+func (p *Program) HasTemporal() bool { return p.hasTemporalConditions }
+
+// HasChangeOnly reports whether any rule opts into persisted-value suppression.
+func (p *Program) HasChangeOnly() bool {
+	return len(p.changeTargetSet) > 0
+}
+
+// ChangeOnlyTargets returns the sorted public facts used for suppression.
+func (p *Program) ChangeOnlyTargets() []string {
+	targets := make([]string, 0, len(p.changeTargetSet))
+	for target := range p.changeTargetSet {
+		targets = append(targets, target)
+	}
+	sort.Strings(targets)
+	return targets
+}
+
 func (p *Program) FactDeclarations() map[string]compiler.FactDeclaration {
 	if p.declarations == nil {
 		return nil
@@ -190,6 +225,7 @@ type ActionProposal struct {
 	ActionIndex int         `json:"action_index,omitempty"`
 	Target      string      `json:"target"`
 	Value       interface{} `json:"value"`
+	Suppressed  bool        `json:"suppressed,omitempty"`
 }
 type ConditionResult struct {
 	Rule   string          `json:"rule"`
@@ -221,6 +257,25 @@ func fieldBytes(key string, value interface{}, limit int) (int, error) {
 		return 0, err
 	}
 	return len(b), nil
+}
+
+func identicalScalar(fact store.Fact, value interface{}) bool {
+	if fact.State != store.Present {
+		return false
+	}
+	switch want := value.(type) {
+	case float64:
+		got, ok := fact.Value.(float64)
+		return ok && got == want
+	case string:
+		got, ok := fact.Value.(string)
+		return ok && got == want
+	case bool:
+		got, ok := fact.Value.(bool)
+		return ok && got == want
+	default:
+		return false
+	}
 }
 func validateEvent(event map[string]interface{}, l Limits) error {
 	if len(event) == 0 || len(event) > l.EventFacts {
@@ -285,7 +340,8 @@ func (p *Program) candidates(event map[string]interface{}) ([]int, []string) {
 	for i := range selected {
 		ids = append(ids, i)
 		for _, key := range p.dependencies[i] {
-			if _, ok := event[key]; !ok {
+			_, inEvent := event[key]
+			if !inEvent || p.changeTargets[i][key] {
 				needed[key] = true
 			}
 		}
@@ -397,6 +453,10 @@ func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact
 	remaining := budget
 	ids, keys := p.candidates(event)
 	values := make(map[string]store.Fact, len(keys)+len(event))
+	var persisted map[string]store.Fact
+	if len(p.changeTargetSet) > 0 {
+		persisted = make(map[string]store.Fact, min(len(keys), len(p.changeTargetSet)))
+	}
 	size := 0
 	for _, k := range keys {
 		f, ok := snapshot[k]
@@ -427,6 +487,9 @@ func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact
 			return empty, budget, fmt.Errorf("snapshot exceeds byte limit")
 		}
 		values[k] = f
+		if p.changeTargetSet[k] {
+			persisted[k] = f
+		}
 	}
 	for k, v := range event {
 		state := store.Present
@@ -561,6 +624,8 @@ func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact
 		return False, nil
 	}
 	targets := map[string]interface{}{}
+	targetChangeOnly := map[string]bool{}
+	targetSeen := map[string]bool{}
 	for _, i := range ids {
 		remaining.Work++
 		if remaining.Work > limits.ChainWork {
@@ -599,7 +664,17 @@ func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact
 				return empty, budget, fmt.Errorf("staged byte budget exceeded")
 			}
 			result.Actions = append(result.Actions, ActionProposal{Rule: rule.Name, ActionIndex: actionIndex, Target: a.Target, Value: a.Value})
+			if len(p.changeTargetSet) > 0 {
+				changeOnly := rule.Emit == compiler.EmitOnChange
+				if targetSeen[a.Target] {
+					targetChangeOnly[a.Target] = targetChangeOnly[a.Target] && changeOnly
+				} else {
+					targetSeen[a.Target] = true
+					targetChangeOnly[a.Target] = changeOnly
+				}
+			}
 			if old, ok := targets[a.Target]; ok {
+				// Validated artifact actions contain only JSON-normalized, comparable scalars.
 				if old != a.Value {
 					return empty, budget, fmt.Errorf("conflicting writes to %q", a.Target)
 				}
@@ -610,6 +685,20 @@ func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact
 				return empty, budget, fmt.Errorf("commit exceeds write limit")
 			}
 			result.Writes = append(result.Writes, store.Write{Key: a.Target, Value: a.Value})
+		}
+	}
+	if len(p.changeTargetSet) > 0 {
+		writes := result.Writes[:0]
+		for _, write := range result.Writes {
+			if !write.Internal && targetChangeOnly[write.Key] && identicalScalar(persisted[write.Key], write.Value) {
+				continue
+			}
+			writes = append(writes, write)
+		}
+		result.Writes = writes
+		for i := range result.Actions {
+			target := result.Actions[i].Target
+			result.Actions[i].Suppressed = targetChangeOnly[target] && identicalScalar(persisted[target], targets[target])
 		}
 	}
 	if err := ctx.Err(); err != nil {
@@ -764,9 +853,11 @@ func (c *Coordinator) process(ctx context.Context, chainID string, event map[str
 		if err := ctx.Err(); err != nil {
 			return result, err
 		}
-		actions := make([]store.ActionIdentity, len(eval.Actions))
-		for i, action := range eval.Actions {
-			actions[i] = store.ActionIdentity{Rule: action.Rule, Index: action.ActionIndex, Target: action.Target}
+		actions := make([]store.ActionIdentity, 0, len(eval.Actions))
+		for _, action := range eval.Actions {
+			if !action.Suppressed {
+				actions = append(actions, store.ActionIdentity{Rule: action.Rule, Index: action.ActionIndex, Target: action.Target})
+			}
 		}
 		committed, err := c.committer.Commit(roundCtx, store.CommitRequest{ChainID: result.ChainID, Round: round, Writes: eval.Writes, Actions: actions})
 		rr.Commit = committed

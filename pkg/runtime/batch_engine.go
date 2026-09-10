@@ -50,6 +50,11 @@ func (e *Engine) BytecodeVersion() uint32 {
 	return 0
 }
 
+// HasTemporalConditions reports whether the active batch program needs a clock.
+func (e *Engine) HasTemporalConditions() bool {
+	return e.coordinator != nil && e.coordinator.program.HasTemporal()
+}
+
 // Snapshot replaces mutable Engine.Facts. Batch execution retains no fact state; inspect the
 // explicit ChainResult returned by EvaluateBatch instead. V3 returns a copy.
 func (e *Engine) Snapshot() map[string]interface{} {
@@ -91,7 +96,7 @@ func (e *Engine) SetBatchLimits(limits Limits) error {
 	return nil
 }
 
-// SetClock injects the processing-time source used by v6 temporal conditions.
+// SetClock injects the processing-time source used by temporal conditions.
 // Production engines use the system clock by default.
 func (e *Engine) SetClock(clock Clock) error {
 	if e.coordinator == nil {
@@ -156,7 +161,9 @@ func (e *Engine) evaluateBatch(ctx context.Context, event map[string]interface{}
 		}
 		for _, action := range round.Evaluation.Actions {
 			record := compiler.Action{Type: "updateStore", Target: action.Target, Value: action.Value}
-			if round.Commit.Outcome == store.Committed && round.CommitError == "" {
+			if action.Suppressed {
+				e.recordActionSkipped(record)
+			} else if round.Commit.Outcome == store.Committed && round.CommitError == "" {
 				e.recordActionSucceeded(record)
 			} else if err != nil {
 				e.recordActionFailed(record, err)

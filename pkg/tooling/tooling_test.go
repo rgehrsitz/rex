@@ -332,3 +332,48 @@ func TestTemporalReplayUsesExplicitProcessingTime(t *testing.T) {
 	_, err = NewBundle(nonTemporal, plain)
 	require.ErrorContains(t, err, "non-temporal replay")
 }
+
+func TestChangeOnlyExplainLintAndReplay(t *testing.T) {
+	source := []byte(`{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	scenario := Scenario{SchemaVersion: SchemaVersion, Name: "change-only", InitialState: map[string]interface{}{"out": true}, Events: []Input{{ID: "same", Facts: map[string]interface{}{"trigger": true}}}}
+	bundle, err := NewBundle(source, scenario)
+	require.NoError(t, err)
+	require.Equal(t, compiler.ChangeOnlyVersion, bundle.Manifest.ExecutionContract)
+	report, err := Replay(context.Background(), bundle)
+	require.NoError(t, err)
+	require.Equal(t, true, report.FinalState["out"])
+	actions := Actions(report)
+	require.Len(t, actions, 1)
+	require.True(t, actions[0].Suppressed)
+
+	artifact, err := compiler.CompileBatch(source)
+	require.NoError(t, err)
+	explanation, err := Explain(artifact)
+	require.NoError(t, err)
+	require.Equal(t, []string{compiler.CapabilityChangeOnly}, explanation.Capabilities)
+	require.Equal(t, "on_change", explanation.Rules[0].Emit)
+	require.Equal(t, []string{"out", "trigger"}, explanation.Rules[0].Dependencies)
+
+	self := []byte(`{"rules":[{"name":"stable","emit":"on_change","conditions":{"all":[{"fact":"out","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	require.Empty(t, Lint(self, nil).Diagnostics, "change-only self-writes terminate after observing equal persisted state")
+
+	missing := scenario
+	missing.Name = "change-only-missing"
+	missing.InitialState = map[string]interface{}{}
+	report, err = Replay(context.Background(), mustBundle(t, source, missing))
+	require.NoError(t, err)
+	require.False(t, Actions(report)[0].Suppressed)
+	require.Equal(t, true, report.FinalState["out"])
+
+	ambiguous := scenario
+	ambiguous.Events = []Input{{ID: "ambiguous", Facts: map[string]interface{}{"trigger": true, "out": true}}}
+	_, err = NewBundle(source, ambiguous)
+	require.ErrorContains(t, err, "includes change-only target")
+}
+
+func mustBundle(t *testing.T, source []byte, scenario Scenario) Bundle {
+	t.Helper()
+	bundle, err := NewBundle(source, scenario)
+	require.NoError(t, err)
+	return bundle
+}

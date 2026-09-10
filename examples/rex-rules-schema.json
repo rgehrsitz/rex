@@ -3,14 +3,16 @@
   "type": "object",
   "properties": {
     "facts": {
-      "description": "Optional closed fact namespace. Presence selects v5 unless a temporal condition selects v6.",
+      "description": "Optional closed fact namespace. Presence selects v5 unless a temporal condition selects v6 or change-only emission selects v7.",
       "type": "object",
       "minProperties": 1,
       "maxProperties": 65536,
       "propertyNames": {
         "minLength": 1,
         "maxLength": 255,
-        "not": {"pattern": "^__rex_temporal_"}
+        "not": {
+          "pattern": "^__rex_temporal_"
+        }
       },
       "additionalProperties": {
         "$ref": "#/definitions/factDeclaration"
@@ -79,7 +81,9 @@
                       "type": "string",
                       "minLength": 1,
                       "maxLength": 255,
-                      "not": {"pattern": "^__rex_temporal_"}
+                      "not": {
+                        "pattern": "^__rex_temporal_"
+                      }
                     },
                     "value": {
                       "oneOf": [
@@ -107,6 +111,13 @@
                   "additionalProperties": false
                 },
                 "minItems": 1
+              },
+              "emit": {
+                "type": "string",
+                "enum": [
+                  "on_change"
+                ],
+                "description": "Opt in to v7 change-only emission. A matching rule suppresses a target write when its scalar value exactly equals the persisted target fact."
               }
             },
             "required": [
@@ -131,14 +142,20 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["number", "string", "boolean"]
+          "enum": [
+            "number",
+            "string",
+            "boolean"
+          ]
         },
         "nullable": {
           "type": "boolean",
           "default": false
         }
       },
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "additionalProperties": false
     },
     "ruleWithUniqueName": {
@@ -163,7 +180,9 @@
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 255,
-                "not": {"pattern": "^__rex_temporal_"}
+                "not": {
+                  "pattern": "^__rex_temporal_"
+                }
               },
               "operator": {
                 "type": "string",
@@ -196,7 +215,7 @@
               "for": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Processing-time duration for which this predicate must remain true, such as 30s or 5m. Presence selects v6."
+                "description": "Processing-time duration for which this predicate must remain true, such as 30s or 5m. Presence selects v6 unless change-only emission selects v7."
               }
             },
             "required": [
@@ -278,6 +297,6 @@
     }
   },
   "title": "REX batch ruleset",
-  "description": "Batch v4/v5/v6: scalar conditions, script-free actions, simultaneous snapshots, optional typed fact declarations, and optional v6 processing-time durations. Compiler additionally enforces unique rule names, declaration references, type agreement, duration bounds, and UTF-8 byte limits.",
+  "description": "Batch v4/v5/v6/v7: scalar conditions, script-free actions, simultaneous snapshots, optional typed fact declarations, optional processing-time durations, and optional v7 change-only emission. Compiler additionally enforces unique rule names, declaration references, type agreement, duration bounds, and UTF-8 byte limits.",
   "additionalProperties": false
 }

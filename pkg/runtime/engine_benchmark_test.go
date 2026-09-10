@@ -153,3 +153,50 @@ func BenchmarkFullRuleEvaluation(b *testing.B) {
 		engine.ProcessFactUpdate("temperature", float64(25+i%10))
 	}
 }
+
+func BenchmarkChangeOnlyEvaluation(b *testing.B) {
+	source := []byte(`{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	artifact, err := compiler.CompileBatch(source)
+	if err != nil {
+		b.Fatal(err)
+	}
+	program, err := LoadProgram(artifact)
+	if err != nil {
+		b.Fatal(err)
+	}
+	event := map[string]interface{}{"trigger": true}
+	b.Run("v4-default", func(b *testing.B) {
+		plainArtifact, err := compiler.CompileBatch([]byte(`{"rules":[{"name":"default","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`))
+		if err != nil {
+			b.Fatal(err)
+		}
+		plain, err := LoadProgram(plainArtifact)
+		if err != nil {
+			b.Fatal(err)
+		}
+		b.ReportAllocs()
+		b.ResetTimer()
+		for i := 0; i < b.N; i++ {
+			if _, _, err := plain.Evaluate(context.Background(), nil, event, DefaultLimits(), Budget{}, false); err != nil {
+				b.Fatal(err)
+			}
+		}
+	})
+	for _, benchmark := range []struct {
+		name      string
+		persisted bool
+	}{
+		{"write", false},
+		{"suppress", true},
+	} {
+		b.Run(benchmark.name, func(b *testing.B) {
+			snapshot := map[string]store.Fact{"out": {State: store.Present, Value: benchmark.persisted}}
+			b.ReportAllocs()
+			for i := 0; i < b.N; i++ {
+				if _, _, err := program.Evaluate(context.Background(), snapshot, event, DefaultLimits(), Budget{}, false); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
