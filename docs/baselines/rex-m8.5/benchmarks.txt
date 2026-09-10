@@ -1,0 +1,30 @@
+goos: darwin
+goarch: arm64
+pkg: rgehrsitz/rex/pkg/runtime
+cpu: Apple M4
+BenchmarkBatchPartitionBaseline/rules=10/dense=false/evaluate-10         	  413727	      1533 ns/op	    1480 B/op	      24 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=false/evaluate-10         	  398755	      1294 ns/op	    1480 B/op	      24 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=false/evaluate-10         	  516849	      1169 ns/op	    1480 B/op	      24 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=false/coordinator-memory-10         	  141090	      3978 ns/op	    5946 B/op	      80 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=false/coordinator-memory-10         	  153580	      3954 ns/op	    5946 B/op	      80 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=false/coordinator-memory-10         	  152500	      4050 ns/op	    5946 B/op	      80 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=true/evaluate-10                    	   78447	      7613 ns/op	   15639 B/op	     157 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=true/evaluate-10                    	   79254	      8011 ns/op	   15639 B/op	     157 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=true/evaluate-10                    	   77173	      7809 ns/op	   15639 B/op	     157 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=true/coordinator-memory-10          	   25780	     24417 ns/op	   46366 B/op	     481 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=true/coordinator-memory-10          	   24816	     23129 ns/op	   46366 B/op	     481 allocs/op
+BenchmarkBatchPartitionBaseline/rules=10/dense=true/coordinator-memory-10          	   24354	     23212 ns/op	   46366 B/op	     481 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=false/evaluate-10                 	  502740	      1185 ns/op	    1480 B/op	      24 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=false/evaluate-10                 	  495200	      1191 ns/op	    1480 B/op	      24 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=false/evaluate-10                 	  495013	      1188 ns/op	    1480 B/op	      24 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=false/coordinator-memory-10       	  141897	      4204 ns/op	    5947 B/op	      80 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=false/coordinator-memory-10       	  139880	      4235 ns/op	    5947 B/op	      80 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=false/coordinator-memory-10       	  138370	      4636 ns/op	    5947 B/op	      80 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=true/evaluate-10                  	     640	    932563 ns/op	 1626350 B/op	   12111 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=true/evaluate-10                  	     633	    932797 ns/op	 1626377 B/op	   12111 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=true/evaluate-10                  	     645	    932447 ns/op	 1626365 B/op	   12111 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=true/coordinator-memory-10        	     222	   2782694 ns/op	 4682468 B/op	   38279 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=true/coordinator-memory-10        	     222	   2698528 ns/op	 4682530 B/op	   38279 allocs/op
+BenchmarkBatchPartitionBaseline/rules=1000/dense=true/coordinator-memory-10        	     222	   2689406 ns/op	 4682497 B/op	   38279 allocs/op
+PASS
+ok  	rgehrsitz/rex/pkg/runtime	17.066s

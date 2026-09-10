@@ -1,8 +1,10 @@
 # REX foundation roadmap
 
-Created: 2026-09-07. Last planning review: 2026-09-08.
+Created: 2026-09-07. Last planning review: 2026-09-10.
 
-Status: REX-M0 through M6 are complete. REX-M7 is the next milestone.
+Status: REX-M0 through M7 and M8.1–M8.4 are complete. M8.5 partition
+readiness is implemented locally; ownership enforcement and durable profiling
+precede concurrent workers.
 
 ## Purpose and authority
 
@@ -55,15 +57,17 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M0 | Record an implementation baseline | None | Complete | [Local baseline report](baselines/rex-m0/README.md): checks, 108 measured runs, source fingerprints, and review budgets. Next: M1. |
 | REX-M1 | Improve lookup and Redis efficiency | M0 | Complete | [Implementation and performance report](baselines/rex-m1/README.md): equivalent outputs, no budget flags, and documented map-memory tradeoff. Next: M2. |
 | REX-M2 | Establish an independent semantics safety net | M0 | Complete | [PR #34](https://github.com/rgehrsitz/rex/pull/34); [current-v3 safety net](../internal/semantics/README.md): memory store, scenarios, generated cases, truth tables, mutation checks, and disassembly goldens. |
-| REX-M3 | Harden deployment and operational visibility | M0 | Complete | [Operations contract](M3_OPERATIONS.md): recoverable startup, verified TLS/env configuration, continuous readiness, bounded metrics, routing validation, and Pub/Sub limits. Local lifecycle and full-repository validation complete; review pending. Next: M7. |
+| REX-M3 | Harden deployment and operational visibility | M0 | Complete | [Operations contract](M3_OPERATIONS.md): recoverable startup, verified TLS/env configuration, continuous readiness, bounded metrics, routing validation, and Pub/Sub limits. Merged in [PR #38](https://github.com/rgehrsitz/rex/pull/38). |
 | REX-M4 | Introduce deterministic batch evaluation and adapter boundaries | M1, M2 | Complete | [PR #35](https://github.com/rgehrsitz/rex/pull/35), `f6e036c`; [migration](M4_MIGRATION.md). |
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1 and M8.2 are complete. M8.3 temporal rules are implemented locally. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.4 are merged. M8.5 partition readiness is implemented locally; concurrent execution remains gated. |
 | REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
 | REX-M8.2 | Typed fact declarations | M4, M5 | Complete | Merged in PR #41 (`da2b03a`). [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [acceptance evidence](baselines/rex-m8.2/README.md). |
-| REX-M8.3 | Temporal rules | M4, M5, M7 | Complete locally | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [local acceptance evidence](baselines/rex-m8.3/README.md). Review pending. |
+| REX-M8.3 | Temporal rules | M4, M5, M7 | Complete | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [acceptance evidence](baselines/rex-m8.3/README.md). Merged PR #42 (`cdab686`). |
+| REX-M8.4 | Optional change-only emission | M4, M5, M7 | Complete | Merged PR #43 (`f5a45d7`); [contract](decisions/REX-M8-CHANGE-ONLY.md), [evidence](baselines/rex-m8.4/README.md). |
+| REX-M8.5 | Partition readiness and batch baseline | M4, M5, M7 | In progress | [Ownership analysis and gates](M8_PARTITION_READINESS.md), [local evidence](baselines/rex-m8.5/README.md). Implementation complete; PR review pending. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -397,8 +401,8 @@ release or a reason to delay foundation work.
 | Safe ruleset reload and rollback | M4, M5 | Validate/warm before atomic swap; pin each in-flight event to one program version; retain old version on failure; coordinate version history with M7 recovery. |
 | Typed fact declarations | M4, M5 | Define missing/null/invalid and numeric precision; compiler diagnostics and input validation agree; provide migration fixtures. |
 | Temporal rules | M4, M5, M7 | Injected clock; persisted bounded timers/state; explicit event-time versus processing-time and late-event behavior; restart and boundary tests. |
-| Optional change-only emission | M4, M5, M7 | Completed locally as M8.4: rule-level opt-in, exact persisted scalar equality, no private activation state, and v7 capability metadata; preserve repeated actions by default. |
-| Partitioned concurrency | M4, M7 plus profiling evidence | Explicit fact/state ownership and cross-partition dependency policy; preserve per-partition order; race, failure, and load tests prove benefit. |
+| Optional change-only emission | M4, M5, M7 | Merged as M8.4 in PR #43: rule-level opt-in, exact persisted scalar equality, no private activation state, and v7 capability metadata; preserve repeated actions by default. |
+| Partitioned concurrency | M4, M7 plus profiling evidence; M8.5 readiness underway | Explicit fact/state ownership and cross-partition dependency policy; preserve per-partition order; race, failure, and load tests prove benefit. |
 | Additional transports | M4; M7 for durable guarantees | Pass adapter contract tests and document ordering/delivery differences. |
 | Webhooks and other external actions | M5, M7 | Outbox dispatch, stable idempotency keys, timeout/retry/dead-letter policy, and destination-specific guarantees. |
 
@@ -470,12 +474,29 @@ CLI, and release checks passed. Full acceptance evidence is recorded in
 - [x] Carry v7 through explanation, lint, replay, schema, durable completion,
   examples, compatibility documentation, restart, and external-drift tests.
 
-**Completed locally 2026-09-09:** independent semantics, compiler, runtime,
+**Merged 2026-09-10 in PR #43 (`f5a45d7`):** independent semantics, compiler, runtime,
 memory/Redis, durable-processing, tooling, schema, observability, full repository,
 race, vet, vulnerability, CLI, fuzz, benchmark, and release cross-build checks
 pass. Two Claude consultant reviews found no remaining correctness defects; all
 actionable findings were resolved. Full results are recorded in
 [the M8.4 evidence](baselines/rex-m8.4/README.md).
+
+### REX-M8.5 — Partition readiness and current batch profiling
+
+- [x] Add deterministic offline `rexc partition-plan` analysis for v4–v7,
+  conservatively joining every shared condition fact and action target.
+- [x] Cover shared reads/writes, transitive chains, nested temporal conditions,
+  change-only targets, unused declarations, malformed artifacts and CLI parity.
+- [x] Record reproducible sparse/dense single-owner batch benchmarks and a CPU
+  profile, including budget settings and limitations.
+- [x] Document routing, ownership, retained-artifact, timer migration, ordering,
+  recovery and representative durable load-test gates before adding workers.
+- [ ] Review and integrate this milestone.
+
+**Implemented locally 2026-09-10:** see [guide](M8_PARTITION_READINESS.md) and
+[evidence](baselines/rex-m8.5/README.md). No concurrent runtime or new execution
+contract is enabled. Next concrete chunk: representative durable profiling and
+an enforced ownership/routing design; parallel speedup remains unproven.
 
 ## Decisions to record before dependent implementation
 
@@ -505,6 +526,10 @@ At the start of each major chunk:
    concrete PR. Check dependencies and changes made since the last review.
 3. Resolve the decisions needed for that chunk in writing. Record acceptance
    fixtures, performance budgets where relevant, and compatibility implications.
+
+Use the authenticated Claude CLI as a design and implementation consultant for
+each upcoming chunk. Record adopted findings and explain material differences
+from its recommendations; consultation does not replace tests or PR review.
 
 At its completion:
 
