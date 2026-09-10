@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -20,6 +21,11 @@ import (
 const BatchVersion uint32 = 4
 const TypedFactsVersion uint32 = 5
 const TemporalVersion uint32 = 6
+const ChangeOnlyVersion uint32 = 7
+const CapabilityChangeOnly = "change_only"
+const CapabilityTemporal = "temporal"
+const CapabilityTypedFacts = "typed_facts"
+const EmitOnChange = "on_change"
 const MaxProgramBytes = 8 << 20
 const MaxProgramRules = 10000
 const MaxConditionNodes = 100000
@@ -38,7 +44,7 @@ func typedFactErrorf(format string, args ...interface{}) error {
 }
 
 func IsBatchVersion(version uint32) bool {
-	return version == BatchVersion || version == TypedFactsVersion || version == TemporalVersion
+	return version == BatchVersion || version == TypedFactsVersion || version == TemporalVersion || version == ChangeOnlyVersion
 }
 
 func BatchArtifactVersion(data []byte) (uint32, error) {
@@ -54,11 +60,16 @@ func BatchArtifactVersion(data []byte) (uint32, error) {
 
 // ParseBatch validates the bounded, script-free batch source contract.
 func ParseBatch(data []byte) (*Ruleset, error) {
+	rules, _, err := parseBatch(data, false)
+	return rules, err
+}
+
+func parseBatch(data []byte, artifact bool) (*Ruleset, bool, error) {
 	if len(data) > MaxProgramBytes {
-		return nil, fmt.Errorf("program exceeds %d bytes", MaxProgramBytes)
+		return nil, false, fmt.Errorf("program exceeds %d bytes", MaxProgramBytes)
 	}
 	if !utf8.Valid(data) {
-		return nil, fmt.Errorf("program must be valid UTF-8")
+		return nil, false, fmt.Errorf("program must be valid UTF-8")
 	}
 	// Bound nesting before recursive source validation. Ignore brackets in strings.
 	depth := 0
@@ -80,7 +91,7 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 		if c == '{' || c == '[' {
 			depth++
 			if depth > 64 {
-				return nil, fmt.Errorf("program nesting exceeds 64")
+				return nil, false, fmt.Errorf("program nesting exceeds 64")
 			}
 		}
 		if c == '}' || c == ']' {
@@ -88,25 +99,27 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 		}
 	}
 	if err := validateFactDeclarationShapes(data); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	rules, err := Parse(data)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if err := validateBatchShapes(data); err != nil {
-		return nil, err
+	declaresCapabilities, err := validateBatchShapes(data, artifact)
+	if err != nil {
+		return nil, false, err
 	}
 	if len(rules.Rules) > MaxProgramRules {
-		return nil, fmt.Errorf("program exceeds %d rules", MaxProgramRules)
+		return nil, false, fmt.Errorf("program exceeds %d rules", MaxProgramRules)
 	}
 	if err := validateFactDeclarations(rules); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 
 	nodes := 0
 	temporalConditions := 0
 	facts := map[string]bool{}
+	changeTargets := map[string]bool{}
 	var check func([]*ConditionOrGroup) error
 	check = func(children []*ConditionOrGroup) error {
 		for _, n := range children {
@@ -150,54 +163,62 @@ func ParseBatch(data []byte) (*Ruleset, error) {
 	}
 	for _, r := range rules.Rules {
 		if err := check(r.Conditions.All); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if err := check(r.Conditions.Any); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if r.Scripts != nil {
-			return nil, fmt.Errorf("scripts are no longer supported: rule %q declares scripts", r.Name)
+			return nil, false, fmt.Errorf("scripts are no longer supported: rule %q declares scripts", r.Name)
+		}
+		if r.Emit == EmitOnChange {
+			for _, action := range r.Actions {
+				changeTargets[action.Target] = true
+			}
 		}
 		for actionIndex, a := range r.Actions {
 			if a.Value == nil {
-				return nil, fmt.Errorf("rule %q action %d: null action values are unsupported", r.Name, actionIndex)
+				return nil, false, fmt.Errorf("rule %q action %d: null action values are unsupported", r.Name, actionIndex)
 			}
 			if v, ok := a.Value.(string); ok && strings.HasPrefix(v, "{") && strings.HasSuffix(v, "}") {
-				return nil, fmt.Errorf("scripts are no longer supported: rule %q action %d calls %q", r.Name, actionIndex, v)
+				return nil, false, fmt.Errorf("scripts are no longer supported: rule %q action %d calls %q", r.Name, actionIndex, v)
 			}
 			if rules.Facts != nil {
 				declaration, ok := rules.Facts[a.Target]
 				if !ok {
-					return nil, typedFactErrorf("rule %q action %d target %q is undeclared", r.Name, actionIndex, a.Target)
+					return nil, false, typedFactErrorf("rule %q action %d target %q is undeclared", r.Name, actionIndex, a.Target)
 				}
 				if !declaration.Accepts(a.Value) {
-					return nil, typedFactErrorf("rule %q action %d target %q requires %s", r.Name, actionIndex, a.Target, declaration.Type)
+					return nil, false, typedFactErrorf("rule %q action %d target %q requires %s", r.Name, actionIndex, a.Target, declaration.Type)
 				}
 			}
 		}
 	}
+	for target := range changeTargets {
+		facts[target] = true
+	}
 	if len(facts)+temporalConditions > MaxDependencies {
-		return nil, fmt.Errorf("program exceeds 65536 dependencies")
+		return nil, false, fmt.Errorf("program exceeds 65536 dependencies")
 	}
 	const reserved = "__rex_temporal_"
 	for name := range rules.Facts {
 		if strings.HasPrefix(name, reserved) {
-			return nil, fmt.Errorf("fact name %q uses reserved temporal state prefix", name)
+			return nil, false, fmt.Errorf("fact name %q uses reserved temporal state prefix", name)
 		}
 	}
 	for _, rule := range rules.Rules {
 		for _, action := range rule.Actions {
 			if strings.HasPrefix(action.Target, reserved) {
-				return nil, fmt.Errorf("action target %q uses reserved temporal state prefix", action.Target)
+				return nil, false, fmt.Errorf("action target %q uses reserved temporal state prefix", action.Target)
 			}
 		}
 	}
 	for fact := range facts {
 		if strings.HasPrefix(fact, reserved) {
-			return nil, fmt.Errorf("condition fact %q uses reserved temporal state prefix", fact)
+			return nil, false, fmt.Errorf("condition fact %q uses reserved temporal state prefix", fact)
 		}
 	}
-	return rules, nil
+	return rules, declaresCapabilities, nil
 }
 
 func validateFactDeclarations(rules *Ruleset) error {
@@ -318,9 +339,19 @@ func (d FactDeclaration) Accepts(value interface{}) bool {
 // CompileBatch preserves boolean grouping in a deterministic structured IR.
 // Header: version, CRC32(payload), payload length, magic REXB, then canonical JSON.
 func CompileBatch(source []byte) ([]byte, error) {
-	rules, err := ParseBatch(source)
+	rules, _, err := parseBatch(source, false)
 	if err != nil {
 		return nil, err
+	}
+	capabilities := observedCapabilities(rules)
+	version := BatchVersion
+	if HasChangeOnlyRules(rules) {
+		version = ChangeOnlyVersion
+		rules.Capabilities = capabilities
+	} else if HasTemporalConditions(rules) {
+		version = TemporalVersion
+	} else if rules.Facts != nil {
+		version = TypedFactsVersion
 	}
 	payload, err := json.Marshal(rules)
 	if err != nil {
@@ -330,12 +361,6 @@ func CompileBatch(source []byte) ([]byte, error) {
 		return nil, fmt.Errorf("canonical program exceeds byte limit")
 	}
 	out := make([]byte, batchHeaderSize, len(payload)+batchHeaderSize)
-	version := BatchVersion
-	if temporalConditionCount(rules) > 0 {
-		version = TemporalVersion
-	} else if rules.Facts != nil {
-		version = TypedFactsVersion
-	}
 	binary.LittleEndian.PutUint32(out, version)
 	binary.LittleEndian.PutUint32(out[4:], crc32.ChecksumIEEE(payload))
 	binary.LittleEndian.PutUint32(out[8:], uint32(len(payload)))
@@ -358,7 +383,7 @@ func DecodeBatch(data []byte) (*Ruleset, error) {
 	if binary.LittleEndian.Uint32(data[4:]) != crc32.ChecksumIEEE(payload) {
 		return nil, fmt.Errorf("batch artifact checksum mismatch")
 	}
-	rules, err := ParseBatch(payload)
+	rules, declaresCapabilities, err := parseBatch(payload, true)
 	if err != nil {
 		return nil, err
 	}
@@ -369,13 +394,52 @@ func DecodeBatch(data []byte) (*Ruleset, error) {
 		return nil, fmt.Errorf("v5 artifact requires typed fact declarations")
 	}
 	temporal := temporalConditionCount(rules)
+	changeOnly := HasChangeOnlyRules(rules)
+	if version != ChangeOnlyVersion && declaresCapabilities {
+		return nil, fmt.Errorf("v%d artifact cannot declare capabilities", version)
+	}
 	if (version == BatchVersion || version == TypedFactsVersion) && temporal > 0 {
 		return nil, fmt.Errorf("v%d artifact cannot contain temporal conditions", version)
 	}
 	if version == TemporalVersion && temporal == 0 {
 		return nil, fmt.Errorf("v6 artifact requires temporal conditions")
 	}
+	if version != ChangeOnlyVersion && changeOnly {
+		return nil, fmt.Errorf("v%d artifact cannot contain change-only emission", version)
+	}
+	if version == ChangeOnlyVersion {
+		observed := observedCapabilities(rules)
+		if !declaresCapabilities || !changeOnly || !slices.Equal(rules.Capabilities, observed) {
+			return nil, fmt.Errorf("v7 artifact capabilities must canonically match its features")
+		}
+	}
 	return rules, nil
+}
+
+func observedCapabilities(rules *Ruleset) []string {
+	var capabilities []string
+	if HasChangeOnlyRules(rules) {
+		capabilities = append(capabilities, CapabilityChangeOnly)
+	}
+	if HasTemporalConditions(rules) {
+		capabilities = append(capabilities, CapabilityTemporal)
+	}
+	if rules != nil && rules.Facts != nil {
+		capabilities = append(capabilities, CapabilityTypedFacts)
+	}
+	return capabilities
+}
+
+func HasChangeOnlyRules(rules *Ruleset) bool {
+	if rules == nil {
+		return false
+	}
+	for _, rule := range rules.Rules {
+		if rule.Emit == EmitOnChange {
+			return true
+		}
+	}
+	return false
 }
 
 func temporalConditionCount(rules *Ruleset) int {
@@ -403,12 +467,17 @@ func HasTemporalConditions(rules *Ruleset) bool {
 
 // validateBatchShapes checks field presence that the shared legacy AST loses
 // (for example, an explicitly empty all beside a populated any).
-func validateBatchShapes(data []byte) error {
+func validateBatchShapes(data []byte, artifact bool) (bool, error) {
 	var root struct {
-		Rules []map[string]json.RawMessage `json:"rules"`
+		Capabilities json.RawMessage              `json:"capabilities"`
+		Rules        []map[string]json.RawMessage `json:"rules"`
 	}
 	if err := json.Unmarshal(data, &root); err != nil {
-		return err
+		return false, err
+	}
+	declaresCapabilities := root.Capabilities != nil
+	if declaresCapabilities && !artifact {
+		return true, fmt.Errorf("capabilities is compiler-owned artifact metadata")
 	}
 	var group func(json.RawMessage, bool) error
 	group = func(raw json.RawMessage, leafAllowed bool) error {
@@ -452,6 +521,12 @@ func validateBatchShapes(data []byte) error {
 		return nil
 	}
 	for i, r := range root.Rules {
+		if rawEmit, present := r["emit"]; present {
+			var emit string
+			if json.Unmarshal(rawEmit, &emit) != nil || emit != EmitOnChange {
+				return declaresCapabilities, fmt.Errorf("rules[%d] emit must be \"on_change\" when present", i)
+			}
+		}
 		if _, ok := r["scripts"]; ok {
 			name := fmt.Sprintf("rules[%d]", i)
 			if rawName, ok := r["name"]; ok {
@@ -460,11 +535,11 @@ func validateBatchShapes(data []byte) error {
 					name = fmt.Sprintf("rule %q", ruleName)
 				}
 			}
-			return fmt.Errorf("scripts are no longer supported: %s declares scripts", name)
+			return declaresCapabilities, fmt.Errorf("scripts are no longer supported: %s declares scripts", name)
 		}
 		if err := group(r["conditions"], false); err != nil {
-			return err
+			return declaresCapabilities, err
 		}
 	}
-	return nil
+	return declaresCapabilities, nil
 }

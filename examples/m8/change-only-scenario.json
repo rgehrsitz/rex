@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "name": "high-temperature-change-only",
+  "initial_state": {},
+  "events": [
+    {"id": "first-high", "facts": {"temperature": 31}},
+    {"id": "still-high", "facts": {"temperature": 32}}
+  ],
+  "expect": {
+    "final_state": {"temperature": 32, "alert": true},
+    "actions": [
+      {"rule": "high-temperature-alert", "target": "alert", "value": true},
+      {"rule": "high-temperature-alert", "target": "alert", "value": true, "suppressed": true}
+    ]
+  }
+}

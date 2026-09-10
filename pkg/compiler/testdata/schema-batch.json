@@ -309,5 +309,92 @@
         }
       ]
     }
+  },
+  {
+    "name": "change_only_emission",
+    "valid": true,
+    "document": {
+      "rules": [
+        {
+          "name": "change-only",
+          "emit": "on_change",
+          "conditions": {
+            "all": [
+              {
+                "fact": "trigger",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "unsupported_emission_mode",
+    "valid": false,
+    "document": {
+      "rules": [
+        {
+          "name": "change-only",
+          "emit": "once",
+          "conditions": {
+            "all": [
+              {
+                "fact": "trigger",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "compiler_owned_capabilities_in_source",
+    "valid": false,
+    "document": {
+      "capabilities": [
+        "change_only"
+      ],
+      "rules": [
+        {
+          "name": "change-only",
+          "emit": "on_change",
+          "conditions": {
+            "all": [
+              {
+                "fact": "trigger",
+                "operator": "EQ",
+                "value": true
+              }
+            ]
+          },
+          "actions": [
+            {
+              "type": "updateStore",
+              "target": "out",
+              "value": true
+            }
+          ]
+        }
+      ]
+    }
   }
 ]

@@ -78,6 +78,9 @@ func RemoveLabels(instructions []Instruction) []Instruction {
 // GenerateBytecode compiles a parsed ruleset and fails if its control-flow
 // labels cannot be resolved to concrete byte offsets.
 func GenerateBytecode(ruleset *Ruleset) (BytecodeFile, error) {
+	if HasChangeOnlyRules(ruleset) {
+		return BytecodeFile{}, fmt.Errorf("change-only emission requires the v7 batch compiler")
+	}
 	if ruleset != nil && temporalConditionCount(ruleset) > 0 {
 		return BytecodeFile{}, fmt.Errorf("temporal conditions require the v6 batch compiler")
 	}

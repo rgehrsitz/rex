@@ -17,6 +17,7 @@ type RuleInfo struct {
 	Dependencies []string                `json:"dependencies"`
 	Conditions   compiler.ConditionGroup `json:"conditions"`
 	Actions      []compiler.Action       `json:"actions"`
+	Emit         string                  `json:"emit,omitempty"`
 }
 type Explanation struct {
 	SchemaVersion     int                                 `json:"schema_version"`
@@ -25,6 +26,7 @@ type Explanation struct {
 	Representation    string                              `json:"representation"`
 	Rules             []RuleInfo                          `json:"rules"`
 	Facts             map[string]compiler.FactDeclaration `json:"facts,omitempty"`
+	Capabilities      []string                            `json:"capabilities,omitempty"`
 }
 
 func Dependencies(r compiler.Rule) []string {
@@ -41,6 +43,11 @@ func Dependencies(r compiler.Rule) []string {
 	}
 	walk(r.Conditions.All)
 	walk(r.Conditions.Any)
+	if r.Emit == compiler.EmitOnChange {
+		for _, action := range r.Actions {
+			set[action.Target] = true
+		}
+	}
 	keys := []string{}
 	for k := range set {
 		keys = append(keys, k)
@@ -64,9 +71,9 @@ func Explain(artifact []byte) (Explanation, error) {
 	if rules.Facts == nil {
 		facts = nil
 	}
-	out := Explanation{SchemaVersion: SchemaVersion, ArtifactSHA256: Digest(artifact), ExecutionContract: version, Representation: "structured condition IR; batch artifacts have no jump instructions", Rules: []RuleInfo{}, Facts: facts}
+	out := Explanation{SchemaVersion: SchemaVersion, ArtifactSHA256: Digest(artifact), ExecutionContract: version, Representation: "structured condition IR; batch artifacts have no jump instructions", Rules: []RuleInfo{}, Facts: facts, Capabilities: rules.Capabilities}
 	for i, r := range rules.Rules {
-		out.Rules = append(out.Rules, RuleInfo{r.Name, i, r.Priority, Dependencies(r), r.Conditions, r.Actions})
+		out.Rules = append(out.Rules, RuleInfo{Name: r.Name, SourceIndex: i, Priority: r.Priority, Dependencies: Dependencies(r), Conditions: r.Conditions, Actions: r.Actions, Emit: r.Emit})
 	}
 	sort.SliceStable(out.Rules, func(i, j int) bool { return out.Rules[i].Priority < out.Rules[j].Priority })
 	return out, nil
@@ -136,7 +143,7 @@ func Lint(source []byte, channels []string) LintReport {
 			if len(r.Conditions.Any) > 0 {
 				nodes = r.Conditions.Any
 			}
-			if len(nodes) == 1 && nodes[0].Fact == a.Target && nodes[0].Operator == "EQ" && nodes[0].Value == a.Value {
+			if r.Emit != compiler.EmitOnChange && len(nodes) == 1 && nodes[0].Fact == a.Target && nodes[0].Operator == "EQ" && nodes[0].Value == a.Value {
 				add("REX-L003", "warning", r.Name, "self-write reproduces the sole EQ condition; if reached without conflicts, it repeats until a chain budget stops it")
 			}
 		}

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"rgehrsitz/rex/pkg/compiler"
 	"rgehrsitz/rex/pkg/eventcontext"
 	"rgehrsitz/rex/pkg/store"
 )
@@ -72,11 +71,11 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 		return result, queue.Acknowledge(ctx, event.ID)
 	}
 	processingTime := time.Time{}
-	if e.BytecodeVersion() == compiler.TemporalVersion {
+	if e.HasTemporalConditions() {
 		temporalQueue, ok := queue.(ProcessingTimeDurableQueue)
 		if !ok {
 			result.RetryPending = true
-			return result, errors.Join(store.ErrDurableInfrastructure, fmt.Errorf("v6 durable processing requires a processing-time journal"))
+			return result, errors.Join(store.ErrDurableInfrastructure, fmt.Errorf("temporal durable processing requires a processing-time journal"))
 		}
 		proposed, sampleErr := e.coordinator.processingTime()
 		if sampleErr != nil {

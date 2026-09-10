@@ -174,6 +174,9 @@ func validateRule(rule *Rule) error {
 	if int64(rule.Priority) > maxRulePriority {
 		return logging.NewError(logging.ErrorTypeCompile, "Rule priority exceeds the bytecode limit", nil, map[string]interface{}{"rule_name": rule.Name})
 	}
+	if rule.Emit != "" && rule.Emit != EmitOnChange {
+		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("unsupported emit mode %q; supported modes: on_change", rule.Emit), nil, map[string]interface{}{"rule_name": rule.Name, "emit": rule.Emit})
+	}
 	if err := validateAndOrderConditionGroup(&rule.Conditions); err != nil {
 		return logging.NewError(logging.ErrorTypeCompile, fmt.Sprintf("Invalid condition group: %v", err), err, map[string]interface{}{"rule_name": rule.Name})
 	}

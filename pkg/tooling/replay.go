@@ -159,13 +159,22 @@ func (b Bundle) validate() (validatedBundle, error) {
 		return validatedBundle{}, fmt.Errorf("initial state exceeds byte limit")
 	}
 	seen := map[string]bool{}
+	changeTargets := map[string]bool{}
+	for _, target := range program.ChangeOnlyTargets() {
+		changeTargets[target] = true
+	}
 	var previousTime time.Time
 	for _, event := range b.Scenario.Events {
 		if event.ID == "" || len(event.ID) > 255 || seen[event.ID] || event.Facts == nil {
 			return validatedBundle{}, fmt.Errorf("events require unique nonempty ids and facts")
 		}
 		seen[event.ID] = true
-		if program.Version() == compiler.TemporalVersion {
+		for key := range event.Facts {
+			if changeTargets[key] {
+				return validatedBundle{}, fmt.Errorf("event %q includes change-only target %q; replay persists inputs before evaluation and cannot represent its prior target snapshot", event.ID, key)
+			}
+		}
+		if program.HasTemporal() {
 			if event.At == "" {
 				return validatedBundle{}, fmt.Errorf("event %q requires processing time in the \"at\" field for temporal replay", event.ID)
 			}
@@ -241,7 +250,7 @@ func Replay(ctx context.Context, b Bundle) (Report, error) {
 				return r, err
 			}
 		}
-		if validated.program.Version() == compiler.TemporalVersion {
+		if validated.program.HasTemporal() {
 			at, _ := time.Parse(time.RFC3339Nano, event.At) // validated above
 			if err := coordinator.SetClock(fixedClock{at: at}); err != nil {
 				return r, err

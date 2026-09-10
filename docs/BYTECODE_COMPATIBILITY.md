@@ -8,8 +8,9 @@ changes.
 ## Current support
 
 `rexc` writes **v4** for rulesets without declarations, **v5** when the
-top-level `facts` map is present, and **v6** when any condition has `for`.
-`rexd` accepts all three batch contracts.
+top-level `facts` map is present, **v6** when any condition has `for`, and
+**v7** when any rule uses `emit: "on_change"`. `rexd` accepts all four batch
+contracts.
 V3 is retained for script-free artifacts: compile using `rexc -legacy-v3` and
 explicitly set `engine.allow_legacy_v3: true` to run it in the daemon.
 Versions 1, 2, and unknown versions are rejected. Keep the source JSON and
@@ -21,9 +22,23 @@ opcode numbers remain reserved only to provide a deterministic migration error.
 
 Embedded APIs `GenerateBytecode` / `WriteBytecodeToFile` and `compiler.Version`
 remain explicitly v3 for existing integrations and the frozen semantics corpus.
-New callers use `CompileBatch`, `BatchVersion`/`TypedFactsVersion`/`TemporalVersion`, and
+New callers use `CompileBatch`, `BatchVersion`/`TypedFactsVersion`/`TemporalVersion`/`ChangeOnlyVersion`, and
 `LoadProgram` or the version-dispatching `NewEngineFromFile`. `DecodeBatch`
-accepts v4, v5, and v6.
+accepts v4, v5, v6, and v7.
+
+## Version-7 format and meaning
+
+V7 uses the same header and canonical structured JSON payload. At least one rule
+must contain `emit: "on_change"`. Its compiler-owned `capabilities` array must
+exactly name the observed `change_only`, `temporal`, and `typed_facts` features
+in canonical order. Source rulesets cannot supply this field, and v4-v6
+artifacts cannot carry it.
+
+After normal conflict detection and identical-write coalescing, change-only
+rules suppress a target write whose scalar type and value exactly match the
+persisted target fact. A target is suppressed only when all of its matching
+writers opt in. See the [change-only contract](decisions/REX-M8-CHANGE-ONLY.md)
+and [operator guide](M8_CHANGE_ONLY.md).
 
 ## Version-6 format and meaning
 
@@ -78,7 +93,7 @@ validation remains required. The file loader bounds reads to 8 MiB plus header.
 V4 means deduplicated batch rounds, a shared snapshot, Unknown propagation,
 staged/coalesced writes, conflict rejection, and bounded local derived rounds.
 See the [decision record](decisions/REX-M4.md) and [migration guide](M4_MIGRATION.md).
-The default [source schema](../examples/rex-rules-schema.json) describes v4/v5/v6;
+The default [source schema](../examples/rex-rules-schema.json) describes v4/v5/v6/v7;
 [the legacy schema](../examples/rex-v3-rules-schema.json) remains available.
 
 ## Version-3 format

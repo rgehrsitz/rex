@@ -397,7 +397,7 @@ release or a reason to delay foundation work.
 | Safe ruleset reload and rollback | M4, M5 | Validate/warm before atomic swap; pin each in-flight event to one program version; retain old version on failure; coordinate version history with M7 recovery. |
 | Typed fact declarations | M4, M5 | Define missing/null/invalid and numeric precision; compiler diagnostics and input validation agree; provide migration fixtures. |
 | Temporal rules | M4, M5, M7 | Injected clock; persisted bounded timers/state; explicit event-time versus processing-time and late-event behavior; restart and boundary tests. |
-| Optional change-only emission | M4, M5, M7 | Explicit opt-in equality/activation semantics, persisted state, and restart/duplicate tests; preserve deliberate repeated actions by default. |
+| Optional change-only emission | M4, M5, M7 | Completed locally as M8.4: rule-level opt-in, exact persisted scalar equality, no private activation state, and v7 capability metadata; preserve repeated actions by default. |
 | Partitioned concurrency | M4, M7 plus profiling evidence | Explicit fact/state ownership and cross-partition dependency policy; preserve per-partition order; race, failure, and load tests prove benefit. |
 | Additional transports | M4; M7 for durable guarantees | Pass adapter contract tests and document ordering/delivery differences. |
 | Webhooks and other external actions | M5, M7 | Outbox dispatch, stable idempotency keys, timeout/retry/dead-letter policy, and destination-specific guarantees. |
@@ -452,9 +452,30 @@ vulnerability, CLI, and release cross-build checks passed.
 - [x] Cover exact deadline behavior, restart/reload recovery, regressing clocks,
   durable retry, resource bounds, and schema/compiler agreement.
 
-**Completed locally 2026-09-09:** focused compiler, runtime, memory/Redis,
-durable-processing, tooling, and schema tests pass. Full acceptance evidence is
-recorded in [the M8.3 evidence](baselines/rex-m8.3/README.md).
+**Merged 2026-09-09 in PR #42 (`cdab686`):** compiler, runtime, memory/Redis,
+durable-processing, tooling, schema, full repository, race, vet, vulnerability,
+CLI, and release checks passed. Full acceptance evidence is recorded in
+[the M8.3 evidence](baselines/rex-m8.3/README.md).
+
+### REX-M8.4 — Optional change-only emission
+
+- [x] Add rule-level `emit: "on_change"` while retaining repeated emission as
+  the default.
+- [x] Compare exact scalar values with persisted target facts and make action
+  targets bounded snapshot dependencies, with no private activation state.
+- [x] Preserve conflict rejection and mixed-writer behavior; expose suppressed
+  proposals in traces and skipped-action metrics while retaining normal budgets.
+- [x] Compose typed, temporal, and change-only behavior through validated v7
+  compiler-owned capability metadata without changing v4-v6 artifact bytes.
+- [x] Carry v7 through explanation, lint, replay, schema, durable completion,
+  examples, compatibility documentation, restart, and external-drift tests.
+
+**Completed locally 2026-09-09:** independent semantics, compiler, runtime,
+memory/Redis, durable-processing, tooling, schema, observability, full repository,
+race, vet, vulnerability, CLI, fuzz, benchmark, and release cross-build checks
+pass. Two Claude consultant reviews found no remaining correctness defects; all
+actionable findings were resolved. Full results are recorded in
+[the M8.4 evidence](baselines/rex-m8.4/README.md).
 
 ## Decisions to record before dependent implementation
 
@@ -473,6 +494,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D8 | Ruleset activation and durable version history | Poll an immutable artifact path; validate and configure before an event-boundary swap; archive exact bytes by program digest; defer while durable work is pending and retain history for at least the journal recovery window. | Resolved for M8.1 in [reload contract](decisions/REX-M8-RULESET-RELOAD.md). |
 | D9 | Typed fact namespace and compatibility | Make declarations an optional closed namespace; missing remains valid/unknown, null is opt-in, incompatible stored values become invalid, and declaration presence selects v5 while undeclared source remains v4. | Resolved for M8.2 in [typed fact contract](decisions/REX-M8-TYPED-FACTS.md). |
 | D10 | Temporal clock, persistence, and late events | Start with event-driven processing time, sample one injected clock value per chain, persist private bounded start times in the existing commit domain, and leave event-time/watermark semantics unsupported until separately designed. | Resolved for M8.3 in [temporal contract](decisions/REX-M8-TEMPORAL-RULES.md). |
+| D11 | Change-only equality and activation state | Opt in per rule, compare exact scalar values with the persisted target snapshot, retain repeated emission by default, and avoid separate activation state. | Resolved for M8.4 in [change-only contract](decisions/REX-M8-CHANGE-ONLY.md). |
 
 ## Review, validation, and completion discipline
 

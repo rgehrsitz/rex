@@ -7,8 +7,7 @@ import "rgehrsitz/rex/pkg/compiler"
 type ExecutionObserver interface {
 	RuleFired(ruleName string)
 	ActionSucceeded(actionType string)
-	// ActionSkipped is retained for observer compatibility. M6 removed the only
-	// production skip path, so current engines do not emit it.
+	// ActionSkipped records an action deliberately suppressed by runtime policy.
 	ActionSkipped(actionType string)
 	ActionFailed(actionType string, err error)
 }
