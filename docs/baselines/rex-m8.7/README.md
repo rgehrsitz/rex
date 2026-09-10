@@ -56,7 +56,7 @@ timing variation. Counts, allocations, and correctness outcomes remained stable.
 
 The completion fault path took 0.89–3.17 ms. Injected lease expiry plus successor
 takeover took 115.9–121.3 ms, including the deliberate 110 ms expiry
-wait. In the skew case, the hot partition's end-to-end p99 was 530–3,750 ms while
+wait. In the skew case, the hot partition's end-to-end p99 was 530–3,749 ms while
 the three cold partitions were 69–423 ms; with only 33–34 cold samples, their
 p99 is the sample maximum. Allocation totals include the Redis
 client and per-event measurement bookkeeping, so they characterize the harness's
