@@ -1,7 +1,7 @@
 # REX-M8.5 local acceptance evidence
 
 Starting revision: `f5a45d7` (merged M8.4 PR #43). Implementation is on
-`codex/rex-m8-partition-readiness`; PR review/integration is pending.
+`codex/rex-m8-partition-readiness`; merged in PR #44 at `97042ec`.
 
 ## Scope and decision
 
@@ -101,7 +101,8 @@ Completed locally:
 
 No runtime/compiler production behavior, artifact format or dependencies changed;
 real-Redis fault/scaling tests belong to the following ownership milestone.
-Hosted CI and PR review remain pending.
+All five PR review threads were addressed and resolved. Hosted CI passed before
+PR #44 merged on 2026-09-10.
 
 Benchmark fixture SHA-256:
 `f22bfb9530e02b344049961bbdebce6c415581edd201370ff266b086faedfbba`.

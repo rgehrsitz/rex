@@ -2,9 +2,9 @@
 
 Created: 2026-09-07. Last planning review: 2026-09-10.
 
-Status: REX-M0 through M7 and M8.1–M8.4 are complete. M8.5 partition
-readiness is implemented locally; ownership enforcement and durable profiling
-precede concurrent workers.
+Status: REX-M0 through M7 and M8.1–M8.5 are complete. M8.6 exact
+partition ownership is implemented locally; durable profiling (M8.7) precedes
+concurrent workers.
 
 ## Purpose and authority
 
@@ -62,12 +62,14 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.4 are merged. M8.5 partition readiness is implemented locally; concurrent execution remains gated. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.5 are merged. M8.6 ownership is implemented locally; concurrent execution remains gated. |
 | REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
 | REX-M8.2 | Typed fact declarations | M4, M5 | Complete | Merged in PR #41 (`da2b03a`). [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [acceptance evidence](baselines/rex-m8.2/README.md). |
 | REX-M8.3 | Temporal rules | M4, M5, M7 | Complete | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [acceptance evidence](baselines/rex-m8.3/README.md). Merged PR #42 (`cdab686`). |
 | REX-M8.4 | Optional change-only emission | M4, M5, M7 | Complete | Merged PR #43 (`f5a45d7`); [contract](decisions/REX-M8-CHANGE-ONLY.md), [evidence](baselines/rex-m8.4/README.md). |
-| REX-M8.5 | Partition readiness and batch baseline | M4, M5, M7 | In progress | [Ownership analysis and gates](M8_PARTITION_READINESS.md), [local evidence](baselines/rex-m8.5/README.md). Implementation complete; PR review pending. |
+| REX-M8.5 | Partition readiness and batch baseline | M4, M5, M7 | Complete | [Ownership analysis and gates](M8_PARTITION_READINESS.md), [evidence](baselines/rex-m8.5/README.md). Merged PR #44 (`97042ec`). |
+| REX-M8.6 | Enforced exact partition ownership | M8.5 | In progress | [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [local evidence](baselines/rex-m8.6/README.md). Review pending. |
+| REX-M8.7 | Representative durable profiling | M8.6 | Planned | Measure per-partition throughput, p50/p95/p99, skew, retry and owner loss before choosing concurrent workers. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -402,7 +404,7 @@ release or a reason to delay foundation work.
 | Typed fact declarations | M4, M5 | Define missing/null/invalid and numeric precision; compiler diagnostics and input validation agree; provide migration fixtures. |
 | Temporal rules | M4, M5, M7 | Injected clock; persisted bounded timers/state; explicit event-time versus processing-time and late-event behavior; restart and boundary tests. |
 | Optional change-only emission | M4, M5, M7 | Merged as M8.4 in PR #43: rule-level opt-in, exact persisted scalar equality, no private activation state, and v7 capability metadata; preserve repeated actions by default. |
-| Partitioned concurrency | M4, M7 plus profiling evidence; M8.5 readiness underway | Explicit fact/state ownership and cross-partition dependency policy; preserve per-partition order; race, failure, and load tests prove benefit. |
+| Partitioned concurrency | M4, M7 plus profiling evidence; M8.5 complete; M8.6 ownership underway | Explicit fact/state ownership and cross-partition dependency policy; preserve per-partition order; race, failure, and load tests prove benefit. |
 | Additional transports | M4; M7 for durable guarantees | Pass adapter contract tests and document ordering/delivery differences. |
 | Webhooks and other external actions | M5, M7 | Outbox dispatch, stable idempotency keys, timeout/retry/dead-letter policy, and destination-specific guarantees. |
 
@@ -491,12 +493,26 @@ actionable findings were resolved. Full results are recorded in
   profile, including budget settings and limitations.
 - [x] Document routing, ownership, retained-artifact, timer migration, ordering,
   recovery and representative durable load-test gates before adding workers.
-- [ ] Review and integrate this milestone.
+- [x] Review and integrate this milestone (PR #44, `97042ec`).
 
-**Implemented locally 2026-09-10:** see [guide](M8_PARTITION_READINESS.md) and
+**Merged 2026-09-10 in PR #44 (`97042ec`):** see [guide](M8_PARTITION_READINESS.md) and
 [evidence](baselines/rex-m8.5/README.md). No concurrent runtime or new execution
 contract is enabled. Next concrete chunk: representative durable profiling and
 an enforced ownership/routing design; parallel speedup remains unproven.
+
+### REX-M8.6 — Enforced exact partition ownership
+
+- [x] Add optional exact fact coverage and offline `partition-check` tooling.
+- [x] Validate active, reload and retained artifacts, with infrastructure-pending
+  handling for incompatible pinned recovery.
+- [x] Atomically reject public/protocol key overlap using immutable claims;
+  preserve claims after crashes and reject managed/legacy mixtures.
+- [x] Reject unowned input before persistence; guard managed effects and timer
+  cleanup against lease loss; retain existing temporal artifact identities.
+- [x] Cover claims, invalid inputs, reload/history, lease-loss and lost-reply
+  recovery with unit, race and real Redis tests.
+- [ ] Review and integrate; next: M8.7 durable profiling, not a worker pool.
+
 
 ## Decisions to record before dependent implementation
 
@@ -516,6 +532,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D9 | Typed fact namespace and compatibility | Make declarations an optional closed namespace; missing remains valid/unknown, null is opt-in, incompatible stored values become invalid, and declaration presence selects v5 while undeclared source remains v4. | Resolved for M8.2 in [typed fact contract](decisions/REX-M8-TYPED-FACTS.md). |
 | D10 | Temporal clock, persistence, and late events | Start with event-driven processing time, sample one injected clock value per chain, persist private bounded start times in the existing commit domain, and leave event-time/watermark semantics unsupported until separately designed. | Resolved for M8.3 in [temporal contract](decisions/REX-M8-TEMPORAL-RULES.md). |
 | D11 | Change-only equality and activation state | Opt in per rule, compare exact scalar values with the persisted target snapshot, retain repeated emission by default, and avoid separate activation state. | Resolved for M8.4 in [change-only contract](decisions/REX-M8-CHANGE-ONLY.md). |
+| D12 | Partition ownership and migration | Exact immutable public/protocol claims, local reads, complete retained-artifact coverage and fenced effects. | Resolved for M8.6 in [ownership decision](decisions/REX-M8-PARTITION-OWNERSHIP.md). |
 
 ## Review, validation, and completion discipline
 

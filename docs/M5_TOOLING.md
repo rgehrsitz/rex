@@ -136,3 +136,9 @@ conservative connected rule/fact groups without running the rules. The report
 is advisory and does not enable concurrent workers. See the
 [M8.5 ownership analysis guide](M8_PARTITION_READINESS.md) for fields, exit codes,
 shared-state limitations and the remaining concurrency gates.
+
+`rexc partition-check -rules examples/m8-partitions/rules.json -ownership
+examples/m8-partitions/ownership.json` checks complete artifact coverage against
+an exact fact list. It exits 2 for ownership diagnostics. See the
+[M8.6 ownership guide](M8_PARTITION_OWNERSHIP.md) for deployment enforcement and
+migration requirements.

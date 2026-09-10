@@ -62,6 +62,12 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 	result := DurableProcessResult{}
 	result.EventID = event.ID
 	result.Recovered = event.Recovered
+	if validator, ok := queue.(interface{ ValidateProgramFacts(string, []string) error }); ok {
+		if err := validator.ValidateProgramFacts(e.programID, e.coordinator.program.ownershipFacts); err != nil {
+			result.RetryPending = true
+			return result, errors.Join(store.ErrDurableInfrastructure, err)
+		}
+	}
 	status, err := queue.Begin(ctx, event, e.programID)
 	if err != nil {
 		return result, err

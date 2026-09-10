@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -26,6 +27,8 @@ var errDurablePreflight = errors.New("durable transaction preflight failed")
 // DurableOptions defines one ordered Redis Streams partition and its recovery
 // bounds. One active processor may own a Stream/Group pair.
 type DurableOptions struct {
+	OwnedFacts []string
+
 	Stream       string
 	Group        string
 	Consumer     string
@@ -78,6 +81,11 @@ func (o DurableOptions) withDefaults() DurableOptions {
 func (o DurableOptions) validate() error {
 	if o.Stream == "" || o.Group == "" || o.Consumer == "" {
 		return fmt.Errorf("durable stream, group, and consumer are required")
+	}
+	for _, key := range []string{o.Stream, o.OutputStream, o.DeadLetter} {
+		if strings.HasPrefix(key, "rex:durable:") || IsInternalKey(key) {
+			return fmt.Errorf("protocol stream key %q is reserved", key)
+		}
 	}
 	if o.Stream == o.OutputStream || o.Stream == o.DeadLetter || o.OutputStream == o.DeadLetter {
 		return fmt.Errorf("durable input, output, and dead-letter streams must be distinct")
@@ -159,10 +167,14 @@ func (d *RedisDurable) PinProcessingTime(ctx context.Context, eventID string, pr
 
 // RedisDurable owns the Streams consumer-group and journal protocol.
 type RedisDurable struct {
-	store   *RedisStore
-	client  *redis.Client
-	options DurableOptions
-	ownerID string
+	store             *RedisStore
+	client            *redis.Client
+	options           DurableOptions
+	ownerID           string
+	ownership         *FactOwnership
+	validationMu      sync.Mutex
+	validatedPrograms map[string]bool
+	claimJSON         string
 }
 
 type durableInfrastructureFailure struct {
@@ -194,11 +206,20 @@ func (s *RedisStore) OpenDurable(ctx context.Context, options DurableOptions) (*
 	if err := options.validate(); err != nil {
 		return nil, err
 	}
+	policy, err := NewFactOwnership(options.OwnedFacts)
+	if err != nil {
+		return nil, err
+	}
+	options.OwnedFacts = policy.Names()
 	ownerBytes := make([]byte, 16)
 	if _, err := rand.Read(ownerBytes); err != nil {
 		return nil, fmt.Errorf("create durable owner identity: %w", err)
 	}
-	durable := &RedisDurable{store: s, client: s.batchWriter(), options: options, ownerID: hex.EncodeToString(ownerBytes)}
+	durable := &RedisDurable{store: s, client: s.batchWriter(), options: options, ownership: policy, ownerID: hex.EncodeToString(ownerBytes)}
+	durable.claimJSON = durable.encodeClaim()
+	if err := durable.reserveFactOwnership(ctx, false); err != nil {
+		return nil, err
+	}
 	if err := durable.client.XGroupCreateMkStream(ctx, options.Stream, options.Group, "0").Err(); err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
 		return nil, fmt.Errorf("create durable consumer group: %w", err)
 	}
@@ -213,30 +234,29 @@ func (d *RedisDurable) ownerKey() string {
 // AcquireOwnership establishes the single active owner required by an ordered
 // stream partition. The lease must be renewed while processing.
 func (d *RedisDurable) AcquireOwnership(ctx context.Context) error {
-	acquired, err := d.client.SetNX(ctx, d.ownerKey(), d.ownerID, d.options.LockTTL).Result()
-	if err != nil {
-		return fmt.Errorf("acquire durable ownership: %w", err)
-	}
-	if !acquired {
-		return ErrDurableOwnership
-	}
-	return nil
+	return d.acquireFactOwnership(ctx)
 }
 
 // RenewOwnership extends the lease only while this instance still owns it.
 func (d *RedisDurable) RenewOwnership(ctx context.Context) error {
-	err := d.client.Watch(ctx, func(tx *redis.Tx) error {
-		owner, err := tx.Get(ctx, d.ownerKey()).Result()
-		if err != nil || owner != d.ownerID {
-			return ErrDurableOwnership
+	err := d.watchOwnership(ctx, func(tx *redis.Tx) error {
+		if d.ownership != nil {
+			if err := d.checkOwnershipFence(ctx, tx); err != nil {
+				return err
+			}
+		} else {
+			owner, err := tx.Get(ctx, d.ownerKey()).Result()
+			if err != nil || owner != d.ownerID {
+				return ErrDurableOwnership
+			}
 		}
-		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+		_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.PExpire(ctx, d.ownerKey(), d.options.LockTTL)
 			return nil
 		})
 		return err
-	}, d.ownerKey())
-	if errors.Is(err, redis.TxFailedErr) {
+	}, d.ownershipWatchKeys(d.ownerKey())...)
+	if d.ownership == nil && errors.Is(err, redis.TxFailedErr) {
 		return ErrDurableOwnership
 	}
 	return err
@@ -290,7 +310,7 @@ func (d *RedisDurable) validateFactKey(key string) error {
 	if key == d.options.Stream || key == d.options.OutputStream || key == d.options.DeadLetter || strings.HasPrefix(key, "rex:durable:") || IsInternalKey(key) {
 		return fmt.Errorf("durable fact key %q is reserved by the processing protocol", key)
 	}
-	return nil
+	return d.ownership.Validate(key)
 }
 
 // Next returns the oldest recoverable pending event before reading new work.
@@ -373,6 +393,9 @@ func (d *RedisDurable) Begin(ctx context.Context, event DurableEvent, programID 
 	status := JournalStatus{}
 	for attempt := 0; attempt < 3; attempt++ {
 		err := d.client.Watch(ctx, func(tx *redis.Tx) error {
+			if err := d.checkOwnershipFence(ctx, tx); err != nil {
+				return err
+			}
 			values, err := tx.HMGet(ctx, key, "payload", "program_id", "terminal", "attempts").Result()
 			if err != nil {
 				return err
@@ -400,7 +423,7 @@ func (d *RedisDurable) Begin(ctx context.Context, event DurableEvent, programID 
 				status.Attempts = attempts.Val()
 			}
 			return err
-		}, key)
+		}, d.ownershipWatchKeys(key)...)
 		if err == nil {
 			return status, nil
 		}
@@ -416,6 +439,22 @@ func (d *RedisDurable) Begin(ctx context.Context, event DurableEvent, programID 
 
 // Acknowledge removes a terminal event from the consumer group's pending list.
 func (d *RedisDurable) Acknowledge(ctx context.Context, eventID string) error {
+	if d.ownership != nil {
+		err := d.watchOwnership(ctx, func(tx *redis.Tx) error {
+			if err := d.checkOwnershipFence(ctx, tx); err != nil {
+				return err
+			}
+			_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				pipe.XAck(ctx, d.options.Stream, d.options.Group, eventID)
+				return nil
+			})
+			return err
+		}, d.ownershipWatchKeys()...)
+		if err != nil {
+			return infrastructureFailure("acknowledge ownership", err)
+		}
+		return nil
+	}
 	if err := d.client.XAck(ctx, d.options.Stream, d.options.Group, eventID).Err(); err != nil {
 		return infrastructureFailure("acknowledge durable event", err)
 	}
@@ -425,7 +464,10 @@ func (d *RedisDurable) Acknowledge(ctx context.Context, eventID string) error {
 // Complete atomically records terminal success and acknowledges the input.
 func (d *RedisDurable) Complete(ctx context.Context, eventID string) error {
 	key := d.journalKey(eventID)
-	err := d.client.Watch(ctx, func(tx *redis.Tx) error {
+	err := d.watchOwnership(ctx, func(tx *redis.Tx) error {
+		if err := d.checkOwnershipFence(ctx, tx); err != nil {
+			return err
+		}
 		terminal, err := tx.HGet(ctx, key, "terminal").Result()
 		if err == nil && terminal != "completed" {
 			return fmt.Errorf("%w: durable event %s is already %s", ErrDurableReconciliation, eventID, terminal)
@@ -442,7 +484,7 @@ func (d *RedisDurable) Complete(ctx context.Context, eventID string) error {
 			return nil
 		})
 		return err
-	}, key)
+	}, d.ownershipWatchKeys(key)...)
 	if err != nil {
 		if errors.Is(err, ErrDurableReconciliation) {
 			return err
@@ -457,7 +499,10 @@ func (d *RedisDurable) Complete(ctx context.Context, eventID string) error {
 func (d *RedisDurable) DeadLetterEvent(ctx context.Context, event DurableEvent, programID string, attempts int64, processErr error) error {
 	key := d.journalKey(event.ID)
 	id := stableDurableID("dead", d.options.Namespace, event.ID, programID)
-	err := d.client.Watch(ctx, func(tx *redis.Tx) error {
+	err := d.watchOwnership(ctx, func(tx *redis.Tx) error {
+		if err := d.checkOwnershipFence(ctx, tx); err != nil {
+			return err
+		}
 		terminal, err := tx.HGet(ctx, key, "terminal").Result()
 		if err == nil {
 			if terminal == "dead_lettered" {
@@ -492,7 +537,7 @@ func (d *RedisDurable) DeadLetterEvent(ctx context.Context, event DurableEvent, 
 			return nil
 		})
 		return err
-	}, key, d.options.DeadLetter)
+	}, d.ownershipWatchKeys(key, d.options.DeadLetter)...)
 	if err != nil {
 		if errors.Is(err, ErrDurableReconciliation) {
 			return err
@@ -536,6 +581,9 @@ func (d *RedisDurable) ApplyInput(ctx context.Context, eventID, programID string
 	marker := stableDurableID("input", d.options.Namespace, eventID, programID)
 	for attempt := 0; attempt < 3; attempt++ {
 		err := d.client.Watch(ctx, func(tx *redis.Tx) error {
+			if err := d.checkOwnershipFence(ctx, tx); err != nil {
+				return err
+			}
 			stored, err := tx.HGet(ctx, journal, "input_commit").Result()
 			if err == nil {
 				if stored != marker {
@@ -555,7 +603,7 @@ func (d *RedisDurable) ApplyInput(ctx context.Context, eventID, programID string
 				return nil
 			})
 			return err
-		}, journal)
+		}, d.ownershipWatchKeys(journal)...)
 		if err == nil {
 			return nil
 		}
@@ -570,6 +618,18 @@ func (d *RedisDurable) ApplyInput(ctx context.Context, eventID, programID string
 }
 
 func (d *RedisDurable) readSnapshot(ctx context.Context, metadata durableEventContext, keys []string) (map[string]Fact, error) {
+	for _, key := range keys {
+		if d.ownership != nil && !IsInternalKey(key) {
+			if err := d.validateFactKey(key); err != nil {
+				return nil, infrastructureFailure("snapshot ownership", err)
+			}
+		}
+	}
+	if d.ownership != nil {
+		if err := d.watchOwnership(ctx, func(tx *redis.Tx) error { return d.checkOwnershipFence(ctx, tx) }, d.ownershipWatchKeys()...); err != nil {
+			return nil, infrastructureFailure("snapshot ownership fence", err)
+		}
+	}
 	field := "snapshot:" + strconv.Itoa(metadata.Round)
 	key := d.journalKey(metadata.EventID)
 	if encoded, err := d.client.HGet(ctx, key, field).Bytes(); err == nil {
@@ -585,7 +645,26 @@ func (d *RedisDurable) readSnapshot(ctx context.Context, metadata durableEventCo
 	if err != nil {
 		return nil, fmt.Errorf("encode historical snapshot: %w", err)
 	}
-	stored, err := d.client.HSetNX(ctx, key, field, encoded).Result()
+	var stored bool
+	if d.ownership == nil {
+		stored, err = d.client.HSetNX(ctx, key, field, encoded).Result()
+	} else {
+		err = d.watchOwnership(ctx, func(tx *redis.Tx) error {
+			if err := d.checkOwnershipFence(ctx, tx); err != nil {
+				return err
+			}
+			var command *redis.BoolCmd
+			_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
+				command = pipe.HSetNX(ctx, key, field, encoded)
+				pipe.PExpire(ctx, key, d.options.JournalTTL)
+				return nil
+			})
+			if err == nil {
+				stored = command.Val()
+			}
+			return err
+		}, d.ownershipWatchKeys()...)
+	}
 	if err != nil {
 		return nil, infrastructureFailure("record historical snapshot", err)
 	}
@@ -615,6 +694,15 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 	}
 	if err := validateWrites(request.Writes); err != nil {
 		return failed, err
+	}
+	if d.ownership != nil {
+		for _, write := range request.Writes {
+			if !write.Internal {
+				if err := d.validateFactKey(write.Key); err != nil {
+					return failed, infrastructureFailure("commit ownership", err)
+				}
+			}
+		}
 	}
 	journal := d.journalKey(metadata.EventID)
 	field := "commit:" + strconv.Itoa(request.Round)
@@ -679,12 +767,15 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 		return failed, err
 	}
 
-	watchKeys := []string{journal}
+	watchKeys := d.ownershipWatchKeys(journal)
 	if len(facts) > 0 {
 		watchKeys = append(watchKeys, d.options.OutputStream)
 	}
 	for attempt := 0; attempt < 3; attempt++ {
 		err = d.client.Watch(ctx, func(tx *redis.Tx) error {
+			if err := d.checkOwnershipFence(ctx, tx); err != nil {
+				return err
+			}
 			if value, err := tx.HGet(ctx, journal, field).Bytes(); err == nil {
 				var committed CommitResult
 				if err := json.Unmarshal(value, &committed); err != nil {

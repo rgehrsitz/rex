@@ -257,3 +257,17 @@ func TestRulesetReloadCleansAbandonedTempFiles(t *testing.T) {
 	_, err := os.Stat(stale)
 	require.ErrorIs(t, err, os.ErrNotExist)
 }
+
+func TestReloadRejectsUnownedCandidateAndHistory(t *testing.T) {
+	r, manager, path := reloadFixture(t, nil)
+	r.config.RedisEventMode = "streams"
+	r.config.RedisDurable.OwnedFacts = []string{"a", "old-output"}
+	active := manager.ActiveProgramID()
+	require.NoError(t, os.WriteFile(path, reloadArtifact(t, "foreign"), 0600))
+	_, err := r.reload(context.Background())
+	require.ErrorContains(t, err, "outside partition")
+	require.Equal(t, active, manager.ActiveProgramID())
+	require.NoError(t, r.loadHistory())
+	r.config.RedisDurable.OwnedFacts = []string{"a"}
+	require.ErrorContains(t, r.loadHistory(), "outside partition")
+}

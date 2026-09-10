@@ -222,7 +222,8 @@ func parseConfig(args []string) (*Config, error) {
 			ClaimIdle: viper.GetDuration("redis.durable.claim_idle"), Block: viper.GetDuration("redis.durable.block"),
 			JournalTTL: viper.GetDuration("redis.durable.journal_ttl"), MaxAttempts: viper.GetInt64("redis.durable.max_attempts"),
 			OutputMaxLen: viper.GetInt64("redis.durable.output_max_len"), DeadMaxLen: viper.GetInt64("redis.durable.dead_letter_max_len"),
-			LockTTL: viper.GetDuration("redis.durable.lock_ttl"),
+			LockTTL:    viper.GetDuration("redis.durable.lock_ttl"),
+			OwnedFacts: viper.GetStringSlice("redis.durable.ownership.facts"),
 		},
 		RedisRetryBackoff:       viper.GetDuration("redis.durable.retry_backoff"),
 		RedisTLSEnabled:         viper.GetBool("redis.tls.enabled"),
@@ -242,6 +243,17 @@ func parseConfig(args []string) (*Config, error) {
 		ReloadHistoryMaxFiles:   viper.GetInt("engine.reload.history_max_files"),
 		ObservabilityEnabled:    viper.GetBool("observability.enabled"),
 		ObservabilityAddress:    viper.GetString("observability.address"),
+	}
+	if viper.IsSet("redis.durable.ownership.facts") && config.RedisDurable.OwnedFacts == nil {
+		config.RedisDurable.OwnedFacts = []string{}
+	}
+	if config.RedisDurable.OwnedFacts != nil {
+		if config.RedisEventMode != "streams" {
+			return nil, fmt.Errorf("fact ownership requires streams mode")
+		}
+		if _, err := store.NewFactOwnership(config.RedisDurable.OwnedFacts); err != nil {
+			return nil, err
+		}
 	}
 	if config.RedisAddress == "" {
 		return nil, fmt.Errorf("redis.address is required")
@@ -353,6 +365,14 @@ func setupDependencies(ctx context.Context, config *Config, storeFactory StoreFa
 }
 
 func configureEngine(engine *runtime.Engine, config *Config) error {
+	if config.RedisDurable.OwnedFacts != nil {
+		if config.RedisEventMode != "streams" {
+			return fmt.Errorf("fact ownership requires streams mode")
+		}
+		if err := engine.ValidateFactOwnership(config.RedisDurable.OwnedFacts); err != nil {
+			return err
+		}
+	}
 	if compiler.IsBatchVersion(engine.BytecodeVersion()) {
 		if err := engine.SetBatchLimits(config.BatchLimits); err != nil {
 			return err
