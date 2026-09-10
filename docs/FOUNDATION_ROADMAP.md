@@ -531,9 +531,9 @@ and release checks passed.
 
 **Completed locally 2026-09-10:** three warmed 1,000-event runs against isolated
 Redis 7.4.2 processes recorded stable correctness, command and allocation
-outcomes. Timing varied too widely for a capacity decision (331–2,082 events/s
-across sparse scenarios); the evidence therefore sets no performance budget and
-keeps concurrent production workers gated.
+outcomes. Timing varied too widely for a capacity decision (266–2,059 events/s
+across sparse scenarios); the local loopback evidence therefore sets no
+performance budget and keeps concurrent production workers gated.
 See [M8.7 evidence](baselines/rex-m8.7/README.md).
 
 

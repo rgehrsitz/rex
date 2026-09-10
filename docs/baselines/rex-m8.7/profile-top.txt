@@ -1,57 +1,57 @@
 File: runtime.test
 Type: cpu
-Time: 2026-09-10 14:16:01 EDT
-Duration: 4.12s, Total samples = 1.76s (42.71%)
-Showing nodes accounting for 1.76s, 100% of 1.76s total
-Showing top 50 nodes out of 210
+Time: 2026-09-10 15:44:29 EDT
+Duration: 4.41s, Total samples = 1.84s (41.71%)
+Showing nodes accounting for 1.84s, 100% of 1.84s total
+Showing top 50 nodes out of 203
       flat  flat%   sum%        cum   cum%
-     0.97s 55.11% 55.11%      0.97s 55.11%  syscall.rawsyscalln
-     0.47s 26.70% 81.82%      0.47s 26.70%  runtime.kevent
-     0.04s  2.27% 84.09%      0.04s  2.27%  runtime.madvise
-     0.04s  2.27% 86.36%      0.04s  2.27%  runtime.pthread_cond_signal
-     0.04s  2.27% 88.64%      0.04s  2.27%  runtime.pthread_kill
-     0.03s  1.70% 90.34%      0.03s  1.70%  runtime.pthread_cond_timedwait_relative_np
-     0.02s  1.14% 91.48%      0.02s  1.14%  runtime.memclrNoHeapPointers
-     0.02s  1.14% 92.61%      0.02s  1.14%  runtime.usleep
-     0.01s  0.57% 93.18%      0.25s 14.20%  bufio.(*Reader).fill
-     0.01s  0.57% 93.75%      0.01s  0.57%  crypto/internal/fips140/sha256.(*Digest).Write
-     0.01s  0.57% 94.32%      0.01s  0.57%  encoding/json.stateInString
-     0.01s  0.57% 94.89%      0.01s  0.57%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
-     0.01s  0.57% 95.45%      0.01s  0.57%  runtime.(*mspan).moveInlineMarks
-     0.01s  0.57% 96.02%      0.01s  0.57%  runtime.acquirem (inline)
-     0.01s  0.57% 96.59%      0.01s  0.57%  runtime.asyncPreempt
-     0.01s  0.57% 97.16%      0.01s  0.57%  runtime.memequal
-     0.01s  0.57% 97.73%      0.01s  0.57%  runtime.memmove
-     0.01s  0.57% 98.30%      0.02s  1.14%  runtime.newobject
-     0.01s  0.57% 98.86%      0.01s  0.57%  runtime.pthread_cond_wait
-     0.01s  0.57% 99.43%      0.01s  0.57%  runtime.scanblock
-     0.01s  0.57%   100%      0.19s 10.80%  runtime.systemstack
-         0     0%   100%      0.25s 14.20%  bufio.(*Reader).Peek
-         0     0%   100%      0.01s  0.57%  bufio.(*Reader).Read
-         0     0%   100%      0.37s 21.02%  bufio.(*Writer).Flush
-         0     0%   100%      0.01s  0.57%  crypto/internal/fips140/sha256.(*Digest).Sum
-         0     0%   100%      0.01s  0.57%  crypto/internal/fips140/sha256.(*Digest).checkSum
-         0     0%   100%      0.01s  0.57%  encoding/hex.EncodeToString
-         0     0%   100%      0.01s  0.57%  encoding/json.(*Decoder).Decode
-         0     0%   100%      0.01s  0.57%  encoding/json.(*Decoder).readValue
-         0     0%   100%      0.01s  0.57%  encoding/json.(*Decoder).refill
-         0     0%   100%      0.02s  1.14%  encoding/json.(*encodeState).marshal
-         0     0%   100%      0.02s  1.14%  encoding/json.(*encodeState).reflectValue
-         0     0%   100%      0.02s  1.14%  encoding/json.Marshal
-         0     0%   100%      0.01s  0.57%  encoding/json.Unmarshal
-         0     0%   100%      0.01s  0.57%  encoding/json.checkValid
-         0     0%   100%      0.02s  1.14%  encoding/json.typeEncoder
-         0     0%   100%      0.02s  1.14%  encoding/json.valueEncoder
-         0     0%   100%      0.01s  0.57%  errors.As
-         0     0%   100%      0.27s 15.34%  github.com/redis/go-redis/v9.(*Client).Process
-         0     0%   100%      0.73s 41.48%  github.com/redis/go-redis/v9.(*Client).Watch
-         0     0%   100%      0.22s 12.50%  github.com/redis/go-redis/v9.(*Pipeline).Exec
-         0     0%   100%      0.22s 12.50%  github.com/redis/go-redis/v9.(*Pipeline).Pipelined
-         0     0%   100%      0.51s 28.98%  github.com/redis/go-redis/v9.(*Tx).Process
-         0     0%   100%      0.22s 12.50%  github.com/redis/go-redis/v9.(*Tx).TxPipelined
-         0     0%   100%      0.22s 12.50%  github.com/redis/go-redis/v9.(*Tx).TxPipelined.(*Tx).TxPipeline.func1
-         0     0%   100%      0.22s 12.50%  github.com/redis/go-redis/v9.(*Tx).Watch
-         0     0%   100%      0.01s  0.57%  github.com/redis/go-redis/v9.(*XMessageSliceCmd).readReply
-         0     0%   100%      0.35s 19.89%  github.com/redis/go-redis/v9.(*baseClient)._getConn
-         0     0%   100%      0.78s 44.32%  github.com/redis/go-redis/v9.(*baseClient)._process
-         0     0%   100%      0.42s 23.86%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
+     1.07s 58.15% 58.15%      1.07s 58.15%  syscall.rawsyscalln
+     0.50s 27.17% 85.33%      0.50s 27.17%  runtime.kevent
+     0.05s  2.72% 88.04%      0.05s  2.72%  runtime.madvise
+     0.05s  2.72% 90.76%      0.05s  2.72%  runtime.pthread_kill
+     0.03s  1.63% 92.39%      0.03s  1.63%  encoding/json.stateInString
+     0.01s  0.54% 92.93%      0.01s  0.54%  bufio.(*Reader).ReadSlice
+     0.01s  0.54% 93.48%      0.02s  1.09%  encoding/json.(*decodeState).literalStore
+     0.01s  0.54% 94.02%      0.01s  0.54%  encoding/json.stateEndValue
+     0.01s  0.54% 94.57%      0.01s  0.54%  encoding/json.stateTr
+     0.01s  0.54% 95.11%      0.01s  0.54%  encoding/json.unquoteBytes
+     0.01s  0.54% 95.65%      0.21s 11.41%  github.com/redis/go-redis/v9/internal/proto.(*Reader).PeekReplyType
+     0.01s  0.54% 96.20%      0.01s  0.54%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
+     0.01s  0.54% 96.74%      0.01s  0.54%  internal/stringslite.Index
+     0.01s  0.54% 97.28%      0.01s  0.54%  reflect.elem
+     0.01s  0.54% 97.83%      0.05s  2.72%  runtime.markroot.func1
+     0.01s  0.54% 98.37%      0.01s  0.54%  runtime.pthread_cond_signal
+     0.01s  0.54% 98.91%      0.01s  0.54%  runtime.pthread_cond_timedwait_relative_np
+     0.01s  0.54% 99.46%      0.01s  0.54%  runtime.scanObjectSmall
+     0.01s  0.54%   100%      0.01s  0.54%  runtime.step
+         0     0%   100%      0.20s 10.87%  bufio.(*Reader).Peek
+         0     0%   100%      0.01s  0.54%  bufio.(*Reader).Read
+         0     0%   100%      0.20s 10.87%  bufio.(*Reader).fill
+         0     0%   100%      0.37s 20.11%  bufio.(*Writer).Flush
+         0     0%   100%      0.02s  1.09%  encoding/json.(*Decoder).Decode
+         0     0%   100%      0.04s  2.17%  encoding/json.(*decodeState).array
+         0     0%   100%      0.08s  4.35%  encoding/json.(*decodeState).object
+         0     0%   100%      0.01s  0.54%  encoding/json.(*decodeState).scanNext
+         0     0%   100%      0.03s  1.63%  encoding/json.(*decodeState).skip
+         0     0%   100%      0.08s  4.35%  encoding/json.(*decodeState).unmarshal
+         0     0%   100%      0.08s  4.35%  encoding/json.(*decodeState).value
+         0     0%   100%      0.07s  3.80%  encoding/json.Unmarshal
+         0     0%   100%      0.01s  0.54%  encoding/json.checkValid
+         0     0%   100%      0.30s 16.30%  github.com/redis/go-redis/v9.(*Client).Process
+         0     0%   100%      0.81s 44.02%  github.com/redis/go-redis/v9.(*Client).Watch
+         0     0%   100%      0.01s  0.54%  github.com/redis/go-redis/v9.(*Conn).Process
+         0     0%   100%      0.20s 10.87%  github.com/redis/go-redis/v9.(*Pipeline).Exec
+         0     0%   100%      0.20s 10.87%  github.com/redis/go-redis/v9.(*Pipeline).Pipelined
+         0     0%   100%      0.60s 32.61%  github.com/redis/go-redis/v9.(*Tx).Process
+         0     0%   100%      0.20s 10.87%  github.com/redis/go-redis/v9.(*Tx).TxPipelined
+         0     0%   100%      0.20s 10.87%  github.com/redis/go-redis/v9.(*Tx).TxPipelined.(*Tx).TxPipeline.func1
+         0     0%   100%      0.36s 19.57%  github.com/redis/go-redis/v9.(*Tx).Watch
+         0     0%   100%      0.01s  0.54%  github.com/redis/go-redis/v9.(*XMessageSliceCmd).readReply
+         0     0%   100%      0.50s 27.17%  github.com/redis/go-redis/v9.(*baseClient)._getConn
+         0     0%   100%      0.90s 48.91%  github.com/redis/go-redis/v9.(*baseClient)._process
+         0     0%   100%      0.40s 21.74%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
+         0     0%   100%      0.19s 10.33%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.3
+         0     0%   100%      0.20s 10.87%  github.com/redis/go-redis/v9.(*baseClient).generalProcessPipeline
+         0     0%   100%      0.20s 10.87%  github.com/redis/go-redis/v9.(*baseClient).generalProcessPipeline.func1
+         0     0%   100%      0.50s 27.17%  github.com/redis/go-redis/v9.(*baseClient).getConn
+         0     0%   100%      0.01s  0.54%  github.com/redis/go-redis/v9.(*baseClient).initConn

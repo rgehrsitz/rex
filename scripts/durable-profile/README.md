@@ -14,6 +14,9 @@ python3 scripts/durable-profile/run.py \
   --runs 3
 ```
 
+If `redis-cli` is not beside `redis-server`, pass its executable path with
+`--redis-cli`.
+
 The output directory must not already exist. Event counts must be multiples of
 100. Each run exercises four exact-ownership partitions and five isolated scenarios:
 sparse balanced, dense balanced, sparse 90/10 skew, a failure after commit but

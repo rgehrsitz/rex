@@ -43,21 +43,21 @@ instrumentation settings are in [`profile-metadata.json`](profile-metadata.json)
 
 ## Results
 
-Ranges below retain all three runs because other host activity caused visible
+Ranges below retain all three final runs because host activity caused visible
 timing variation. Counts, allocations, and correctness outcomes remained stable.
 
 | Scenario | Drain events/s | Service p50 ms | p95 ms | p99 ms | End-to-end p99 ms | Redis commands/event | Allocated KB/event |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Sparse balanced | 1,063–2,079 | 0.470–0.899 | 0.556–1.655 | 0.648–2.932 | 477–936 | 44 | 50.3 |
-| Dense balanced | 1,013–1,225 | 0.747–0.911 | 0.985–1.511 | 1.087–1.906 | 809–979 | 143 | 457.1–457.9 |
-| Sparse 90/10 skew | 331–2,068 | 0.472–1.749 | 0.552–9.782 | 0.649–20.409 | 479–2,993 | 44 | 50.3 |
-| Completion retry | 374–2,082 | 0.469–1.409 | 0.560–8.353 | 0.653–19.705 | 476–2,664 | 44.017 | 50.3 |
-| Owner loss | 386–1,650 | 0.472–1.356 | 0.595–6.803 | 0.730–22.394 | 602–2,583 | 44.055 | 51.4 |
+| Sparse balanced | 890–2,059 | 0.467–1.151 | 0.623–1.685 | 0.851–2.748 | 481–1,111 | 44 | 50.3 |
+| Dense balanced | 510–1,142 | 0.792–1.437 | 1.261–4.559 | 1.964–11.259 | 868–1,908 | 143 | 457.3–458.1 |
+| Sparse 90/10 skew | 266–1,872 | 0.482–1.969 | 0.907–13.320 | 1.366–29.128 | 530–3,749 | 44 | 50.3 |
+| Completion retry | 353–2,058 | 0.467–1.729 | 0.616–7.542 | 0.847–21.076 | 483–2,814 | 44.017 | 50.3 |
+| Owner loss | 412–1,624 | 0.472–1.469 | 0.652–6.724 | 0.983–14.345 | 611–2,414 | 44.055 | 51.3–51.4 |
 
-The completion fault path took 0.82–2.89 ms. Injected lease expiry plus successor
-takeover took 115.7–158.4 ms, including the deliberate 110 ms expiry
-wait. In the skew case, the hot partition's end-to-end p99 was 480–2,994 ms while
-the three cold partitions were 65–316 ms; with only 33–34 cold samples, their
+The completion fault path took 0.89–3.17 ms. Injected lease expiry plus successor
+takeover took 115.9–121.3 ms, including the deliberate 110 ms expiry
+wait. In the skew case, the hot partition's end-to-end p99 was 530–3,750 ms while
+the three cold partitions were 69–423 ms; with only 33–34 cold samples, their
 p99 is the sample maximum. Allocation totals include the Redis
 client and per-event measurement bookkeeping, so they characterize the harness's
 end-to-end process cost rather than evaluator-only allocation.
@@ -93,9 +93,9 @@ and the one injected pause perturbs owner-loss scenario throughput. Successor
 construction, ownership acquisition, and stale-owner fencing also explain the
 owner-loss row's extra 0.055 commands and roughly 1.1 KB allocation per event.
 
-The large timing spread, including one heavily disturbed run, makes this host
-unsuitable for a regression budget or capacity decision. Deterministic command
-and allocation counts plus the correctness checks remained stable. A production
+The large timing spread includes a heavily disturbed host run and does not
+establish a regression budget or capacity decision. Deterministic command and
+allocation counts plus the correctness checks remained stable. A production
 capacity claim requires a controlled host, production-equivalent Redis network,
 persistence and TLS settings, sustained arrival rates, saturation/backpressure,
 and longer steady-state samples. Raw event-level samples are intentionally not
@@ -149,3 +149,9 @@ files and hashes both allowed measurement sources. Documentation changes may be
 dirty without changing the measured binary. Claude's follow-up found no
 remaining correctness or evidence-integrity defect; its three minor provenance
 and explanation notes are also reflected in the final report.
+
+The regenerated metadata records original PR commit `fa19721` and the working
+tree containing these review fixes. The follow-up commit is necessarily newer;
+a clean reproduction from it will therefore record that newer HEAD and a clean
+status. Production Go/module sources remained at `fa19721`, while the exact
+profile test and runner are anchored by their recorded content hashes.
