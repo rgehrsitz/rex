@@ -128,3 +128,11 @@ the comparison exit code. CI runs it alongside normal race/build checks.
 test-only JSON Schema validator against shared positive/negative source shapes.
 The parser additionally enforces UTF-8 byte limits, unique rule names, total node/
 dependency limits and nesting bounds, which the generic schema does not express.
+
+## Partition readiness analysis
+
+`rexc partition-plan -rules rules.json` (or `-artifact rules.bytecode`) reports
+conservative connected rule/fact groups without running the rules. The report
+is advisory and does not enable concurrent workers. See the
+[M8.5 ownership analysis guide](M8_PARTITION_READINESS.md) for fields, exit codes,
+shared-state limitations and the remaining concurrency gates.

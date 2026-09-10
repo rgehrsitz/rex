@@ -1,0 +1,205 @@
+File: rex-m85-profile.test
+Type: cpu
+Time: 2026-09-10 11:25:58 EDT
+Duration: 6.42s, Total samples = 8.20s (127.64%)
+Active filters:
+   focus=rgehrsitz/rex
+Showing nodes accounting for 1.47s, 17.93% of 8.20s total
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      1.47s 17.93%  testing.(*B).runN
+         0     0%     0%      1.44s 17.56%  rgehrsitz/rex/pkg/runtime.BenchmarkBatchPartitionBaseline.func1.2
+         0     0%     0%      1.44s 17.56%  testing.(*B).launch
+         0     0%     0%      1.36s 16.59%  rgehrsitz/rex/pkg/runtime.(*Coordinator).Process (inline)
+         0     0%     0%      1.36s 16.59%  rgehrsitz/rex/pkg/runtime.(*Coordinator).process
+     0.01s  0.12%  0.12%      0.79s  9.63%  rgehrsitz/rex/pkg/runtime.(*Program).EvaluateAt
+         0     0%  0.12%      0.51s  6.22%  rgehrsitz/rex/pkg/runtime.fieldBytes
+     0.02s  0.24%  0.37%      0.44s  5.37%  encoding/json.Marshal
+         0     0%  0.37%      0.42s  5.12%  rgehrsitz/rex/pkg/runtime.(*Program).candidates
+         0     0%  0.37%      0.39s  4.76%  encoding/json.(*encodeState).marshal
+     0.01s  0.12%  0.49%      0.39s  4.76%  encoding/json.(*encodeState).reflectValue
+     0.02s  0.24%  0.73%      0.33s  4.02%  encoding/json.mapEncoder.encode
+         0     0%  0.73%      0.32s  3.90%  runtime.mallocgc
+     0.04s  0.49%  1.22%      0.29s  3.54%  runtime.mapassign_faststr
+         0     0%  1.22%      0.26s  3.17%  rgehrsitz/rex/pkg/runtime.(*Program).validateEvent
+         0     0%  1.22%      0.24s  2.93%  rgehrsitz/rex/pkg/runtime.validateEvent
+     0.07s  0.85%  2.07%      0.24s  2.93%  runtime.mallocgcSmallScanNoHeader
+     0.10s  1.22%  3.29%      0.16s  1.95%  internal/runtime/maps.(*Iter).Next
+         0     0%  3.29%      0.16s  1.95%  internal/runtime/maps.(*table).rehash
+     0.05s  0.61%  3.90%      0.13s  1.59%  internal/runtime/maps.(*table).uncheckedPutSlot
+         0     0%  3.90%      0.13s  1.59%  sort.Slice
+         0     0%  3.90%      0.13s  1.59%  sort.pdqsort_func
+         0     0%  3.90%      0.12s  1.46%  internal/runtime/maps.newGroups (inline)
+         0     0%  3.90%      0.12s  1.46%  internal/runtime/maps.newarray
+     0.02s  0.24%  4.15%      0.12s  1.46%  runtime.newarray
+         0     0%  4.15%      0.11s  1.34%  reflect.(*MapIter).Next
+     0.01s  0.12%  4.27%      0.11s  1.34%  rgehrsitz/rex/pkg/store.(*MemoryStore).ReadSnapshot
+         0     0%  4.27%      0.11s  1.34%  runtime.systemstack
+         0     0%  4.27%      0.10s  1.22%  encoding/json.Unmarshal
+         0     0%  4.27%      0.10s  1.22%  reflect.mapIterStart
+     0.10s  1.22%  5.49%      0.10s  1.22%  rgehrsitz/rex/pkg/runtime.(*Program).candidates.func1
+         0     0%  5.49%      0.10s  1.22%  runtime.wbBufFlush
+         0     0%  5.49%      0.10s  1.22%  runtime.wbBufFlush.func1
+     0.02s  0.24%  5.73%      0.10s  1.22%  runtime.wbBufFlush1
+     0.02s  0.24%  5.98%      0.10s  1.22%  sort.partition_func
+     0.02s  0.24%  6.22%      0.09s  1.10%  runtime.growslice
+     0.01s  0.12%  6.34%      0.09s  1.10%  runtime.newobject
+         0     0%  6.34%      0.08s  0.98%  gcWriteBarrier
+         0     0%  6.34%      0.08s  0.98%  internal/runtime/maps.(*Map).growToSmall
+         0     0%  6.34%      0.08s  0.98%  internal/runtime/maps.(*table).grow
+         0     0%  6.34%      0.08s  0.98%  internal/runtime/maps.(*table).split
+         0     0%  6.34%      0.08s  0.98%  reflect.unsafe_New
+         0     0%  6.34%      0.08s  0.98%  rgehrsitz/rex/pkg/store.(*MemoryStore).DrainPublications
+         0     0%  6.34%      0.08s  0.98%  rgehrsitz/rex/pkg/store.copyJSON
+     0.03s  0.37%  6.71%      0.08s  0.98%  runtime.mapaccess2_faststr
+     0.08s  0.98%  7.68%      0.08s  0.98%  runtime.memclrNoHeapPointers
+     0.07s  0.85%  8.54%      0.07s  0.85%  aeshashbody
+         0     0%  8.54%      0.07s  0.85%  encoding/json.valueEncoder
+         0     0%  8.54%      0.07s  0.85%  rgehrsitz/rex/pkg/runtime.(*Program).EvaluateAt.func3
+         0     0%  8.54%      0.07s  0.85%  rgehrsitz/rex/pkg/store.(*MemoryStore).Commit
+         0     0%  8.54%      0.06s  0.73%  encoding/json.(*decodeState).unmarshal
+         0     0%  8.54%      0.06s  0.73%  encoding/json.(*decodeState).value
+         0     0%  8.54%      0.06s  0.73%  encoding/json.typeEncoder
+         0     0%  8.54%      0.06s  0.73%  internal/runtime/maps.typedmemmove
+     0.01s  0.12%  8.66%      0.06s  0.73%  internal/sync.(*HashTrieMap[go.shape.interface {},go.shape.interface {}]).Load
+         0     0%  8.66%      0.06s  0.73%  reflect.copyVal
+         0     0%  8.66%      0.06s  0.73%  rgehrsitz/rex/pkg/store.validateWrites
+     0.01s  0.12%  8.78%      0.06s  0.73%  runtime.heapSetTypeNoHeader (inline)
+         0     0%  8.78%      0.06s  0.73%  runtime.mapIterNext
+     0.04s  0.49%  9.27%      0.06s  0.73%  runtime.mapaccess1_faststr
+     0.01s  0.12%  9.39%      0.06s  0.73%  runtime.mapassign_fast64
+         0     0%  9.39%      0.06s  0.73%  slices.Sort[go.shape.[]string,go.shape.string] (inline)
+         0     0%  9.39%      0.06s  0.73%  slices.pdqsortOrdered[go.shape.string]
+         0     0%  9.39%      0.06s  0.73%  sort.Strings
+         0     0%  9.39%      0.06s  0.73%  sync.(*Map).Load (inline)
+         0     0%  9.39%      0.05s  0.61%  encoding/json.interfaceEncoder
+         0     0%  9.39%      0.05s  0.61%  internal/runtime/maps.newTable
+         0     0%  9.39%      0.05s  0.61%  rgehrsitz/rex/pkg/store.DecodeFact
+         0     0%  9.39%      0.05s  0.61%  runtime.(*mcache).nextFree
+         0     0%  9.39%      0.05s  0.61%  runtime.(*mcache).refill
+     0.01s  0.12%  9.51%      0.05s  0.61%  runtime.(*mspan).writeHeapBitsSmall
+         0     0%  9.51%      0.05s  0.61%  runtime.newstack
+     0.05s  0.61% 10.12%      0.05s  0.61%  runtime.tryDeferToSpanScan
+     0.03s  0.37% 10.49%      0.05s  0.61%  runtime.typedmemmove
+     0.01s  0.12% 10.61%      0.04s  0.49%  internal/runtime/maps.(*Map).getWithoutKeySmallFastStr
+         0     0% 10.61%      0.04s  0.49%  internal/runtime/maps.(*table).reset
+         0     0% 10.61%      0.04s  0.49%  reflect.(*MapIter).Value
+         0     0% 10.61%      0.04s  0.49%  runtime.bulkBarrierPreWriteSrcOnly
+     0.04s  0.49% 11.10%      0.04s  0.49%  runtime.getGCMask (inline)
+     0.02s  0.24% 11.34%      0.04s  0.49%  slices.partitionOrdered[go.shape.string]
+         0     0% 11.34%      0.03s  0.37%  encoding/json.(*decodeState).array
+         0     0% 11.34%      0.03s  0.37%  encoding/json.(*decodeState).object
+     0.03s  0.37% 11.71%      0.03s  0.37%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
+         0     0% 11.71%      0.03s  0.37%  rgehrsitz/rex/pkg/compiler.parseBatch
+         0     0% 11.71%      0.03s  0.37%  rgehrsitz/rex/pkg/runtime.BenchmarkBatchPartitionBaseline.func1
+         0     0% 11.71%      0.03s  0.37%  runtime.(*mcentral).cacheSpan
+         0     0% 11.71%      0.03s  0.37%  runtime.(*mcentral).grow
+     0.01s  0.12% 11.83%      0.03s  0.37%  runtime.(*mspan).initHeapBits
+         0     0% 11.83%      0.03s  0.37%  runtime.copystack
+     0.02s  0.24% 12.07%      0.03s  0.37%  runtime.findObject
+         0     0% 12.07%      0.03s  0.37%  runtime.mProf_Malloc
+         0     0% 12.07%      0.03s  0.37%  runtime.makeslice
+         0     0% 12.07%      0.03s  0.37%  runtime.mallocgcSmallScanHeader
+         0     0% 12.07%      0.03s  0.37%  runtime.profilealloc
+         0     0% 12.07%      0.03s  0.37%  runtime.shrinkstack
+         0     0% 12.07%      0.03s  0.37%  runtime.stkbucket
+         0     0% 12.07%      0.03s  0.37%  testing.(*B).run1.func1
+     0.02s  0.24% 12.32%      0.02s  0.24%  bytes.(*Buffer).Write
+         0     0% 12.32%      0.02s  0.24%  cmp.Less[go.shape.string] (inline)
+     0.02s  0.24% 12.56%      0.02s  0.24%  cmpbody
+         0     0% 12.56%      0.02s  0.24%  encoding/json.(*Decoder).Decode
+         0     0% 12.56%      0.02s  0.24%  encoding/json.(*decodeState).literalStore
+         0     0% 12.56%      0.02s  0.24%  encoding/json.indirect
+         0     0% 12.56%      0.02s  0.24%  encoding/json.structEncoder.encode
+     0.02s  0.24% 12.80%      0.02s  0.24%  internal/runtime/maps.(*groupReference).ctrls (inline)
+         0     0% 12.80%      0.02s  0.24%  internal/runtime/maps.NewEmptyMap (inline)
+         0     0% 12.80%      0.02s  0.24%  internal/runtime/maps.NewMap
+         0     0% 12.80%      0.02s  0.24%  reflect.(*MapIter).Key
+         0     0% 12.80%      0.02s  0.24%  reflect.New
+     0.01s  0.12% 12.93%      0.02s  0.24%  reflect.Value.Len (inline)
+         0     0% 12.93%      0.02s  0.24%  rgehrsitz/rex/pkg/compiler.CompileBatch
+         0     0% 12.93%      0.02s  0.24%  rgehrsitz/rex/pkg/compiler.Parse
+         0     0% 12.93%      0.02s  0.24%  rgehrsitz/rex/pkg/runtime.(*Program).validateFactTypes
+         0     0% 12.93%      0.02s  0.24%  runtime.(*wbBuf).get1 (inline)
+         0     0% 12.93%      0.02s  0.24%  runtime.gcStart
+         0     0% 12.93%      0.02s  0.24%  runtime.makemap
+         0     0% 12.93%      0.02s  0.24%  runtime.makemap_small
+         0     0% 12.93%      0.02s  0.24%  runtime.mallocgcLarge
+     0.01s  0.12% 13.05%      0.02s  0.24%  runtime.mallocgcSmallNoscan
+     0.02s  0.24% 13.29%      0.02s  0.24%  runtime.memhash64
+     0.02s  0.24% 13.54%      0.02s  0.24%  runtime.memmove
+     0.01s  0.12% 13.66%      0.02s  0.24%  runtime.nilinterhash
+     0.02s  0.24% 13.90%      0.02s  0.24%  runtime.typePointers.next
+     0.01s  0.12% 14.02%      0.02s  0.24%  sort.insertionSort_func
+     0.02s  0.24% 14.27%      0.02s  0.24%  sync/atomic.(*Pointer[go.shape.struct { internal/sync.isEntry bool }]).Load (inline)
+     0.01s  0.12% 14.39%      0.01s  0.12%  bytes.(*Buffer).WriteString
+     0.01s  0.12% 14.51%      0.01s  0.12%  encoding/json.(*decodeState).rescanLiteral
+     0.01s  0.12% 14.63%      0.01s  0.12%  encoding/json.appendString[go.shape.string]
+         0     0% 14.63%      0.01s  0.12%  encoding/json.checkValid
+     0.01s  0.12% 14.76%      0.01s  0.12%  encoding/json.resolveKeyName
+         0     0% 14.76%      0.01s  0.12%  encoding/json.stateT
+     0.01s  0.12% 14.88%      0.01s  0.12%  internal/abi.(*Type).Pointers (inline)
+     0.01s  0.12% 15.00%      0.01s  0.12%  internal/abi.(*Type).Size (inline)
+     0.01s  0.12% 15.12%      0.01s  0.12%  internal/runtime/atomic.(*Uint32).CompareAndSwap (inline)
+     0.01s  0.12% 15.24%      0.01s  0.12%  internal/runtime/atomic.(*Uint64).Add (inline)
+     0.01s  0.12% 15.37%      0.01s  0.12%  internal/runtime/maps.(*Iter).Init
+     0.01s  0.12% 15.49%      0.01s  0.12%  internal/runtime/maps.(*ctrlGroup).set (inline)
+     0.01s  0.12% 15.61%      0.01s  0.12%  internal/runtime/maps.probeSeq.next (inline)
+     0.01s  0.12% 15.73%      0.01s  0.12%  internal/sync.(*entry[go.shape.interface {},go.shape.interface {}]).lookup (inline)
+         0     0% 15.73%      0.01s  0.12%  reflect.Value.Elem
+         0     0% 15.73%      0.01s  0.12%  reflect.Value.Grow
+     0.01s  0.12% 15.85%      0.01s  0.12%  reflect.Value.IsNil (inline)
+     0.01s  0.12% 15.98%      0.01s  0.12%  reflect.Value.NumMethod
+         0     0% 15.98%      0.01s  0.12%  reflect.Value.Set
+     0.01s  0.12% 16.10%      0.01s  0.12%  reflect.Value.assignTo
+         0     0% 16.10%      0.01s  0.12%  reflect.Value.grow
+         0     0% 16.10%      0.01s  0.12%  reflect.Value.lenNonSlice
+         0     0% 16.10%      0.01s  0.12%  reflect.Value.pointer (inline)
+         0     0% 16.10%      0.01s  0.12%  reflect.growslice
+         0     0% 16.10%      0.01s  0.12%  reflect.mapIterNext
+     0.01s  0.12% 16.22%      0.01s  0.12%  reflect.unpackEface (inline)
+         0     0% 16.22%      0.01s  0.12%  rgehrsitz/rex/pkg/compiler.DecodeBatch
+         0     0% 16.22%      0.01s  0.12%  rgehrsitz/rex/pkg/compiler.validateBatchShapes
+         0     0% 16.22%      0.01s  0.12%  rgehrsitz/rex/pkg/runtime.LoadProgram
+     0.01s  0.12% 16.34%      0.01s  0.12%  runtime.(*fixalloc).alloc
+         0     0% 16.34%      0.01s  0.12%  runtime.(*gcControllerState).update
+         0     0% 16.34%      0.01s  0.12%  runtime.(*mcache).allocLarge
+         0     0% 16.34%      0.01s  0.12%  runtime.(*mcentral).uncacheSpan
+         0     0% 16.34%      0.01s  0.12%  runtime.(*mheap).alloc
+         0     0% 16.34%      0.01s  0.12%  runtime.(*mheap).alloc.func1
+         0     0% 16.34%      0.01s  0.12%  runtime.(*mheap).allocMSpanLocked
+         0     0% 16.34%      0.01s  0.12%  runtime.(*mheap).allocSpan
+     0.01s  0.12% 16.46%      0.01s  0.12%  runtime.(*spanSet).push
+         0     0% 16.46%      0.01s  0.12%  runtime.(*unwinder).init (inline)
+         0     0% 16.46%      0.01s  0.12%  runtime.(*unwinder).initAt
+         0     0% 16.46%      0.01s  0.12%  runtime.(*unwinder).next
+         0     0% 16.46%      0.01s  0.12%  runtime.(*unwinder).resolveInternal
+         0     0% 16.46%      0.01s  0.12%  runtime.adjustctxt
+     0.01s  0.12% 16.59%      0.01s  0.12%  runtime.adjustpointer (inline)
+         0     0% 16.59%      0.01s  0.12%  runtime.casGToPreemptScan
+     0.01s  0.12% 16.71%      0.01s  0.12%  runtime.casgstatus
+         0     0% 16.71%      0.01s  0.12%  runtime.findfunc
+     0.01s  0.12% 16.83%      0.01s  0.12%  runtime.findmoduledatap (inline)
+         0     0% 16.83%      0.01s  0.12%  runtime.funcspdelta (inline)
+         0     0% 16.83%      0.01s  0.12%  runtime.gopreempt_m (inline)
+         0     0% 16.83%      0.01s  0.12%  runtime.goschedImpl
+         0     0% 16.83%      0.01s  0.12%  runtime.memclrNoHeapPointersChunked
+     0.01s  0.12% 16.95%      0.01s  0.12%  runtime.memequal
+         0     0% 16.95%      0.01s  0.12%  runtime.nanotime (inline)
+     0.01s  0.12% 17.07%      0.01s  0.12%  runtime.nanotime1
+         0     0% 17.07%      0.01s  0.12%  runtime.pcvalue
+         0     0% 17.07%      0.01s  0.12%  runtime.preemptPark
+         0     0% 17.07%      0.01s  0.12%  runtime.semacquire (inline)
+     0.01s  0.12% 17.20%      0.01s  0.12%  runtime.semacquire1
+     0.01s  0.12% 17.32%      0.01s  0.12%  runtime.spanOf (inline)
+     0.01s  0.12% 17.44%      0.01s  0.12%  runtime.step
+     0.01s  0.12% 17.56%      0.01s  0.12%  runtime.strhash
+         0     0% 17.56%      0.01s  0.12%  runtime.typehash
+         0     0% 17.56%      0.01s  0.12%  slices.choosePivotOrdered[go.shape.string]
+     0.01s  0.12% 17.68%      0.01s  0.12%  slices.insertionSortOrdered[go.shape.string]
+         0     0% 17.68%      0.01s  0.12%  slices.medianOrdered[go.shape.string]
+     0.01s  0.12% 17.80%      0.01s  0.12%  slices.order2Ordered[go.shape.string] (inline)
+         0     0% 17.80%      0.01s  0.12%  sort.choosePivot_func
+         0     0% 17.80%      0.01s  0.12%  sort.medianAdjacent_func (inline)
+         0     0% 17.80%      0.01s  0.12%  sort.median_func
+         0     0% 17.80%      0.01s  0.12%  sort.order2_func (inline)
+     0.01s  0.12% 17.93%      0.01s  0.12%  sync.(*Pool).Put

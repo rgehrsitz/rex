@@ -1,0 +1,7 @@
+goos: darwin
+goarch: arm64
+pkg: rgehrsitz/rex/pkg/runtime
+cpu: Apple M4
+BenchmarkBatchPartitionBaseline/rules=1000/dense=true/coordinator-memory-10         	    2299	   2597667 ns/op	 4680616 B/op	   38276 allocs/op
+PASS
+ok  	rgehrsitz/rex/pkg/runtime	6.708s

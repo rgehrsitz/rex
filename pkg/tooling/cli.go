@@ -13,7 +13,7 @@ import (
 
 func IsCommand(command string) bool {
 	switch command {
-	case "explain", "bundle", "simulate", "test", "compare", "lint":
+	case "explain", "bundle", "simulate", "test", "compare", "lint", "partition-plan":
 		return true
 	}
 	return false
@@ -23,7 +23,7 @@ func IsCommand(command string) bool {
 // scenario failure, lint error, or failed replay. Stdout is always JSON.
 func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 	if len(args) == 0 || !IsCommand(args[0]) {
-		fmt.Fprintln(diagnostics, "expected explain, bundle, simulate, test, compare or lint")
+		fmt.Fprintln(diagnostics, "expected explain, bundle, simulate, test, compare, lint or partition-plan")
 		return 1
 	}
 	command := args[0]
@@ -31,14 +31,14 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 	fs.SetOutput(diagnostics)
 	var rulesPath, artifactPath, bundlePath, scenarioPath, channels string
 	switch command {
-	case "explain":
-		fs.StringVar(&rulesPath, "rules", "", "v4 source JSON")
-		fs.StringVar(&artifactPath, "artifact", "", "v4 compiled artifact")
+	case "explain", "partition-plan":
+		fs.StringVar(&rulesPath, "rules", "", "batch v4-v7 source JSON")
+		fs.StringVar(&artifactPath, "artifact", "", "batch v4-v7 compiled artifact")
 	case "lint":
-		fs.StringVar(&rulesPath, "rules", "", "v4 source JSON")
+		fs.StringVar(&rulesPath, "rules", "", "batch v4-v7 source JSON")
 		fs.StringVar(&channels, "channels", "", "comma-separated input channels")
 	case "bundle", "test":
-		fs.StringVar(&rulesPath, "rules", "", "v4 source JSON")
+		fs.StringVar(&rulesPath, "rules", "", "batch v4-v7 source JSON")
 		fs.StringVar(&scenarioPath, "scenario", "", "scenario or suite JSON")
 	case "simulate":
 		fs.StringVar(&bundlePath, "bundle", "", "complete replay bundle")
@@ -83,9 +83,9 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 		return b, err
 	}
 	switch command {
-	case "explain":
+	case "explain", "partition-plan":
 		if (rulesPath == "") == (artifactPath == "") {
-			return fail(fmt.Errorf("explain requires exactly one of -rules or -artifact"))
+			return fail(fmt.Errorf("%s requires exactly one of -rules or -artifact", command))
 		}
 		var artifact []byte
 		var err error
@@ -100,6 +100,13 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 		}
 		if err != nil {
 			return fail(err)
+		}
+		if command == "partition-plan" {
+			value, err := PlanPartitions(artifact)
+			if err != nil {
+				return fail(err)
+			}
+			return emit(value, 0)
 		}
 		value, err := Explain(artifact)
 		if err != nil {

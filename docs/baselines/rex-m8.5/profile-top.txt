@@ -1,0 +1,141 @@
+File: rex-m85-profile.test
+Type: cpu
+Time: 2026-09-10 11:25:58 EDT
+Duration: 6.42s, Total samples = 8.20s (127.64%)
+Showing nodes accounting for 7.37s, 89.88% of 8.20s total
+Dropped 171 nodes (cum <= 0.04s)
+      flat  flat%   sum%        cum   cum%
+     2.36s 28.78% 28.78%      2.36s 28.78%  runtime.kevent
+     1.17s 14.27% 43.05%      1.18s 14.39%  runtime.pthread_cond_wait
+     0.85s 10.37% 53.41%      0.85s 10.37%  runtime.madvise
+     0.76s  9.27% 62.68%      0.76s  9.27%  runtime.usleep
+     0.57s  6.95% 69.63%      0.57s  6.95%  runtime.pthread_cond_signal
+     0.52s  6.34% 75.98%      0.52s  6.34%  runtime.pthread_kill
+     0.10s  1.22% 77.20%      0.16s  1.95%  internal/runtime/maps.(*Iter).Next
+     0.10s  1.22% 78.41%      0.10s  1.22%  rgehrsitz/rex/pkg/runtime.(*Program).candidates.func1
+     0.10s  1.22% 79.63%      0.11s  1.34%  runtime.tryDeferToSpanScan
+     0.08s  0.98% 80.61%      0.08s  0.98%  runtime.memclrNoHeapPointers
+     0.07s  0.85% 81.46%      0.07s  0.85%  aeshashbody
+     0.07s  0.85% 82.32%      0.24s  2.93%  runtime.mallocgcSmallScanNoHeader
+     0.07s  0.85% 83.17%      0.17s  2.07%  runtime.scanObject
+     0.05s  0.61% 83.78%      0.13s  1.59%  internal/runtime/maps.(*table).uncheckedPutSlot
+     0.05s  0.61% 84.39%      0.05s  0.61%  runtime.typePointers.next
+     0.04s  0.49% 84.88%      0.05s  0.61%  runtime.findObject
+     0.04s  0.49% 85.37%      0.06s  0.73%  runtime.mapaccess1_faststr
+     0.04s  0.49% 85.85%      0.29s  3.54%  runtime.mapassign_faststr
+     0.04s  0.49% 86.34%      0.17s  2.07%  runtime.stealWork
+     0.03s  0.37% 86.71%      0.08s  0.98%  runtime.mapaccess2_faststr
+     0.03s  0.37% 87.07%      0.05s  0.61%  runtime.typedmemmove
+     0.02s  0.24% 87.32%      0.44s  5.37%  encoding/json.Marshal
+     0.02s  0.24% 87.56%      0.33s  4.02%  encoding/json.mapEncoder.encode
+     0.02s  0.24% 87.80%      0.09s  1.10%  runtime.growslice
+     0.02s  0.24% 88.05%      0.12s  1.46%  runtime.newarray
+     0.02s  0.24% 88.29%      0.11s  1.34%  runtime.wbBufFlush1
+     0.02s  0.24% 88.54%      0.10s  1.22%  sort.partition_func
+     0.01s  0.12% 88.66%      0.39s  4.76%  encoding/json.(*encodeState).reflectValue
+     0.01s  0.12% 88.78%      0.06s  0.73%  internal/sync.(*HashTrieMap[go.shape.interface {},go.shape.interface {}]).Load
+     0.01s  0.12% 88.90%      0.79s  9.63%  rgehrsitz/rex/pkg/runtime.(*Program).EvaluateAt
+     0.01s  0.12% 89.02%      0.11s  1.34%  rgehrsitz/rex/pkg/store.(*MemoryStore).ReadSnapshot
+     0.01s  0.12% 89.15%      0.05s  0.61%  runtime.(*mspan).writeHeapBitsSmall
+     0.01s  0.12% 89.27%      0.25s  3.05%  runtime.gcBgMarkWorker
+     0.01s  0.12% 89.39%      0.68s  8.29%  runtime.gcDrain
+     0.01s  0.12% 89.51%      0.06s  0.73%  runtime.heapSetTypeNoHeader (inline)
+     0.01s  0.12% 89.63%      0.68s  8.29%  runtime.lock2
+     0.01s  0.12% 89.76%      0.06s  0.73%  runtime.mapassign_fast64
+     0.01s  0.12% 89.88%      0.09s  1.10%  runtime.newobject
+         0     0% 89.88%      0.06s  0.73%  encoding/json.(*decodeState).unmarshal
+         0     0% 89.88%      0.06s  0.73%  encoding/json.(*decodeState).value
+         0     0% 89.88%      0.39s  4.76%  encoding/json.(*encodeState).marshal
+         0     0% 89.88%      0.10s  1.22%  encoding/json.Unmarshal
+         0     0% 89.88%      0.05s  0.61%  encoding/json.interfaceEncoder
+         0     0% 89.88%      0.06s  0.73%  encoding/json.typeEncoder
+         0     0% 89.88%      0.07s  0.85%  encoding/json.valueEncoder
+         0     0% 89.88%      0.08s  0.98%  gcWriteBarrier
+         0     0% 89.88%      0.08s  0.98%  internal/runtime/maps.(*Map).growToSmall
+         0     0% 89.88%      0.08s  0.98%  internal/runtime/maps.(*table).grow
+         0     0% 89.88%      0.16s  1.95%  internal/runtime/maps.(*table).rehash
+         0     0% 89.88%      0.08s  0.98%  internal/runtime/maps.(*table).split
+         0     0% 89.88%      0.12s  1.46%  internal/runtime/maps.newGroups (inline)
+         0     0% 89.88%      0.05s  0.61%  internal/runtime/maps.newTable
+         0     0% 89.88%      0.12s  1.46%  internal/runtime/maps.newarray
+         0     0% 89.88%      0.06s  0.73%  internal/runtime/maps.typedmemmove
+         0     0% 89.88%      0.11s  1.34%  reflect.(*MapIter).Next
+         0     0% 89.88%      0.06s  0.73%  reflect.copyVal
+         0     0% 89.88%      0.10s  1.22%  reflect.mapIterStart
+         0     0% 89.88%      0.08s  0.98%  reflect.unsafe_New
+         0     0% 89.88%      1.36s 16.59%  rgehrsitz/rex/pkg/runtime.(*Coordinator).Process (inline)
+         0     0% 89.88%      1.36s 16.59%  rgehrsitz/rex/pkg/runtime.(*Coordinator).process
+         0     0% 89.88%      0.07s  0.85%  rgehrsitz/rex/pkg/runtime.(*Program).EvaluateAt.func3
+         0     0% 89.88%      0.42s  5.12%  rgehrsitz/rex/pkg/runtime.(*Program).candidates
+         0     0% 89.88%      0.26s  3.17%  rgehrsitz/rex/pkg/runtime.(*Program).validateEvent
+         0     0% 89.88%      1.44s 17.56%  rgehrsitz/rex/pkg/runtime.BenchmarkBatchPartitionBaseline.func1.2
+         0     0% 89.88%      0.51s  6.22%  rgehrsitz/rex/pkg/runtime.fieldBytes
+         0     0% 89.88%      0.24s  2.93%  rgehrsitz/rex/pkg/runtime.validateEvent
+         0     0% 89.88%      0.07s  0.85%  rgehrsitz/rex/pkg/store.(*MemoryStore).Commit
+         0     0% 89.88%      0.08s  0.98%  rgehrsitz/rex/pkg/store.(*MemoryStore).DrainPublications
+         0     0% 89.88%      0.05s  0.61%  rgehrsitz/rex/pkg/store.DecodeFact
+         0     0% 89.88%      0.08s  0.98%  rgehrsitz/rex/pkg/store.copyJSON
+         0     0% 89.88%      0.06s  0.73%  rgehrsitz/rex/pkg/store.validateWrites
+         0     0% 89.88%      0.37s  4.51%  runtime.(*gcControllerState).enlistWorker
+         0     0% 89.88%      0.05s  0.61%  runtime.(*mcache).nextFree
+         0     0% 89.88%      0.05s  0.61%  runtime.(*mcache).refill
+         0     0% 89.88%      0.79s  9.63%  runtime.(*mheap).alloc.func1
+         0     0% 89.88%      0.79s  9.63%  runtime.(*mheap).allocSpan
+         0     0% 89.88%      0.07s  0.85%  runtime.(*pageAlloc).scavenge.func1
+         0     0% 89.88%      0.07s  0.85%  runtime.(*pageAlloc).scavengeOne
+         0     0% 89.88%      0.05s  0.61%  runtime.bgsweep
+         0     0% 89.88%      1.47s 17.93%  runtime.findRunnable
+         0     0% 89.88%      0.42s  5.12%  runtime.forEachPInternal
+         0     0% 89.88%      0.68s  8.29%  runtime.gcBgMarkWorker.func2
+         0     0% 89.88%      0.56s  6.83%  runtime.gcDrainMarkWorkerDedicated (inline)
+         0     0% 89.88%      0.12s  1.46%  runtime.gcDrainMarkWorkerIdle (inline)
+         0     0% 89.88%      0.40s  4.88%  runtime.gcMarkDone.forEachP.func5
+         0     0% 89.88%      0.05s  0.61%  runtime.gcMarkTermination.func3
+         0     0% 89.88%      2.32s 28.29%  runtime.gcStart.func4
+         0     0% 89.88%      0.80s  9.76%  runtime.gopreempt_m (inline)
+         0     0% 89.88%      0.82s 10.00%  runtime.goschedImpl
+         0     0% 89.88%      0.68s  8.29%  runtime.lock (inline)
+         0     0% 89.88%      0.68s  8.29%  runtime.lockWithRank (inline)
+         0     0% 89.88%      1.18s 14.39%  runtime.mPark (inline)
+         0     0% 89.88%      0.32s  3.90%  runtime.mallocgc
+         0     0% 89.88%      0.06s  0.73%  runtime.mapIterNext
+         0     0% 89.88%      0.06s  0.73%  runtime.markroot
+         0     0% 89.88%      0.06s  0.73%  runtime.markroot.func1
+         0     0% 89.88%      1.51s 18.41%  runtime.mcall
+         0     0% 89.88%      0.81s  9.88%  runtime.morestack
+         0     0% 89.88%      2.36s 28.78%  runtime.netpoll
+         0     0% 89.88%      0.86s 10.49%  runtime.newstack
+         0     0% 89.88%      1.18s 14.39%  runtime.notesleep
+         0     0% 89.88%      0.56s  6.83%  runtime.notewakeup
+         0     0% 89.88%      0.64s  7.80%  runtime.osyield (inline)
+         0     0% 89.88%      1.49s 18.17%  runtime.park_m
+         0     0% 89.88%      0.52s  6.34%  runtime.preemptM
+         0     0% 89.88%      0.36s  4.39%  runtime.preemptall
+         0     0% 89.88%      0.46s  5.61%  runtime.preemptone
+         0     0% 89.88%      0.09s  1.10%  runtime.resetspinning
+         0     0% 89.88%      0.12s  1.46%  runtime.runqgrab
+         0     0% 89.88%      0.12s  1.46%  runtime.runqsteal
+         0     0% 89.88%      1.57s 19.15%  runtime.schedule
+         0     0% 89.88%      1.22s 14.88%  runtime.semasleep
+         0     0% 89.88%      0.57s  6.95%  runtime.semawakeup
+         0     0% 89.88%      0.52s  6.34%  runtime.signalM (inline)
+         0     0% 89.88%      2.38s 29.02%  runtime.startTheWorldWithSema
+         0     0% 89.88%      0.51s  6.22%  runtime.startm
+         0     0% 89.88%      1.21s 14.76%  runtime.stopm
+         0     0% 89.88%      0.06s  0.73%  runtime.suspendG
+         0     0% 89.88%      0.07s  0.85%  runtime.sysUnused (inline)
+         0     0% 89.88%      0.07s  0.85%  runtime.sysUnusedOS (inline)
+         0     0% 89.88%      0.78s  9.51%  runtime.sysUsed (inline)
+         0     0% 89.88%      0.78s  9.51%  runtime.sysUsedOS (inline)
+         0     0% 89.88%      4.45s 54.27%  runtime.systemstack
+         0     0% 89.88%      0.56s  6.83%  runtime.wakep
+         0     0% 89.88%      0.11s  1.34%  runtime.wbBufFlush
+         0     0% 89.88%      0.11s  1.34%  runtime.wbBufFlush.func1
+         0     0% 89.88%      0.06s  0.73%  slices.Sort[go.shape.[]string,go.shape.string] (inline)
+         0     0% 89.88%      0.06s  0.73%  slices.pdqsortOrdered[go.shape.string]
+         0     0% 89.88%      0.13s  1.59%  sort.Slice
+         0     0% 89.88%      0.06s  0.73%  sort.Strings
+         0     0% 89.88%      0.13s  1.59%  sort.pdqsort_func
+         0     0% 89.88%      0.06s  0.73%  sync.(*Map).Load (inline)
+         0     0% 89.88%      1.44s 17.56%  testing.(*B).launch
+         0     0% 89.88%      1.47s 17.93%  testing.(*B).runN
