@@ -1,8 +1,8 @@
 # REX-M8.6 acceptance evidence
 
-Base: `97042ec` (merged M8.5 PR #44), branch
-`codex/rex-m8-partition-ownership`. Implementation is local; review and hosted
-CI are pending. No artifact version or dependency changes.
+Base: `97042ec` (merged M8.5 PR #44). Merged in PR #45 as `48cd367` after all
+review threads were resolved and all hosted checks passed. No artifact version
+or dependency changes.
 
 ## Delivered behavior
 

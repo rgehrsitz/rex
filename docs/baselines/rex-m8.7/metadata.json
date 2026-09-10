@@ -1,0 +1,30 @@
+{
+  "revision": "fa197210b2975f38abbe1415f7c76a8c5e5f2b5a",
+  "status": "M docs/FOUNDATION_ROADMAP.md\n M docs/baselines/rex-m8.7/README.md\n M docs/baselines/rex-m8.7/metadata.json\n M docs/baselines/rex-m8.7/profile-metadata.json\n M docs/baselines/rex-m8.7/profile-top.txt\n M docs/baselines/rex-m8.7/summary.json\n M scripts/durable-profile/README.md\n M scripts/durable-profile/run.py",
+  "go": "go version go1.26.6 darwin/arm64",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "redis": "Redis server v=7.4.2 sha=00000000:1 malloc=libc bits=64 build=f5a32bc60e111576",
+  "gomaxprocs": 2,
+  "redis_cli": "redis-cli 7.4.2",
+  "events_per_scenario": 1000,
+  "runs": 3,
+  "scenarios": [
+    "sparse-balanced",
+    "dense-balanced",
+    "sparse-skew",
+    "completion-retry",
+    "owner-loss"
+  ],
+  "race": false,
+  "cpu_profile": false,
+  "persistence": "disabled: save empty, appendonly no",
+  "network": "loopback TCP",
+  "logging": "error; condition tracing disabled",
+  "warmup": "100 successful events per scenario; excluded from measurements",
+  "scheduler": "one serial round-robin driver across four partitions",
+  "production_source": "tracked Go/module sources at revision; profile test hashed separately",
+  "sha256": {
+    "pkg/runtime/durable_profile_test.go": "f76b4ab887fd62858864a419a51a8817faab108d77c17a70830299e9c2fd7d3e",
+    "scripts/durable-profile/run.py": "51c3b7cdc6cf5770c46bf90717d504f3c6a9a1c76110a3444b0eb69e9d44272f"
+  }
+}

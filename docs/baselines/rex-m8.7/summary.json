@@ -1,0 +1,1427 @@
+[
+  {
+    "drain_alloc_bytes": 50286128,
+    "drain_alloc_objects": 669167,
+    "drain_redis_commands": 44000,
+    "name": "sparse-balanced",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 485731416,
+    "producer_ns": 18552708,
+    "fault_path_ns": 0,
+    "run": 0,
+    "events_per_second": 2058.7509208998745,
+    "service": {
+      "p50_ms": 0.466666,
+      "p95_ms": 0.623292,
+      "p99_ms": 0.851
+    },
+    "end_to_end": {
+      "p50_ms": 251.4045,
+      "p95_ms": 462.952792,
+      "p99_ms": 481.479041
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.6877302249686,
+        "service_events_per_second": 2088.117994703447,
+        "service": {
+          "p50_ms": 0.466875,
+          "p95_ms": 0.611625,
+          "p99_ms": 0.828958
+        },
+        "end_to_end": {
+          "p50_ms": 250.056542,
+          "p95_ms": 462.519958,
+          "p99_ms": 481.031625
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.6877302249686,
+        "service_events_per_second": 2067.335789388893,
+        "service": {
+          "p50_ms": 0.46675,
+          "p95_ms": 0.622667,
+          "p99_ms": 0.91175
+        },
+        "end_to_end": {
+          "p50_ms": 250.507792,
+          "p95_ms": 462.952792,
+          "p99_ms": 481.479041
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.6877302249686,
+        "service_events_per_second": 2046.4656911295692,
+        "service": {
+          "p50_ms": 0.466708,
+          "p95_ms": 0.641958,
+          "p99_ms": 0.902791
+        },
+        "end_to_end": {
+          "p50_ms": 250.965166,
+          "p95_ms": 463.415167,
+          "p99_ms": 481.940458
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.6877302249686,
+        "service_events_per_second": 2066.9264330201454,
+        "service": {
+          "p50_ms": 0.465625,
+          "p95_ms": 0.623334,
+          "p99_ms": 0.817875
+        },
+        "end_to_end": {
+          "p50_ms": 251.4045,
+          "p95_ms": 463.849583,
+          "p99_ms": 482.41275
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 457865832,
+    "drain_alloc_objects": 5421316,
+    "drain_redis_commands": 143000,
+    "name": "dense-balanced",
+    "rules_per_partition": 100,
+    "affected_rules": 100,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 875634125,
+    "producer_ns": 18601333,
+    "fault_path_ns": 0,
+    "run": 0,
+    "events_per_second": 1142.029497765405,
+    "service": {
+      "p50_ms": 0.791583,
+      "p95_ms": 1.260875,
+      "p99_ms": 1.963833
+    },
+    "end_to_end": {
+      "p50_ms": 427.060625,
+      "p95_ms": 833.67075,
+      "p99_ms": 867.799834
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 285.50737444135126,
+        "service_events_per_second": 1093.0243896106947,
+        "service": {
+          "p50_ms": 0.840583,
+          "p95_ms": 1.571917,
+          "p99_ms": 2.313
+        },
+        "end_to_end": {
+          "p50_ms": 424.65225,
+          "p95_ms": 832.879208,
+          "p99_ms": 867.0
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 285.50737444135126,
+        "service_events_per_second": 1158.4521059524004,
+        "service": {
+          "p50_ms": 0.786458,
+          "p95_ms": 1.276958,
+          "p99_ms": 1.86725
+        },
+        "end_to_end": {
+          "p50_ms": 425.386333,
+          "p95_ms": 833.67075,
+          "p99_ms": 867.799834
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 285.50737444135126,
+        "service_events_per_second": 1189.5651478462225,
+        "service": {
+          "p50_ms": 0.779333,
+          "p95_ms": 1.184333,
+          "p99_ms": 1.699291
+        },
+        "end_to_end": {
+          "p50_ms": 426.309416,
+          "p95_ms": 834.39175,
+          "p99_ms": 868.565458
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 285.50737444135126,
+        "service_events_per_second": 1144.6143914986321,
+        "service": {
+          "p50_ms": 0.785375,
+          "p95_ms": 1.250458,
+          "p99_ms": 2.162917
+        },
+        "end_to_end": {
+          "p50_ms": 427.060625,
+          "p95_ms": 835.120959,
+          "p99_ms": 869.340166
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50286384,
+    "drain_alloc_objects": 669167,
+    "drain_redis_commands": 44000,
+    "name": "sparse-skew",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      900,
+      34,
+      33,
+      33
+    ],
+    "elapsed_ns": 534093667,
+    "producer_ns": 19673292,
+    "fault_path_ns": 0,
+    "run": 0,
+    "events_per_second": 1872.330757293926,
+    "service": {
+      "p50_ms": 0.482458,
+      "p95_ms": 0.9075,
+      "p99_ms": 1.366
+    },
+    "end_to_end": {
+      "p50_ms": 271.63975,
+      "p95_ms": 511.20625,
+      "p99_ms": 529.887125
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 900,
+        "events_per_second_over_full_drain": 1685.0976815645333,
+        "service_events_per_second": 1870.6859993251687,
+        "service": {
+          "p50_ms": 0.482208,
+          "p95_ms": 0.938959,
+          "p99_ms": 1.388083
+        },
+        "end_to_end": {
+          "p50_ms": 304.0085,
+          "p95_ms": 513.22275,
+          "p99_ms": 530.334
+        }
+      },
+      {
+        "partition": 1,
+        "events": 34,
+        "events_per_second_over_full_drain": 63.65924574799348,
+        "service_events_per_second": 1925.0049767040427,
+        "service": {
+          "p50_ms": 0.48825,
+          "p95_ms": 0.670583,
+          "p99_ms": 0.686541
+        },
+        "end_to_end": {
+          "p50_ms": 44.632917,
+          "p95_ms": 68.727042,
+          "p99_ms": 70.3135
+        }
+      },
+      {
+        "partition": 2,
+        "events": 33,
+        "events_per_second_over_full_drain": 61.78691499069956,
+        "service_events_per_second": 1953.5491014502913,
+        "service": {
+          "p50_ms": 0.48975,
+          "p95_ms": 0.6755,
+          "p99_ms": 0.798292
+        },
+        "end_to_end": {
+          "p50_ms": 45.068166,
+          "p95_ms": 67.279167,
+          "p99_ms": 69.1475
+        }
+      },
+      {
+        "partition": 3,
+        "events": 33,
+        "events_per_second_over_full_drain": 61.78691499069956,
+        "service_events_per_second": 2039.171621750719,
+        "service": {
+          "p50_ms": 0.4785,
+          "p95_ms": 0.574459,
+          "p99_ms": 0.681125
+        },
+        "end_to_end": {
+          "p50_ms": 45.422458,
+          "p95_ms": 67.553875,
+          "p99_ms": 69.478625
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50313040,
+    "drain_alloc_objects": 669478,
+    "drain_redis_commands": 44017,
+    "name": "completion-retry",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 485958042,
+    "producer_ns": 18949500,
+    "fault_path_ns": 889541,
+    "run": 0,
+    "events_per_second": 2057.790824665476,
+    "service": {
+      "p50_ms": 0.467125,
+      "p95_ms": 0.616167,
+      "p99_ms": 0.846542
+    },
+    "end_to_end": {
+      "p50_ms": 253.160041,
+      "p95_ms": 458.857916,
+      "p99_ms": 482.8655
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.447706166369,
+        "service_events_per_second": 2072.8417140921797,
+        "service": {
+          "p50_ms": 0.467417,
+          "p95_ms": 0.616167,
+          "p99_ms": 0.806584
+        },
+        "end_to_end": {
+          "p50_ms": 251.697333,
+          "p95_ms": 458.40525,
+          "p99_ms": 482.51475
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.447706166369,
+        "service_events_per_second": 2085.9358860071084,
+        "service": {
+          "p50_ms": 0.467208,
+          "p95_ms": 0.618875,
+          "p99_ms": 0.782083
+        },
+        "end_to_end": {
+          "p50_ms": 252.135041,
+          "p95_ms": 458.857916,
+          "p99_ms": 482.8655
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.447706166369,
+        "service_events_per_second": 2051.715592464843,
+        "service": {
+          "p50_ms": 0.467,
+          "p95_ms": 0.6255,
+          "p99_ms": 0.966625
+        },
+        "end_to_end": {
+          "p50_ms": 252.588166,
+          "p95_ms": 459.308875,
+          "p99_ms": 483.20225
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 514.447706166369,
+        "service_events_per_second": 2055.9402256267754,
+        "service": {
+          "p50_ms": 0.466833,
+          "p95_ms": 0.609292,
+          "p99_ms": 0.849708
+        },
+        "end_to_end": {
+          "p50_ms": 253.160041,
+          "p95_ms": 459.766709,
+          "p99_ms": 483.545916
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 51365624,
+    "drain_alloc_objects": 681413,
+    "drain_redis_commands": 44055,
+    "name": "owner-loss",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 615788666,
+    "producer_ns": 20168083,
+    "fault_path_ns": 116124958,
+    "run": 0,
+    "events_per_second": 1623.933753921999,
+    "service": {
+      "p50_ms": 0.471875,
+      "p95_ms": 0.65225,
+      "p99_ms": 0.983083
+    },
+    "end_to_end": {
+      "p50_ms": 387.240292,
+      "p95_ms": 592.927708,
+      "p99_ms": 611.266333
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 405.98343848049973,
+        "service_events_per_second": 1035.3118663516077,
+        "service": {
+          "p50_ms": 0.472917,
+          "p95_ms": 0.724167,
+          "p99_ms": 1.521
+        },
+        "end_to_end": {
+          "p50_ms": 385.902583,
+          "p95_ms": 592.511,
+          "p99_ms": 610.793667
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 405.98343848049973,
+        "service_events_per_second": 2028.1658037551313,
+        "service": {
+          "p50_ms": 0.471667,
+          "p95_ms": 0.5955,
+          "p99_ms": 1.12525
+        },
+        "end_to_end": {
+          "p50_ms": 386.341292,
+          "p95_ms": 592.927708,
+          "p99_ms": 611.266333
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 405.98343848049973,
+        "service_events_per_second": 2015.1440006184719,
+        "service": {
+          "p50_ms": 0.470375,
+          "p95_ms": 0.645208,
+          "p99_ms": 0.866833
+        },
+        "end_to_end": {
+          "p50_ms": 386.778291,
+          "p95_ms": 593.341542,
+          "p99_ms": 611.727084
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 405.98343848049973,
+        "service_events_per_second": 2001.971894268529,
+        "service": {
+          "p50_ms": 0.471709,
+          "p95_ms": 0.670208,
+          "p99_ms": 0.9055
+        },
+        "end_to_end": {
+          "p50_ms": 387.240292,
+          "p95_ms": 593.775291,
+          "p99_ms": 612.16775
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50279272,
+    "drain_alloc_objects": 669132,
+    "drain_redis_commands": 44000,
+    "name": "sparse-balanced",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 680547500,
+    "producer_ns": 16347916,
+    "fault_path_ns": 0,
+    "run": 1,
+    "events_per_second": 1469.4051480609362,
+    "service": {
+      "p50_ms": 0.562125,
+      "p95_ms": 1.151542,
+      "p99_ms": 1.519792
+    },
+    "end_to_end": {
+      "p50_ms": 342.17175,
+      "p95_ms": 639.20175,
+      "p99_ms": 671.317166
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 367.35128701523405,
+        "service_events_per_second": 1517.3325289285972,
+        "service": {
+          "p50_ms": 0.541833,
+          "p95_ms": 1.125667,
+          "p99_ms": 1.375167
+        },
+        "end_to_end": {
+          "p50_ms": 340.153292,
+          "p95_ms": 638.183708,
+          "p99_ms": 670.180667
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 367.35128701523405,
+        "service_events_per_second": 1474.0450356489243,
+        "service": {
+          "p50_ms": 0.584958,
+          "p95_ms": 1.148833,
+          "p99_ms": 1.336708
+        },
+        "end_to_end": {
+          "p50_ms": 340.626541,
+          "p95_ms": 639.20175,
+          "p99_ms": 671.317166
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 367.35128701523405,
+        "service_events_per_second": 1437.346420253669,
+        "service": {
+          "p50_ms": 0.580709,
+          "p95_ms": 1.193375,
+          "p99_ms": 1.721333
+        },
+        "end_to_end": {
+          "p50_ms": 341.387375,
+          "p95_ms": 640.161292,
+          "p99_ms": 672.353084
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 367.35128701523405,
+        "service_events_per_second": 1474.2645654803334,
+        "service": {
+          "p50_ms": 0.554084,
+          "p95_ms": 1.141166,
+          "p99_ms": 1.52175
+        },
+        "end_to_end": {
+          "p50_ms": 342.17175,
+          "p95_ms": 641.234708,
+          "p99_ms": 673.456542
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 458065888,
+    "drain_alloc_objects": 5421395,
+    "drain_redis_commands": 143000,
+    "name": "dense-balanced",
+    "rules_per_partition": 100,
+    "affected_rules": 100,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 1960820625,
+    "producer_ns": 33541000,
+    "fault_path_ns": 0,
+    "run": 1,
+    "events_per_second": 509.9905556123983,
+    "service": {
+      "p50_ms": 1.436917,
+      "p95_ms": 4.558708,
+      "p99_ms": 11.259125
+    },
+    "end_to_end": {
+      "p50_ms": 605.296,
+      "p95_ms": 1752.367792,
+      "p99_ms": 1907.685958
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 127.49763890309957,
+        "service_events_per_second": 509.9413608842222,
+        "service": {
+          "p50_ms": 1.420334,
+          "p95_ms": 4.558708,
+          "p99_ms": 7.948667
+        },
+        "end_to_end": {
+          "p50_ms": 599.954333,
+          "p95_ms": 1750.256125,
+          "p99_ms": 1895.836875
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 127.49763890309957,
+        "service_events_per_second": 503.76967523095465,
+        "service": {
+          "p50_ms": 1.451125,
+          "p95_ms": 5.217333,
+          "p99_ms": 11.861
+        },
+        "end_to_end": {
+          "p50_ms": 601.174667,
+          "p95_ms": 1752.367792,
+          "p99_ms": 1907.685958
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 127.49763890309957,
+        "service_events_per_second": 522.1381783969047,
+        "service": {
+          "p50_ms": 1.456083,
+          "p95_ms": 4.139875,
+          "p99_ms": 13.933458
+        },
+        "end_to_end": {
+          "p50_ms": 603.24725,
+          "p95_ms": 1754.943833,
+          "p99_ms": 1918.922
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 127.49763890309957,
+        "service_events_per_second": 510.6848038294922,
+        "service": {
+          "p50_ms": 1.428083,
+          "p95_ms": 4.201041,
+          "p99_ms": 7.544584
+        },
+        "end_to_end": {
+          "p50_ms": 605.296,
+          "p95_ms": 1761.107125,
+          "p99_ms": 1922.74925
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50268112,
+    "drain_alloc_objects": 669059,
+    "drain_redis_commands": 44000,
+    "name": "sparse-skew",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      900,
+      34,
+      33,
+      33
+    ],
+    "elapsed_ns": 3755952667,
+    "producer_ns": 66108000,
+    "fault_path_ns": 0,
+    "run": 1,
+    "events_per_second": 266.24403677555716,
+    "service": {
+      "p50_ms": 1.968958,
+      "p95_ms": 13.319709,
+      "p99_ms": 29.128125
+    },
+    "end_to_end": {
+      "p50_ms": 1977.138625,
+      "p95_ms": 3682.69925,
+      "p99_ms": 3749.06975
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 900,
+        "events_per_second_over_full_drain": 239.61963309800146,
+        "service_events_per_second": 262.0889556584512,
+        "service": {
+          "p50_ms": 1.956958,
+          "p95_ms": 13.900833,
+          "p99_ms": 30.45675
+        },
+        "end_to_end": {
+          "p50_ms": 2137.38325,
+          "p95_ms": 3693.085875,
+          "p99_ms": 3749.751459
+        }
+      },
+      {
+        "partition": 1,
+        "events": 34,
+        "events_per_second_over_full_drain": 9.052297250368945,
+        "service_events_per_second": 382.2363138011289,
+        "service": {
+          "p50_ms": 1.903916,
+          "p95_ms": 7.515833,
+          "p99_ms": 8.025292
+        },
+        "end_to_end": {
+          "p50_ms": 234.984041,
+          "p95_ms": 420.127625,
+          "p99_ms": 422.724709
+        }
+      },
+      {
+        "partition": 2,
+        "events": 33,
+        "events_per_second_over_full_drain": 8.786053213593387,
+        "service_events_per_second": 272.112112697161,
+        "service": {
+          "p50_ms": 2.0375,
+          "p95_ms": 14.084834,
+          "p99_ms": 18.413667
+        },
+        "end_to_end": {
+          "p50_ms": 248.3375,
+          "p95_ms": 412.240292,
+          "p99_ms": 422.62325
+        }
+      },
+      {
+        "partition": 3,
+        "events": 33,
+        "events_per_second_over_full_drain": 8.786053213593387,
+        "service_events_per_second": 328.0669899273095,
+        "service": {
+          "p50_ms": 2.231709,
+          "p95_ms": 8.500209,
+          "p99_ms": 14.238125
+        },
+        "end_to_end": {
+          "p50_ms": 255.918459,
+          "p95_ms": 413.49,
+          "p99_ms": 420.599833
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50290144,
+    "drain_alloc_objects": 669346,
+    "drain_redis_commands": 44017,
+    "name": "completion-retry",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 2831217375,
+    "producer_ns": 85760667,
+    "fault_path_ns": 3173833,
+    "run": 1,
+    "events_per_second": 353.2049530460373,
+    "service": {
+      "p50_ms": 1.728833,
+      "p95_ms": 7.542209,
+      "p99_ms": 21.075792
+    },
+    "end_to_end": {
+      "p50_ms": 1514.049083,
+      "p95_ms": 2736.755292,
+      "p99_ms": 2813.870459
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 88.30123826150933,
+        "service_events_per_second": 353.2264408143963,
+        "service": {
+          "p50_ms": 1.624458,
+          "p95_ms": 7.860375,
+          "p99_ms": 22.705542
+        },
+        "end_to_end": {
+          "p50_ms": 1510.612375,
+          "p95_ms": 2735.090167,
+          "p99_ms": 2812.304208
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 88.30123826150933,
+        "service_events_per_second": 340.39789357589757,
+        "service": {
+          "p50_ms": 1.753083,
+          "p95_ms": 7.893917,
+          "p99_ms": 24.039708
+        },
+        "end_to_end": {
+          "p50_ms": 1511.885792,
+          "p95_ms": 2736.755292,
+          "p99_ms": 2813.870459
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 88.30123826150933,
+        "service_events_per_second": 362.6384543464818,
+        "service": {
+          "p50_ms": 1.639333,
+          "p95_ms": 7.171083,
+          "p99_ms": 21.075792
+        },
+        "end_to_end": {
+          "p50_ms": 1513.340167,
+          "p95_ms": 2737.997125,
+          "p99_ms": 2815.092625
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 88.30123826150933,
+        "service_events_per_second": 361.1316881940757,
+        "service": {
+          "p50_ms": 1.825875,
+          "p95_ms": 7.473834,
+          "p99_ms": 14.577916
+        },
+        "end_to_end": {
+          "p50_ms": 1514.049083,
+          "p95_ms": 2739.935792,
+          "p99_ms": 2816.062917
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 51333592,
+    "drain_alloc_objects": 681281,
+    "drain_redis_commands": 44055,
+    "name": "owner-loss",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 2428196292,
+    "producer_ns": 50672792,
+    "fault_path_ns": 121329791,
+    "run": 1,
+    "events_per_second": 411.8283201793144,
+    "service": {
+      "p50_ms": 1.469208,
+      "p95_ms": 6.724167,
+      "p99_ms": 14.345292
+    },
+    "end_to_end": {
+      "p50_ms": 1705.548625,
+      "p95_ms": 2357.082708,
+      "p99_ms": 2414.245417
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 102.9570800448286,
+        "service_events_per_second": 347.62248827387305,
+        "service": {
+          "p50_ms": 1.450917,
+          "p95_ms": 6.974042,
+          "p99_ms": 22.888708
+        },
+        "end_to_end": {
+          "p50_ms": 1695.319583,
+          "p95_ms": 2355.772625,
+          "p99_ms": 2413.264708
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 102.9570800448286,
+        "service_events_per_second": 408.98976651654374,
+        "service": {
+          "p50_ms": 1.514125,
+          "p95_ms": 7.735625,
+          "p99_ms": 15.92725
+        },
+        "end_to_end": {
+          "p50_ms": 1700.369667,
+          "p95_ms": 2357.082708,
+          "p99_ms": 2414.245417
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 102.9570800448286,
+        "service_events_per_second": 480.2519227927876,
+        "service": {
+          "p50_ms": 1.461083,
+          "p95_ms": 6.324459,
+          "p99_ms": 10.769917
+        },
+        "end_to_end": {
+          "p50_ms": 1704.285208,
+          "p95_ms": 2358.555291,
+          "p99_ms": 2415.274708
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 102.9570800448286,
+        "service_events_per_second": 438.8836643592305,
+        "service": {
+          "p50_ms": 1.474083,
+          "p95_ms": 6.828166,
+          "p99_ms": 14.345292
+        },
+        "end_to_end": {
+          "p50_ms": 1705.548625,
+          "p95_ms": 2360.574083,
+          "p99_ms": 2416.859334
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50262704,
+    "drain_alloc_objects": 669051,
+    "drain_redis_commands": 44000,
+    "name": "sparse-balanced",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 1123783291,
+    "producer_ns": 57142958,
+    "fault_path_ns": 0,
+    "run": 2,
+    "events_per_second": 889.8512800543142,
+    "service": {
+      "p50_ms": 1.150667,
+      "p95_ms": 1.685375,
+      "p99_ms": 2.7485
+    },
+    "end_to_end": {
+      "p50_ms": 569.748292,
+      "p95_ms": 1033.989458,
+      "p99_ms": 1110.714875
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 222.46282001357855,
+        "service_events_per_second": 864.9421512331215,
+        "service": {
+          "p50_ms": 1.160583,
+          "p95_ms": 1.710583,
+          "p99_ms": 3.272708
+        },
+        "end_to_end": {
+          "p50_ms": 565.971083,
+          "p95_ms": 1032.70725,
+          "p99_ms": 1109.368459
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 222.46282001357855,
+        "service_events_per_second": 891.9164990485017,
+        "service": {
+          "p50_ms": 1.163459,
+          "p95_ms": 1.685375,
+          "p99_ms": 2.871958
+        },
+        "end_to_end": {
+          "p50_ms": 566.962416,
+          "p95_ms": 1033.989458,
+          "p99_ms": 1110.714875
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 222.46282001357855,
+        "service_events_per_second": 918.3541942325219,
+        "service": {
+          "p50_ms": 1.138542,
+          "p95_ms": 1.680583,
+          "p99_ms": 2.017084
+        },
+        "end_to_end": {
+          "p50_ms": 568.064833,
+          "p95_ms": 1035.258708,
+          "p99_ms": 1112.068083
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 222.46282001357855,
+        "service_events_per_second": 900.3693585219465,
+        "service": {
+          "p50_ms": 1.142,
+          "p95_ms": 1.672959,
+          "p99_ms": 2.590292
+        },
+        "end_to_end": {
+          "p50_ms": 569.748292,
+          "p95_ms": 1036.420458,
+          "p99_ms": 1113.447333
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 457345568,
+    "drain_alloc_objects": 5421191,
+    "drain_redis_commands": 143000,
+    "name": "dense-balanced",
+    "rules_per_partition": 100,
+    "affected_rules": 100,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 1563488667,
+    "producer_ns": 27017542,
+    "fault_path_ns": 0,
+    "run": 2,
+    "events_per_second": 639.595298070683,
+    "service": {
+      "p50_ms": 1.26375,
+      "p95_ms": 2.702708,
+      "p99_ms": 5.045416
+    },
+    "end_to_end": {
+      "p50_ms": 753.070917,
+      "p95_ms": 1505.112541,
+      "p99_ms": 1551.6855
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 159.89882451767076,
+        "service_events_per_second": 642.6338668808725,
+        "service": {
+          "p50_ms": 1.307292,
+          "p95_ms": 2.616666,
+          "p99_ms": 5.087292
+        },
+        "end_to_end": {
+          "p50_ms": 746.886458,
+          "p95_ms": 1503.269833,
+          "p99_ms": 1550.623792
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 159.89882451767076,
+        "service_events_per_second": 652.6467970768441,
+        "service": {
+          "p50_ms": 1.254042,
+          "p95_ms": 2.757958,
+          "p99_ms": 4.080625
+        },
+        "end_to_end": {
+          "p50_ms": 748.838083,
+          "p95_ms": 1505.112541,
+          "p99_ms": 1551.6855
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 159.89882451767076,
+        "service_events_per_second": 622.9737886544427,
+        "service": {
+          "p50_ms": 1.252709,
+          "p95_ms": 2.755917,
+          "p99_ms": 5.653542
+        },
+        "end_to_end": {
+          "p50_ms": 750.856708,
+          "p95_ms": 1506.222542,
+          "p99_ms": 1552.85575
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 159.89882451767076,
+        "service_events_per_second": 648.8245672242165,
+        "service": {
+          "p50_ms": 1.230083,
+          "p95_ms": 2.673667,
+          "p99_ms": 5.125791
+        },
+        "end_to_end": {
+          "p50_ms": 753.070917,
+          "p95_ms": 1507.312458,
+          "p99_ms": 1553.791625
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50269808,
+    "drain_alloc_objects": 669088,
+    "drain_redis_commands": 44000,
+    "name": "sparse-skew",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      900,
+      34,
+      33,
+      33
+    ],
+    "elapsed_ns": 1019594917,
+    "producer_ns": 31618500,
+    "fault_path_ns": 0,
+    "run": 2,
+    "events_per_second": 980.7816646853684,
+    "service": {
+      "p50_ms": 0.929083,
+      "p95_ms": 1.807916,
+      "p99_ms": 2.182792
+    },
+    "end_to_end": {
+      "p50_ms": 678.865209,
+      "p95_ms": 982.984375,
+      "p99_ms": 1013.85475
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 900,
+        "events_per_second_over_full_drain": 882.7034982168315,
+        "service_events_per_second": 1025.138595577278,
+        "service": {
+          "p50_ms": 0.815791,
+          "p95_ms": 1.761833,
+          "p99_ms": 2.182792
+        },
+        "end_to_end": {
+          "p50_ms": 715.124583,
+          "p95_ms": 986.60175,
+          "p99_ms": 1014.414
+        }
+      },
+      {
+        "partition": 1,
+        "events": 34,
+        "events_per_second_over_full_drain": 33.34657659930252,
+        "service_events_per_second": 717.206931264976,
+        "service": {
+          "p50_ms": 1.366208,
+          "p95_ms": 1.957708,
+          "p99_ms": 1.986
+        },
+        "end_to_end": {
+          "p50_ms": 107.3465,
+          "p95_ms": 180.4195,
+          "p99_ms": 183.912791
+        }
+      },
+      {
+        "partition": 2,
+        "events": 33,
+        "events_per_second_over_full_drain": 32.365794934617156,
+        "service_events_per_second": 746.6725048914403,
+        "service": {
+          "p50_ms": 1.279,
+          "p95_ms": 1.944083,
+          "p99_ms": 2.142458
+        },
+        "end_to_end": {
+          "p50_ms": 108.880375,
+          "p95_ms": 177.534875,
+          "p99_ms": 181.184416
+        }
+      },
+      {
+        "partition": 3,
+        "events": 33,
+        "events_per_second_over_full_drain": 32.365794934617156,
+        "service_events_per_second": 721.4856728030991,
+        "service": {
+          "p50_ms": 1.277583,
+          "p95_ms": 2.097583,
+          "p99_ms": 2.405583
+        },
+        "end_to_end": {
+          "p50_ms": 110.627292,
+          "p95_ms": 178.241791,
+          "p99_ms": 182.02675
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 50300872,
+    "drain_alloc_objects": 669417,
+    "drain_redis_commands": 44017,
+    "name": "completion-retry",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 894293792,
+    "producer_ns": 41111125,
+    "fault_path_ns": 2405500,
+    "run": 2,
+    "events_per_second": 1118.2007623731777,
+    "service": {
+      "p50_ms": 0.684375,
+      "p95_ms": 1.585667,
+      "p99_ms": 2.201834
+    },
+    "end_to_end": {
+      "p50_ms": 617.536959,
+      "p95_ms": 868.153375,
+      "p99_ms": 890.3875
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 279.5501905932944,
+        "service_events_per_second": 1113.2756405693408,
+        "service": {
+          "p50_ms": 0.678208,
+          "p95_ms": 1.67175,
+          "p99_ms": 2.328584
+        },
+        "end_to_end": {
+          "p50_ms": 614.0985,
+          "p95_ms": 867.949334,
+          "p99_ms": 889.906666
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 279.5501905932944,
+        "service_events_per_second": 1152.5869472866111,
+        "service": {
+          "p50_ms": 0.654333,
+          "p95_ms": 1.546083,
+          "p99_ms": 1.757459
+        },
+        "end_to_end": {
+          "p50_ms": 615.298875,
+          "p95_ms": 868.153375,
+          "p99_ms": 890.3875
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 279.5501905932944,
+        "service_events_per_second": 1111.0884942875384,
+        "service": {
+          "p50_ms": 0.691209,
+          "p95_ms": 1.616667,
+          "p99_ms": 2.201834
+        },
+        "end_to_end": {
+          "p50_ms": 616.344,
+          "p95_ms": 868.491792,
+          "p99_ms": 890.822584
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 279.5501905932944,
+        "service_events_per_second": 1115.5827585006837,
+        "service": {
+          "p50_ms": 0.698583,
+          "p95_ms": 1.579584,
+          "p99_ms": 2.236167
+        },
+        "end_to_end": {
+          "p50_ms": 617.536959,
+          "p95_ms": 868.831458,
+          "p99_ms": 891.367625
+        }
+      }
+    ]
+  },
+  {
+    "drain_alloc_bytes": 51363368,
+    "drain_alloc_objects": 681397,
+    "drain_redis_commands": 44055,
+    "name": "owner-loss",
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250,
+      250,
+      250
+    ],
+    "elapsed_ns": 779742541,
+    "producer_ns": 19182208,
+    "fault_path_ns": 115876333,
+    "run": 2,
+    "events_per_second": 1282.474595675549,
+    "service": {
+      "p50_ms": 0.49725,
+      "p95_ms": 1.422375,
+      "p99_ms": 1.844167
+    },
+    "end_to_end": {
+      "p50_ms": 448.112834,
+      "p95_ms": 755.737083,
+      "p99_ms": 775.335291
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 320.61864891888723,
+        "service_events_per_second": 892.6994283738471,
+        "service": {
+          "p50_ms": 0.494042,
+          "p95_ms": 1.482917,
+          "p99_ms": 1.929125
+        },
+        "end_to_end": {
+          "p50_ms": 446.719375,
+          "p95_ms": 755.274583,
+          "p99_ms": 774.84125
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 320.61864891888723,
+        "service_events_per_second": 1495.1370935158077,
+        "service": {
+          "p50_ms": 0.491458,
+          "p95_ms": 1.460209,
+          "p99_ms": 2.396
+        },
+        "end_to_end": {
+          "p50_ms": 447.142541,
+          "p95_ms": 755.737083,
+          "p99_ms": 775.335291
+        }
+      },
+      {
+        "partition": 2,
+        "events": 250,
+        "events_per_second_over_full_drain": 320.61864891888723,
+        "service_events_per_second": 1500.3177102789641,
+        "service": {
+          "p50_ms": 0.503041,
+          "p95_ms": 1.548708,
+          "p99_ms": 1.915
+        },
+        "end_to_end": {
+          "p50_ms": 447.65225,
+          "p95_ms": 756.194792,
+          "p99_ms": 775.814625
+        }
+      },
+      {
+        "partition": 3,
+        "events": 250,
+        "events_per_second_over_full_drain": 320.61864891888723,
+        "service_events_per_second": 1533.9736695751255,
+        "service": {
+          "p50_ms": 0.49725,
+          "p95_ms": 1.344667,
+          "p99_ms": 1.62175
+        },
+        "end_to_end": {
+          "p50_ms": 448.112834,
+          "p95_ms": 757.163459,
+          "p99_ms": 776.264833
+        }
+      }
+    ]
+  }
+]
