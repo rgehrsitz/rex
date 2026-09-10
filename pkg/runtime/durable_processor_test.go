@@ -305,3 +305,26 @@ func TestRealRedisDurablePoisonThenProgress(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, true, value)
 }
+
+func TestDurableRejectsChangeOnlyTargetBeforePersistence(t *testing.T) {
+	source := `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`
+	memory, err := store.NewMemoryStore(map[string]interface{}{"out": false})
+	require.NoError(t, err)
+	defer memory.Close()
+	coordinator, err := NewCoordinator(batchProgram(t, source), memory, memory, DefaultLimits())
+	require.NoError(t, err)
+	engine := &Engine{coordinator: coordinator, programID: "change"}
+	queue := &durableQueueProbe{event: store.DurableEvent{ID: "1-0", Payload: `{"trigger":true,"out":true}`}, maxAttempts: 2}
+	result, err := engine.ProcessNextDurable(context.Background(), queue)
+	require.ErrorContains(t, err, "includes change-only target")
+	require.True(t, result.RetryPending)
+	require.Zero(t, queue.inputs)
+	require.Zero(t, queue.completed)
+	result, err = engine.ProcessNextDurable(context.Background(), queue)
+	require.NoError(t, err)
+	require.True(t, result.DeadLettered)
+	require.Zero(t, queue.inputs)
+	facts, err := memory.Snapshot()
+	require.NoError(t, err)
+	require.Equal(t, map[string]interface{}{"out": false}, facts)
+}

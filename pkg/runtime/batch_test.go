@@ -664,3 +664,13 @@ func TestTypedFactRuntimeContract(t *testing.T) {
 	require.Equal(t, store.Invalid, evaluation.Conditions[1].State)
 	require.Empty(t, evaluation.Actions)
 }
+
+func TestChangeOnlyTargetAloneDoesNotSelectRule(t *testing.T) {
+	p := batchProgram(t, `{"rules":[{"name":"change","emit":"on_change","conditions":{"all":[{"fact":"trigger","operator":"EQ","value":true}]},"actions":[{"type":"updateStore","target":"out","value":true}]}]}`)
+	ids, keys := p.candidates(map[string]interface{}{"out": false})
+	require.Empty(t, ids)
+	require.Empty(t, keys)
+	ids, keys = p.candidates(map[string]interface{}{"trigger": true})
+	require.Equal(t, []int{0}, ids)
+	require.Equal(t, []string{"out"}, keys)
+}

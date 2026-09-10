@@ -34,3 +34,11 @@ journal completes it.
 Change-only action targets count as dependencies and against the existing 65,536 dependency and snapshot-byte limits. Suppressed proposals count against action and staged-byte limits. The legacy v3 compiler rejects `emit` because it cannot represent these semantics.
 
 Rollback uses normal M8.1 artifact activation. Restoring v4, v5, or v6 bytes restores repeated emission for subsequent events; no private change-only state needs migration or cleanup. Adding `emit` to a temporal rule changes its artifact digest and therefore restarts that rule's current `for` window under new private tracker keys; retained-program cleanup retires the prior keys normally.
+
+## PR review clarification
+
+Durable inputs containing any change-only output target are rejected before input
+persistence, matching replay's boundary. They follow normal bounded retries and
+dead-letter handling. Change-only targets are snapshot dependencies only; they
+do not become condition triggers. External drift is repaired on the next event
+that affects a condition fact and matches the rule.

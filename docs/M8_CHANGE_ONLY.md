@@ -50,3 +50,9 @@ rexc simulate -bundle /tmp/rex-change-only-bundle.json
 ```
 
 In scenario `initial_state`, an omitted target means explicitly missing and causes the first matching event to emit. Suppressed actions continue to consume the normal action, work, and staged-byte budgets.
+
+Durable input events also reject change-only output targets before `ApplyInput`
+can persist any fact. These invalid inputs follow the configured bounded retry
+and dead-letter policy. Pub/Sub and direct evaluation retain their snapshot
+semantics. Output targets alone do not select rules: an event affecting a
+condition fact must arrive before REX evaluates whether to repair external drift.

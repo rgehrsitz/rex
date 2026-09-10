@@ -90,6 +90,7 @@ func LoadProgram(data []byte) (*Program, error) {
 		if err := visit(r.Conditions.Any, facts); err != nil {
 			return nil, err
 		}
+		// Only condition facts select rules; output targets are snapshot-only dependencies.
 		for fact := range facts {
 			p.dependents[fact] = append(p.dependents[fact], i)
 		}
@@ -454,7 +455,7 @@ func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact
 	values := make(map[string]store.Fact, len(keys)+len(event))
 	var persisted map[string]store.Fact
 	if len(p.changeTargetSet) > 0 {
-		persisted = make(map[string]store.Fact, len(p.changeTargetSet))
+		persisted = make(map[string]store.Fact, min(len(keys), len(p.changeTargetSet)))
 	}
 	size := 0
 	for _, k := range keys {
@@ -673,6 +674,7 @@ func (p *Program) EvaluateAt(ctx context.Context, snapshot map[string]store.Fact
 				}
 			}
 			if old, ok := targets[a.Target]; ok {
+				// Validated artifact actions contain only JSON-normalized, comparable scalars.
 				if old != a.Value {
 					return empty, budget, fmt.Errorf("conflicting writes to %q", a.Target)
 				}
