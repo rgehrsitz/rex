@@ -13,7 +13,7 @@ import (
 
 func IsCommand(command string) bool {
 	switch command {
-	case "explain", "bundle", "simulate", "test", "compare", "lint", "partition-plan":
+	case "explain", "bundle", "simulate", "test", "compare", "lint", "partition-plan", "partition-check":
 		return true
 	}
 	return false
@@ -23,15 +23,18 @@ func IsCommand(command string) bool {
 // scenario failure, lint error, or failed replay. Stdout is always JSON.
 func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int {
 	if len(args) == 0 || !IsCommand(args[0]) {
-		fmt.Fprintln(diagnostics, "expected explain, bundle, simulate, test, compare, lint or partition-plan")
+		fmt.Fprintln(diagnostics, "expected explain, bundle, simulate, test, compare, lint, partition-plan or partition-check")
 		return 1
 	}
 	command := args[0]
 	fs := flag.NewFlagSet(command, flag.ContinueOnError)
 	fs.SetOutput(diagnostics)
-	var rulesPath, artifactPath, bundlePath, scenarioPath, channels string
+	var rulesPath, artifactPath, bundlePath, scenarioPath, channels, ownershipPath string
 	switch command {
-	case "explain", "partition-plan":
+	case "explain", "partition-plan", "partition-check":
+		if command == "partition-check" {
+			fs.StringVar(&ownershipPath, "ownership", "", "ownership JSON with exact facts")
+		}
 		fs.StringVar(&rulesPath, "rules", "", "batch v4-v7 source JSON")
 		fs.StringVar(&artifactPath, "artifact", "", "batch v4-v7 compiled artifact")
 	case "lint":
@@ -83,7 +86,7 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 		return b, err
 	}
 	switch command {
-	case "explain", "partition-plan":
+	case "explain", "partition-plan", "partition-check":
 		if (rulesPath == "") == (artifactPath == "") {
 			return fail(fmt.Errorf("%s requires exactly one of -rules or -artifact", command))
 		}
@@ -100,6 +103,28 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 		}
 		if err != nil {
 			return fail(err)
+		}
+		if command == "partition-check" {
+			if ownershipPath == "" {
+				return fail(fmt.Errorf("-ownership is required"))
+			}
+			raw, err := ReadFile(ownershipPath)
+			if err != nil {
+				return fail(err)
+			}
+			var spec OwnershipSpec
+			if err := Decode(raw, &spec); err != nil {
+				return fail(err)
+			}
+			report, err := CheckOwnership(artifact, spec.Facts)
+			if err != nil {
+				return fail(err)
+			}
+			code := 0
+			if HasLintErrors(report) {
+				code = 2
+			}
+			return emit(report, code)
 		}
 		if command == "partition-plan" {
 			value, err := PlanPartitions(artifact)

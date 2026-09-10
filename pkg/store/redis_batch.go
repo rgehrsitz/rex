@@ -146,5 +146,15 @@ func (s *RedisStore) DeleteInternal(ctx context.Context, keys []string) error {
 			return fmt.Errorf("internal cleanup key %q is invalid", key)
 		}
 	}
+	if s.durable != nil && s.durable.ownership != nil {
+		d := s.durable
+		return d.watchOwnership(ctx, func(tx *redis.Tx) error {
+			if err := d.checkOwnershipFence(ctx, tx); err != nil {
+				return err
+			}
+			_, err := tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error { pipe.Del(ctx, keys...); return nil })
+			return err
+		}, d.ownershipWatchKeys()...)
+	}
 	return s.client.Del(ctx, keys...).Err()
 }

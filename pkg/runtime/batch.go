@@ -27,6 +27,7 @@ const (
 
 // Program contains a private, immutable copy of a validated batch artifact.
 type Program struct {
+	ownershipFacts        []string
 	rules                 []compiler.Rule
 	dependents            map[string][]int
 	dependencies          [][]string
@@ -155,6 +156,7 @@ func LoadProgram(data []byte) (*Program, error) {
 	if len(unique) > compiler.MaxDependencies {
 		return nil, fmt.Errorf("program exceeds 65536 dependencies")
 	}
+	p.ownershipFacts = p.collectOwnershipFacts()
 	return p, nil
 }
 

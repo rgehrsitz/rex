@@ -730,3 +730,24 @@ func TestV4MessageIsOneBatchAndOutputNotificationIsIgnored(t *testing.T) {
 	require.Error(t, processMessage(context.Background(), engine, &redis.Message{Payload: `{"a":{"bad":true},"b":1}`}))
 	require.Error(t, processMessage(context.Background(), engine, &redis.Message{Payload: strings.Repeat("x", store.MaxEventBytes+1)}))
 }
+
+func TestOwnershipConfig(t *testing.T) {
+	for _, tc := range []struct {
+		facts, mode string
+		valid       bool
+	}{{`["a,b","out"]`, "streams", true}, {`[]`, "streams", false}, {`["a","a"]`, "streams", false}, {`["rex:durable:bad"]`, "streams", false}, {`["a"]`, "pubsub", false}} {
+		flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ContinueOnError)
+		viper.Reset()
+		t.Cleanup(viper.Reset)
+		path := t.TempDir() + "/config.json"
+		body := `{"redis":{"event_mode":"` + tc.mode + `","durable":{"stream":"in","group":"g","consumer":"c","ownership":{"facts":` + tc.facts + `}}}}`
+		require.NoError(t, os.WriteFile(path, []byte(body), 0600))
+		config, err := parseConfig([]string{"rexd", "--config", path})
+		if tc.valid {
+			require.NoError(t, err)
+			require.Equal(t, []string{"a,b", "out"}, config.RedisDurable.OwnedFacts)
+		} else {
+			require.Error(t, err)
+		}
+	}
+}

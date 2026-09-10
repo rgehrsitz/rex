@@ -12,6 +12,18 @@ jobs:
   test:
     name: Test and build
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4.2
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      REX_REDIS_TEST_ADDR: 127.0.0.1:6379
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
