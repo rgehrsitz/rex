@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -41,6 +40,8 @@ func (d *RedisDurable) ValidateProgramFacts(programID string, keys []string) err
 			return err
 		}
 	}
+	// Keep memory bounded without evicting known-good entries. After saturation,
+	// new artifacts are revalidated on each delivery; correctness is unchanged.
 	if len(d.validatedPrograms) < 1024 {
 		if d.validatedPrograms == nil {
 			d.validatedPrograms = map[string]bool{}
@@ -102,7 +103,7 @@ func (d *RedisDurable) reserveFactOwnership(ctx context.Context, acquire bool) e
 						return ErrDurableOwnership
 					}
 					pending, err := tx.XPending(ctx, d.options.Stream, d.options.Group).Result()
-					if err != nil && !strings.Contains(err.Error(), "NOGROUP") && !strings.Contains(err.Error(), "no such key") {
+					if err != nil && !redis.HasErrorPrefix(err, "NOGROUP ") && !redis.HasErrorPrefix(err, "no such key") {
 						return err
 					}
 					if err == nil && pending.Count > 0 {

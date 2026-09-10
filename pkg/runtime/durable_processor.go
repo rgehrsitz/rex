@@ -36,6 +36,12 @@ type ProcessingTimeDurableQueue interface {
 	PinProcessingTime(context.Context, string, time.Time) (time.Time, error)
 }
 
+// ProgramFactValidator checks a pinned artifact against queue ownership before
+// Begin. A failure leaves the event pending as an infrastructure problem.
+type ProgramFactValidator interface {
+	ValidateProgramFacts(programID string, facts []string) error
+}
+
 type DurableProcessResult struct {
 	EventID      string
 	Attempts     int64
@@ -62,7 +68,7 @@ func (e *Engine) processDurableEvent(ctx context.Context, queue DurableQueue, ev
 	result := DurableProcessResult{}
 	result.EventID = event.ID
 	result.Recovered = event.Recovered
-	if validator, ok := queue.(interface{ ValidateProgramFacts(string, []string) error }); ok {
+	if validator, ok := queue.(ProgramFactValidator); ok {
 		if err := validator.ValidateProgramFacts(e.programID, e.coordinator.program.ownershipFacts); err != nil {
 			result.RetryPending = true
 			return result, errors.Join(store.ErrDurableInfrastructure, err)

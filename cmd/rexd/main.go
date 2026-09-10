@@ -244,8 +244,8 @@ func parseConfig(args []string) (*Config, error) {
 		ObservabilityEnabled:    viper.GetBool("observability.enabled"),
 		ObservabilityAddress:    viper.GetString("observability.address"),
 	}
-	if viper.IsSet("redis.durable.ownership.facts") && config.RedisDurable.OwnedFacts == nil {
-		config.RedisDurable.OwnedFacts = []string{}
+	if viper.IsSet("redis.durable.ownership.facts") && len(config.RedisDurable.OwnedFacts) == 0 {
+		return nil, fmt.Errorf("redis.durable.ownership.facts must be a nonempty list")
 	}
 	if config.RedisDurable.OwnedFacts != nil {
 		if config.RedisEventMode != "streams" {

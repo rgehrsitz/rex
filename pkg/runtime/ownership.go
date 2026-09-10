@@ -18,6 +18,8 @@ func (p *Program) collectOwnershipFacts() []string {
 			}
 		}
 	}
+	// Validated source actions always target public facts: DecodeBatch rejects
+	// the private timer prefix. Runtime timer writes are not source actions.
 	for _, rule := range p.rules {
 		for _, action := range rule.Actions {
 			set[action.Target] = true
