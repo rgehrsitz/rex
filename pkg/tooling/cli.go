@@ -43,7 +43,7 @@ func RunCLI(ctx context.Context, args []string, out, diagnostics io.Writer) int 
 	case "simulate":
 		fs.StringVar(&bundlePath, "bundle", "", "complete replay bundle")
 	case "compare":
-		fs.StringVar(&rulesPath, "rules", "", "candidate v4 source JSON")
+		fs.StringVar(&rulesPath, "rules", "", "candidate batch v4-v7 source JSON")
 		fs.StringVar(&bundlePath, "bundle", "", "complete replay bundle")
 	}
 	if err := fs.Parse(args[1:]); err != nil {

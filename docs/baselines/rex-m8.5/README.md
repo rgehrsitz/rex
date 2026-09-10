@@ -34,8 +34,11 @@ EventFacts=1024, so the 1,000-output event and derived round fit the explicit
 budget. Default deployments would reject that dense event at 256 actions.
 The evaluator checks output count. The coordinator checks two rounds and drains
 and checks publications after every event; drain/copy cost is included, and
-retained publication memory is bounded. Chain IDs are fixed because this is
-non-durable memory processing, with no identity generation/deduplication cost.
+retained publication memory is bounded. Each coordinator/store is reused across
+iterations: after the first event, outputs already exist. This measures steady-state
+reprocessing, not cold-start event cost; v4 still emits every matching write.
+Chain IDs are fixed because this is non-durable memory processing, with no
+identity generation/deduplication cost.
 
 Median ns/op from [raw measurements](benchmarks.txt):
 

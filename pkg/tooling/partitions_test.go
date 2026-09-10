@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -98,7 +99,7 @@ func TestPartitionPlanAllBatchVersions(t *testing.T) {
 	}{
 		{4, false, false, false}, {5, true, false, false}, {6, false, true, false}, {7, false, false, true},
 	} {
-		t.Run(string(rune('0'+tc.version)), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d", tc.version), func(t *testing.T) {
 			node := &compiler.ConditionOrGroup{Fact: "a", Operator: "EQ", Value: true}
 			rule := compiler.Rule{Name: "r", Conditions: compiler.ConditionGroup{All: []*compiler.ConditionOrGroup{node}}, Actions: []compiler.Action{{Type: "updateStore", Target: "b", Value: true}}}
 			if tc.temporal {

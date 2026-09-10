@@ -53,6 +53,8 @@ func PlanPartitions(artifact []byte) (PartitionReport, error) {
 	owners := map[string]int{}
 	for i, rule := range rules.Rules {
 		facts := Dependencies(rule)
+		// Change-only dependencies already include targets. Rejoining them is
+		// harmless; all other rules must also join every written fact.
 		for _, action := range rule.Actions {
 			facts = append(facts, action.Target)
 		}
