@@ -2,9 +2,8 @@
 
 Created: 2026-09-07. Last planning review: 2026-09-10.
 
-Status: REX-M0 through M7 and M8.1–M8.5 are complete. M8.6 exact
-partition ownership is implemented locally; durable profiling (M8.7) precedes
-concurrent workers.
+Status: REX-M0 through M7 and M8.1–M8.6 are complete. M8.7 durable profiling is
+implemented locally and precedes any concurrent-worker experiment.
 
 ## Purpose and authority
 
@@ -62,14 +61,14 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.5 are merged. M8.6 ownership is implemented locally; concurrent execution remains gated. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.6 are merged. M8.7 profiling is locally complete; concurrent execution remains gated. |
 | REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
 | REX-M8.2 | Typed fact declarations | M4, M5 | Complete | Merged in PR #41 (`da2b03a`). [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [acceptance evidence](baselines/rex-m8.2/README.md). |
 | REX-M8.3 | Temporal rules | M4, M5, M7 | Complete | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [acceptance evidence](baselines/rex-m8.3/README.md). Merged PR #42 (`cdab686`). |
 | REX-M8.4 | Optional change-only emission | M4, M5, M7 | Complete | Merged PR #43 (`f5a45d7`); [contract](decisions/REX-M8-CHANGE-ONLY.md), [evidence](baselines/rex-m8.4/README.md). |
 | REX-M8.5 | Partition readiness and batch baseline | M4, M5, M7 | Complete | [Ownership analysis and gates](M8_PARTITION_READINESS.md), [evidence](baselines/rex-m8.5/README.md). Merged PR #44 (`97042ec`). |
-| REX-M8.6 | Enforced exact partition ownership | M8.5 | In progress | [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [local evidence](baselines/rex-m8.6/README.md). Review pending. |
-| REX-M8.7 | Representative durable profiling | M8.6 | Planned | Measure per-partition throughput, p50/p95/p99, skew, retry and owner loss before choosing concurrent workers. |
+| REX-M8.6 | Enforced exact partition ownership | M8.5 | Complete | Merged in [PR #45](https://github.com/rgehrsitz/rex/pull/45), `48cd367`; [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [evidence](baselines/rex-m8.6/README.md). |
+| REX-M8.7 | Representative durable profiling | M8.6 | In progress | [Local evidence](baselines/rex-m8.7/README.md): per-partition throughput and p50/p95/p99, 90/10 skew, retry, real owner loss, command/allocation counts and CPU profile. Review pending. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -511,7 +510,31 @@ an enforced ownership/routing design; parallel speedup remains unproven.
   cleanup against lease loss; retain existing temporal artifact identities.
 - [x] Cover claims, invalid inputs, reload/history, lease-loss and lost-reply
   recovery with unit, race and real Redis tests.
-- [ ] Review and integrate; next: M8.7 durable profiling, not a worker pool.
+- [x] Review and integrate; next: M8.7 durable profiling, not a worker pool.
+
+**Merged 2026-09-10 in PR #45 (`48cd367`):** all review threads were
+resolved and hosted build, race, real-Redis, vet, CodeQL, vulnerability, CLI,
+and release checks passed.
+
+### REX-M8.7 — Representative durable profiling
+
+- [x] Add an opt-in harness that owns a fresh loopback Redis process and records
+  source, revision, environment, topology, and server evidence.
+- [x] Measure aggregate and per-partition throughput plus service and finite-
+  backlog p50/p95/p99 for sparse, dense, balanced, and 90/10 skew workloads.
+- [x] Record Redis command counts, process allocations, and a CPU profile.
+- [x] Measure recovery after a post-commit completion failure and real lease
+  expiry/successor takeover; prove order, fencing, deduplication, and terminal state.
+- [x] State measurement limits and the acceptance gates for a separate concurrent-
+  partition experiment; make no production capacity or parallel speedup claim.
+- [ ] Review and integrate.
+
+**Completed locally 2026-09-10:** three warmed 1,000-event runs against isolated
+Redis 7.4.2 processes recorded stable correctness, command and allocation
+outcomes. Timing varied too widely for a capacity decision (331–2,082 events/s
+across sparse scenarios); the evidence therefore sets no performance budget and
+keeps concurrent production workers gated.
+See [M8.7 evidence](baselines/rex-m8.7/README.md).
 
 
 ## Decisions to record before dependent implementation
