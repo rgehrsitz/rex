@@ -5,7 +5,7 @@ go 1.26.0
 toolchain go1.26.6
 
 require (
-	github.com/alicebob/miniredis/v2 v2.38.0
+	github.com/alicebob/miniredis/v2 v2.39.0
 	github.com/brianvoe/gofakeit/v7 v7.16.0
 	github.com/google/jsonschema-go v0.4.3
 	github.com/redis/go-redis/v9 v9.22.0
