@@ -77,6 +77,13 @@ The automated [gate report](gates.json) records:
 | Non-fault Redis commands/event unchanged | Pass: 44 sparse, 143 dense |
 | Overall D13 gate | **Fail** |
 
+The max-versus-max latency gate deliberately fails safe: any bad two-worker tail
+fails the case. The balanced result is not dependent on one outlier because even
+the best two-worker p99 exceeded the worst one-worker p99: 0.749 versus 0.605 ms
+for sparse and 1.366 versus 1.001 ms for dense. The skew gate passed against one
+disturbed 15.819 ms control and is weak evidence; it cannot support a future pass
+without a stable or robust skew comparison.
+
 Redis CPU seconds divided by drain wall time rose from median 0.38 to 0.53 to
 0.67 for sparse balanced and 0.28 to 0.39 to 0.52 for dense balanced at one,
 two, and four workers. Measured allocations remained near 65.8 KB/event for
@@ -90,7 +97,10 @@ and 113.9–128.5 ms respectively. Fault speedup is deliberately omitted because
 fixed recovery work would bias it. Commands remained exact at 44.017/event for
 completion retry and 44.055/event for owner loss. Every multi-worker case
 recorded overlapping processing windows; every multi-worker owner-loss case
-recorded sibling completions during recovery.
+recorded post-fault sibling completions during recovery. The owner-loss gate
+deliberately releases siblings only after partition zero starts fault injection,
+so it proves recovery does not block siblings rather than natural pre-fault
+overlap; window assertions in the non-owner-loss cases cover ordinary overlap.
 
 ## Correctness and profile evidence
 

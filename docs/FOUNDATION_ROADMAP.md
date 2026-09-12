@@ -69,7 +69,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M8.5 | Partition readiness and batch baseline | M4, M5, M7 | Complete | [Ownership analysis and gates](M8_PARTITION_READINESS.md), [evidence](baselines/rex-m8.5/README.md). Merged PR #44 (`97042ec`). |
 | REX-M8.6 | Enforced exact partition ownership | M8.5 | Complete | Merged in [PR #45](https://github.com/rgehrsitz/rex/pull/45), `48cd367`; [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [evidence](baselines/rex-m8.6/README.md). |
 | REX-M8.7 | Representative durable profiling | M8.6 | Complete | Merged in [PR #46](https://github.com/rgehrsitz/rex/pull/46), `5bf6852`; [evidence](baselines/rex-m8.7/README.md). |
-| REX-M8.8 | Concurrent partition experiment | M8.7 | In progress | [Evidence](baselines/rex-m8.8/README.md) fails the combined latency/throughput gate; production concurrency stays disabled. Review pending. |
+| REX-M8.8 | Concurrent partition experiment | M8.7 | In progress | [Evidence](baselines/rex-m8.8/README.md) passes throughput but fails latency, so the overall D13 gate fails and production concurrency stays disabled. Review pending. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -762,8 +762,9 @@ Next concrete action:
   stores, engines, queues, streams, exact claims, leases, and serial goroutines
   sharing one owned Redis process. Production daemon behavior is unchanged.
 - Seventy-five normal cases and fifteen race cases preserved order, exact
-  effects, deduplication, terminal state, ownership cleanup, overlap, sibling
-  progress during owner recovery, and stale-owner fencing.
+  effects, deduplication, terminal state, ownership cleanup, and stale-owner
+  fencing. Non-owner-loss cases proved ordinary overlap; multi-worker owner-loss
+  cases proved post-fault sibling progress during recovery.
 - Stable balanced controls and exact command counts allowed a decision. Two workers met
   sparse and dense throughput targets (1.65x and 1.56x median paired speedup)
   but failed both balanced service-p99 gates. D13 therefore records a no-go;

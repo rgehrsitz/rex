@@ -31,7 +31,8 @@ non-comparable.
 Every case verifies per-partition input/output order, exact output and write
 counts, final facts, empty pending and dead-letter queues, and ownership release.
 Fault cases additionally prove retry deduplication or real lease expiry,
-stale-owner fencing, and successor recovery while sibling partitions drain.
+stale-owner fencing, and, for multi-worker owner loss, successor recovery with
+post-fault sibling progress.
 Use `--race` for correctness only; race timings are not comparable. Use
 `--cpu-profile` with a narrow worker/scenario selection to retain Go profiles.
 
