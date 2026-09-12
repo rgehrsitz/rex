@@ -2,8 +2,8 @@
 
 Created: 2026-09-07. Last planning review: 2026-09-10.
 
-Status: REX-M0 through M7 and M8.1–M8.6 are complete. M8.7 durable profiling is
-implemented locally and precedes any concurrent-worker experiment.
+Status: REX-M0 through M7 and M8.1–M8.7 are complete. M8.8 is an opt-in
+concurrent-partition experiment; production concurrency remains gated.
 
 ## Purpose and authority
 
@@ -61,14 +61,15 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.6 are merged. M8.7 profiling is locally complete; concurrent execution remains gated. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.7 are merged. M8.8 measures concurrent partitions before any production supervisor. |
 | REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
 | REX-M8.2 | Typed fact declarations | M4, M5 | Complete | Merged in PR #41 (`da2b03a`). [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [acceptance evidence](baselines/rex-m8.2/README.md). |
 | REX-M8.3 | Temporal rules | M4, M5, M7 | Complete | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [acceptance evidence](baselines/rex-m8.3/README.md). Merged PR #42 (`cdab686`). |
 | REX-M8.4 | Optional change-only emission | M4, M5, M7 | Complete | Merged PR #43 (`f5a45d7`); [contract](decisions/REX-M8-CHANGE-ONLY.md), [evidence](baselines/rex-m8.4/README.md). |
 | REX-M8.5 | Partition readiness and batch baseline | M4, M5, M7 | Complete | [Ownership analysis and gates](M8_PARTITION_READINESS.md), [evidence](baselines/rex-m8.5/README.md). Merged PR #44 (`97042ec`). |
 | REX-M8.6 | Enforced exact partition ownership | M8.5 | Complete | Merged in [PR #45](https://github.com/rgehrsitz/rex/pull/45), `48cd367`; [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [evidence](baselines/rex-m8.6/README.md). |
-| REX-M8.7 | Representative durable profiling | M8.6 | In progress | [Local evidence](baselines/rex-m8.7/README.md): per-partition throughput and p50/p95/p99, 90/10 skew, retry, real owner loss, command/allocation counts and CPU profile. Review pending. |
+| REX-M8.7 | Representative durable profiling | M8.6 | Complete | Merged in [PR #46](https://github.com/rgehrsitz/rex/pull/46), `5bf6852`; [evidence](baselines/rex-m8.7/README.md). |
+| REX-M8.8 | Concurrent partition experiment | M8.7 | In progress | [Evidence](baselines/rex-m8.8/README.md) passes throughput but fails latency, so the overall D13 gate fails and production concurrency stays disabled. Review pending. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -403,7 +404,7 @@ release or a reason to delay foundation work.
 | Typed fact declarations | M4, M5 | Define missing/null/invalid and numeric precision; compiler diagnostics and input validation agree; provide migration fixtures. |
 | Temporal rules | M4, M5, M7 | Injected clock; persisted bounded timers/state; explicit event-time versus processing-time and late-event behavior; restart and boundary tests. |
 | Optional change-only emission | M4, M5, M7 | Merged as M8.4 in PR #43: rule-level opt-in, exact persisted scalar equality, no private activation state, and v7 capability metadata; preserve repeated actions by default. |
-| Partitioned concurrency | M4, M7 plus profiling evidence; M8.5 complete; M8.6 ownership underway | Explicit fact/state ownership and cross-partition dependency policy; preserve per-partition order; race, failure, and load tests prove benefit. |
+| Partitioned concurrency | M4, M7, M8.5–M8.7 | M8.8 must preserve per-partition order and prove race/failure safety plus measured benefit before a production supervisor is designed. |
 | Additional transports | M4; M7 for durable guarantees | Pass adapter contract tests and document ordering/delivery differences. |
 | Webhooks and other external actions | M5, M7 | Outbox dispatch, stable idempotency keys, timeout/retry/dead-letter policy, and destination-specific guarantees. |
 
@@ -527,14 +528,30 @@ and release checks passed.
   expiry/successor takeover; prove order, fencing, deduplication, and terminal state.
 - [x] State measurement limits and the acceptance gates for a separate concurrent-
   partition experiment; make no production capacity or parallel speedup claim.
-- [ ] Review and integrate.
+- [x] Review and integrate (PR #46, `5bf6852`).
 
-**Completed locally 2026-09-10:** three warmed 1,000-event runs against isolated
+**Merged 2026-09-10 in PR #46 (`5bf6852`):** three warmed 1,000-event runs against isolated
 Redis 7.4.2 processes recorded stable correctness, command and allocation
 outcomes. Timing varied too widely for a capacity decision (266–2,059 events/s
 across sparse scenarios); the local loopback evidence therefore sets no
 performance budget and keeps concurrent production workers gated.
 See [M8.7 evidence](baselines/rex-m8.7/README.md).
+
+### REX-M8.8 — Concurrent partition experiment
+
+- [x] Record D13 and keep the experiment outside the production daemon.
+- [x] Give every partition a distinct store, engine, queue, stream set, fact
+  claim, lease, and serial processor against one shared Redis process.
+- [x] Compare 1/2/4 partitions across five shuffled sparse, dense, skew,
+  completion-retry, and owner-loss runs with per-partition evidence.
+- [x] Run race-mode fault coverage and retain a four-worker CPU profile.
+- [x] Apply the speedup, latency, correctness, and command-count gates; record a
+  go/no-go decision for a later production supervisor.
+- [x] Consult Claude on the design, implementation, and retained evidence.
+- [ ] Review and integrate.
+
+Temporal artifacts, reload, migration, routing, dynamic workers, and daemon
+supervision remain outside M8.8. See [D13](decisions/REX-M8-PARTITION-CONCURRENCY-EXPERIMENT.md).
 
 
 ## Decisions to record before dependent implementation
@@ -556,6 +573,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D10 | Temporal clock, persistence, and late events | Start with event-driven processing time, sample one injected clock value per chain, persist private bounded start times in the existing commit domain, and leave event-time/watermark semantics unsupported until separately designed. | Resolved for M8.3 in [temporal contract](decisions/REX-M8-TEMPORAL-RULES.md). |
 | D11 | Change-only equality and activation state | Opt in per rule, compare exact scalar values with the persisted target snapshot, retain repeated emission by default, and avoid separate activation state. | Resolved for M8.4 in [change-only contract](decisions/REX-M8-CHANGE-ONLY.md). |
 | D12 | Partition ownership and migration | Exact immutable public/protocol claims, local reads, complete retained-artifact coverage and fenced effects. | Resolved for M8.6 in [ownership decision](decisions/REX-M8-PARTITION-OWNERSHIP.md). |
+| D13 | Concurrent partition experiment | Measure isolated 1/2/4-worker partitions in an opt-in harness before designing production supervision; keep reload and temporal artifacts excluded. | Resolved for M8.8 in [D13](decisions/REX-M8-PARTITION-CONCURRENCY-EXPERIMENT.md). |
 
 ## Review, validation, and completion discipline
 
@@ -735,3 +753,26 @@ Next concrete action:
   `govulncheck` pass. The scan reports no reachable vulnerabilities.
 - Next concrete action after review/integration: REX-M7 on the main sequence, or
   REX-M3 in the independent operational-hardening lane.
+
+### 2026-09-10 — REX-M8.8 local completion; review pending
+
+- Starting revision: `5bf6852a196b25c5e3bf70f292a37cd83128b963`, merged M8.7
+  [PR #46](https://github.com/rgehrsitz/rex/pull/46).
+- Added an opt-in 1/2/4-partition processor-loop experiment with independent
+  stores, engines, queues, streams, exact claims, leases, and serial goroutines
+  sharing one owned Redis process. Production daemon behavior is unchanged.
+- Seventy-five normal cases and fifteen race cases preserved order, exact
+  effects, deduplication, terminal state, ownership cleanup, and stale-owner
+  fencing. Non-owner-loss cases proved ordinary overlap; multi-worker owner-loss
+  cases proved post-fault sibling progress during recovery.
+- Stable balanced controls and exact command counts allowed a decision. Two workers met
+  sparse and dense throughput targets (1.65x and 1.56x median paired speedup)
+  but failed both balanced service-p99 gates. D13 therefore records a no-go;
+  production concurrency remains disabled.
+- A four-worker CPU profile is syscall/network dominated. This host exposes four
+  performance cores, so four Go workers also contend with Redis and remain
+  diagnostic. See [the complete evidence](baselines/rex-m8.8/README.md).
+- Claude reviews established the experiment boundary and tightened stability,
+  overlap, recovery, cleanup, provenance, and measurement claims. Next concrete
+  action: review and integrate M8.8, then prioritize round-trip/transaction cost
+  reduction before repeating the production-concurrency gate.

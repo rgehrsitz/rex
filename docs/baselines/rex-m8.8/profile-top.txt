@@ -1,0 +1,57 @@
+File: runtime.test
+Type: cpu
+Time: 2026-09-10 20:51:38 EDT
+Duration: 702.04ms, Total samples = 490ms (69.80%)
+Showing nodes accounting for 490ms, 100% of 490ms total
+Showing top 50 nodes out of 156
+      flat  flat%   sum%        cum   cum%
+     210ms 42.86% 42.86%      210ms 42.86%  syscall.rawsyscalln
+     120ms 24.49% 67.35%      120ms 24.49%  runtime.kevent
+      50ms 10.20% 77.55%       50ms 10.20%  runtime.pthread_cond_signal
+      40ms  8.16% 85.71%       40ms  8.16%  runtime.pthread_cond_wait
+      10ms  2.04% 87.76%      170ms 34.69%  github.com/redis/go-redis/v9.(*hooksMixin).processHook (inline)
+      10ms  2.04% 89.80%       20ms  4.08%  github.com/redis/go-redis/v9.cmdable.XAdd
+      10ms  2.04% 91.84%       10ms  2.04%  runtime.(*puintptr).set
+      10ms  2.04% 93.88%       10ms  2.04%  runtime.(*spanSet).push
+      10ms  2.04% 95.92%       10ms  2.04%  runtime.(*timer).modify
+      10ms  2.04% 97.96%       10ms  2.04%  runtime.madvise
+      10ms  2.04%   100%       10ms  2.04%  runtime.mallocgcSmallScanNoHeader
+         0     0%   100%      110ms 22.45%  bufio.(*Reader).Peek
+         0     0%   100%      110ms 22.45%  bufio.(*Reader).fill
+         0     0%   100%       60ms 12.24%  bufio.(*Writer).Flush
+         0     0%   100%       10ms  2.04%  encoding/json.(*decodeState).array
+         0     0%   100%       10ms  2.04%  encoding/json.(*decodeState).object
+         0     0%   100%       10ms  2.04%  encoding/json.(*decodeState).unmarshal
+         0     0%   100%       10ms  2.04%  encoding/json.(*decodeState).value
+         0     0%   100%       10ms  2.04%  encoding/json.Unmarshal
+         0     0%   100%       50ms 10.20%  github.com/redis/go-redis/v9.(*Client).Process
+         0     0%   100%      190ms 38.78%  github.com/redis/go-redis/v9.(*Client).Watch
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*Pipeline).Exec
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*Pipeline).Pipelined
+         0     0%   100%      120ms 24.49%  github.com/redis/go-redis/v9.(*Tx).Process
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*Tx).TxPipelined
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*Tx).TxPipelined.(*Tx).TxPipeline.func1
+         0     0%   100%       40ms  8.16%  github.com/redis/go-redis/v9.(*Tx).Watch
+         0     0%   100%       50ms 10.20%  github.com/redis/go-redis/v9.(*baseClient)._getConn
+         0     0%   100%      160ms 32.65%  github.com/redis/go-redis/v9.(*baseClient)._process
+         0     0%   100%      110ms 22.45%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
+         0     0%   100%       60ms 12.24%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.3
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*baseClient).generalProcessPipeline
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*baseClient).generalProcessPipeline.func1
+         0     0%   100%       50ms 10.20%  github.com/redis/go-redis/v9.(*baseClient).getConn
+         0     0%   100%      160ms 32.65%  github.com/redis/go-redis/v9.(*baseClient).process
+         0     0%   100%      160ms 32.65%  github.com/redis/go-redis/v9.(*baseClient).processCommand
+         0     0%   100%      110ms 22.45%  github.com/redis/go-redis/v9.(*baseClient).processPendingPushNotificationWithReader
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*baseClient).processTxPipeline
+         0     0%   100%      160ms 32.65%  github.com/redis/go-redis/v9.(*baseClient).processWithRetry
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*baseClient).txPipelineProcessCmds
+         0     0%   100%       50ms 10.20%  github.com/redis/go-redis/v9.(*baseClient).txPipelineProcessCmds.func2
+         0     0%   100%       50ms 10.20%  github.com/redis/go-redis/v9.(*baseClient).txPipelineReadQueued
+         0     0%   100%      230ms 46.94%  github.com/redis/go-redis/v9.(*baseClient).withConn
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*baseClient).withPipelineConn
+         0     0%   100%       70ms 14.29%  github.com/redis/go-redis/v9.(*hooksMixin).processTxPipelineHook
+         0     0%   100%       30ms  6.12%  github.com/redis/go-redis/v9.cmdable.Get (inline)
+         0     0%   100%       20ms  4.08%  github.com/redis/go-redis/v9.cmdable.HGet (inline)
+         0     0%   100%       20ms  4.08%  github.com/redis/go-redis/v9.cmdable.HMGet
+         0     0%   100%       10ms  2.04%  github.com/redis/go-redis/v9.cmdable.Type (inline)
+         0     0%   100%       20ms  4.08%  github.com/redis/go-redis/v9.cmdable.XPending
