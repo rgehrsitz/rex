@@ -1,0 +1,29 @@
+{
+  "sparse-balanced": {
+    "watch_median_events_per_second": 1998.1924670653723,
+    "script_median_events_per_second": 4021.147213194188,
+    "throughput_ratio": 2.012392339312444,
+    "throughput_threshold": 1.5,
+    "throughput_pass": true,
+    "watch_cv": 0.08774569945290675,
+    "script_cv": 0.08004740082490955,
+    "stability_pass": true,
+    "script_p99_max_ms": 0.835833,
+    "watch_p99_max_ms": 2.33725,
+    "latency_pass": true
+  },
+  "dense-balanced": {
+    "watch_median_events_per_second": 1112.2497248619513,
+    "script_median_events_per_second": 1373.9421802758163,
+    "throughput_ratio": 1.2352821039774546,
+    "throughput_threshold": 1.15,
+    "throughput_pass": true,
+    "watch_cv": 0.02985675802063161,
+    "script_cv": 0.09458545811215535,
+    "stability_pass": true,
+    "script_p99_max_ms": 2.349791,
+    "watch_p99_max_ms": 2.662375,
+    "latency_pass": true
+  },
+  "overall_pass": true
+}

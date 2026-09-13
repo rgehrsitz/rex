@@ -160,6 +160,7 @@ func parseConfig(args []string) (*Config, error) {
 	viper.SetDefault("redis.durable.output_max_len", 100000)
 	viper.SetDefault("redis.durable.dead_letter_max_len", 10000)
 	viper.SetDefault("redis.durable.lock_ttl", "30s")
+	viper.SetDefault("redis.durable.transaction_mode", "script")
 	viper.SetDefault("redis.durable.retry_backoff", "250ms")
 	viper.SetDefault("redis.tls.enabled", false)
 	viper.SetDefault("redis.connect_timeout", "5s")
@@ -222,8 +223,9 @@ func parseConfig(args []string) (*Config, error) {
 			ClaimIdle: viper.GetDuration("redis.durable.claim_idle"), Block: viper.GetDuration("redis.durable.block"),
 			JournalTTL: viper.GetDuration("redis.durable.journal_ttl"), MaxAttempts: viper.GetInt64("redis.durable.max_attempts"),
 			OutputMaxLen: viper.GetInt64("redis.durable.output_max_len"), DeadMaxLen: viper.GetInt64("redis.durable.dead_letter_max_len"),
-			LockTTL:    viper.GetDuration("redis.durable.lock_ttl"),
-			OwnedFacts: viper.GetStringSlice("redis.durable.ownership.facts"),
+			LockTTL:         viper.GetDuration("redis.durable.lock_ttl"),
+			TransactionMode: strings.ToLower(viper.GetString("redis.durable.transaction_mode")),
+			OwnedFacts:      viper.GetStringSlice("redis.durable.ownership.facts"),
 		},
 		RedisRetryBackoff:       viper.GetDuration("redis.durable.retry_backoff"),
 		RedisTLSEnabled:         viper.GetBool("redis.tls.enabled"),

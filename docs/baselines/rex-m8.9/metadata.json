@@ -1,0 +1,28 @@
+{
+  "revision": "d01b5ad30af29983d42290506d61157f9d22ad6b",
+  "status": "M cmd/rexd/main.go\n M cmd/rexd/rex_config.json\n M docs/FOUNDATION_ROADMAP.md\n M docs/M7_DURABLE_PROCESSING.md\n M pkg/runtime/durable_concurrency_profile_test.go\n M pkg/runtime/durable_profile_test.go\n M pkg/store/ownership_test.go\n M pkg/store/redis_durable.go\n M pkg/store/redis_durable_test.go\n M scripts/durable-concurrency/run.py\n?? docs/decisions/REX-M8-DURABLE-ROUND-TRIPS.md\n?? pkg/store/redis_durable_scripts.go\n?? scripts/durable-roundtrip/",
+  "go": "go version go1.26.6 darwin/arm64",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "redis": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a",
+  "events_per_case": 1000,
+  "runs": 5,
+  "modes": [
+    "watch",
+    "script"
+  ],
+  "scenarios": [
+    "sparse-balanced",
+    "dense-balanced"
+  ],
+  "gomaxprocs": 2,
+  "network": "loopback TCP",
+  "persistence": "disabled",
+  "scheduler": "serial round-robin driver across four isolated partitions",
+  "raw_case_files_retained": false,
+  "sha256": {
+    "pkg/runtime/durable_profile_test.go": "4dc7ad1272470919e8df6c184877f427affe9d5dc160c52fae3c597d825d958e",
+    "pkg/store/redis_durable.go": "eec66d8ea9ac3d828f25461a5a53cc8823e85cef745131985631da14b5f77848",
+    "pkg/store/redis_durable_scripts.go": "192c54ca2e18a4d008a370ebce36a20fa44e512a1a1892659e952dbdec66aec1",
+    "scripts/durable-roundtrip/run.py": "2cd64bf2c9dcda741546fe2facd22b3dddae1d5280b03bef7b8738f0d8a58e97"
+  }
+}
