@@ -115,9 +115,13 @@ def stop_redis(directory, log, proc):
 
 
 def slowlog_script_profile(cli, port, event_count):
-    raw = command([str(cli), "--json", "-h", "127.0.0.1", "-p", str(port),
-                   "SLOWLOG", "GET", "100000"], stderr=subprocess.DEVNULL)
-    entries = json.loads(raw)
+    try:
+        raw = command([str(cli), "--json", "-h", "127.0.0.1", "-p", str(port),
+                       "SLOWLOG", "GET", "100000"], stderr=subprocess.DEVNULL)
+        entries = json.loads(raw)
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as err:
+        raise RuntimeError(
+            "stage profiling requires redis-cli with --json and SLOWLOG support") from err
     scripts = []
     commands = {}
     for entry in reversed(entries):
@@ -417,7 +421,7 @@ def main():
             if redis_scripts is not None:
                 row["redis_scripts"] = redis_scripts
                 row["redis_slowlog"] = {
-                    "accounting": "EVALSHA entries include the nested command entries; do not sum both",
+                    "accounting": "EVALSHA entries include nested command entries; post-drain verification is also present; do not sum entries as exclusive time",
                     "entries_by_command": redis_commands,
                 }
             if sum(results[0]["partition_events"]) != args.events:

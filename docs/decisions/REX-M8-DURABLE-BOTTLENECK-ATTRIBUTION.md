@@ -1,14 +1,21 @@
 # D15 — Stop shared-Redis concurrency; optimize dense allocation separately
 
-Proposed for REX-M8.10 integration, 2026-09-13.
+Accepted for REX-M8.10 in PR #51, 2026-09-14.
 
 The production-concurrency line stops at one serial processor per REX daemon
-when partitions share one Redis process once this decision is integrated. The unchanged five-run D13 diagnostic
+when partitions share one Redis process. The unchanged five-run D13 diagnostic
 puts sparse Redis CPU utilization at a 0.601 median with one worker, 0.800 with
 two, and 0.933 with four. Two workers already fail the service-p99 gate, and
-four workers approach the single Redis execution thread's capacity. Faster
-client work would feed that shared server sooner; it would not remove the
-queueing that fails the latency gate.
+four workers approach the single Redis execution thread's capacity. Together
+with flat per-script execution time and rising client-stage latency, this is
+consistent with queueing at that shared execution thread. Faster client work
+would feed the shared server sooner; it would not remove that queueing.
+
+Dense Redis utilization retains headroom at a 0.520 median with two workers and
+0.689 with four. Dense closes on the repeated D13 speedup failure rather than
+saturation: its two-worker median remained below 1.50x, and dense-only work
+cannot satisfy the overall gate while sparse fails structurally. Dense serial
+efficiency remains an independent target below.
 
 This decision does not reject partitioning or parallelism on a different
 topology. A future proposal may measure one Redis execution domain per

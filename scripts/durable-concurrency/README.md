@@ -43,6 +43,9 @@ case to at most 80,000 estimated SLOWLOG entries. Stage profiling adds timing
 and Redis observability overhead, so the runner marks those results
 non-comparable and excludes them from D13 gates. SLOWLOG reports each `EVALSHA`
 duration and its nested commands; those entries overlap and must not be summed.
+The command-name totals also include post-drain correctness verification. Stage
+profiling requires a `redis-cli` version that supports `--json` and SLOWLOG; the
+runner reports that requirement directly if either capability is unavailable.
 
 The runner computes the D13 gate. One-worker throughput must first have a
 coefficient of variation at or below 20%; otherwise the decision is

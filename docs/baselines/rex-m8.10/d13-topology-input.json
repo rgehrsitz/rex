@@ -1,0 +1,237 @@
+{
+  "source": {
+    "path": "docs/baselines/rex-m8.9/d13-summary.json",
+    "sha256": "c8efacb0a07fe145ac3b007e0e7cd903ef54860726a8b6c40f8ed9b9f12817f7",
+    "revision": "d01b5ad30af29983d42290506d61157f9d22ad6b",
+    "case_order_seed": 8808,
+    "gomaxprocs": "4",
+    "runs": 5,
+    "events_per_scenario": 1000,
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "redis": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a"
+  },
+  "cases": [
+    {
+      "scenario": "sparse-balanced",
+      "workers": 1,
+      "runs": [
+        {
+          "run": 0,
+          "events_per_second": 3509.9059742871236,
+          "redis_cpu_utilization": 0.5971087142516998
+        },
+        {
+          "run": 1,
+          "events_per_second": 3520.6293477021954,
+          "redis_cpu_utilization": 0.5964227765355335
+        },
+        {
+          "run": 2,
+          "events_per_second": 3566.737152882956,
+          "redis_cpu_utilization": 0.6034990597421019
+        },
+        {
+          "run": 3,
+          "events_per_second": 3569.1107781424216,
+          "redis_cpu_utilization": 0.6008490921679422
+        },
+        {
+          "run": 4,
+          "events_per_second": 3598.721558484814,
+          "redis_cpu_utilization": 0.6007813731381304
+        }
+      ],
+      "events_per_second_median": 3566.737152882956,
+      "redis_cpu_utilization_median": 0.6007813731381304,
+      "redis_cpu_utilization_range": [
+        0.5964227765355335,
+        0.6034990597421019
+      ]
+    },
+    {
+      "scenario": "sparse-balanced",
+      "workers": 2,
+      "runs": [
+        {
+          "run": 0,
+          "events_per_second": 5237.034738560679,
+          "redis_cpu_utilization": 0.8002712783994574
+        },
+        {
+          "run": 1,
+          "events_per_second": 5137.8748721953625,
+          "redis_cpu_utilization": 0.7965863959349133
+        },
+        {
+          "run": 2,
+          "events_per_second": 5437.70094004255,
+          "redis_cpu_utilization": 0.8000706901122205
+        },
+        {
+          "run": 3,
+          "events_per_second": 5509.988471285822,
+          "redis_cpu_utilization": 0.8035216187676114
+        },
+        {
+          "run": 4,
+          "events_per_second": 5462.559277303408,
+          "redis_cpu_utilization": 0.7959495122958795
+        }
+      ],
+      "events_per_second_median": 5437.70094004255,
+      "redis_cpu_utilization_median": 0.8000706901122205,
+      "redis_cpu_utilization_range": [
+        0.7959495122958795,
+        0.8035216187676114
+      ]
+    },
+    {
+      "scenario": "sparse-balanced",
+      "workers": 4,
+      "runs": [
+        {
+          "run": 0,
+          "events_per_second": 6397.910002417002,
+          "redis_cpu_utilization": 0.9341908290029186
+        },
+        {
+          "run": 1,
+          "events_per_second": 6533.623920177358,
+          "redis_cpu_utilization": 0.9293884017734685
+        },
+        {
+          "run": 2,
+          "events_per_second": 6669.751426701516,
+          "redis_cpu_utilization": 0.9344054958751755
+        },
+        {
+          "run": 3,
+          "events_per_second": 6655.343354221705,
+          "redis_cpu_utilization": 0.9325999535403793
+        },
+        {
+          "run": 4,
+          "events_per_second": 6685.242370253218,
+          "redis_cpu_utilization": 0.9319027306861877
+        }
+      ],
+      "events_per_second_median": 6655.343354221705,
+      "redis_cpu_utilization_median": 0.9325999535403793,
+      "redis_cpu_utilization_range": [
+        0.9293884017734685,
+        0.9344054958751755
+      ]
+    },
+    {
+      "scenario": "dense-balanced",
+      "workers": 1,
+      "runs": [
+        {
+          "run": 0,
+          "events_per_second": 1533.8967208164167,
+          "redis_cpu_utilization": 0.3784337955795014
+        },
+        {
+          "run": 1,
+          "events_per_second": 1581.491593855031,
+          "redis_cpu_utilization": 0.37949630435304704
+        },
+        {
+          "run": 2,
+          "events_per_second": 1578.8407974981903,
+          "redis_cpu_utilization": 0.3782713089909964
+        },
+        {
+          "run": 3,
+          "events_per_second": 1526.4091690006699,
+          "redis_cpu_utilization": 0.373809973442419
+        },
+        {
+          "run": 4,
+          "events_per_second": 1449.4215312287376,
+          "redis_cpu_utilization": 0.3702561795739123
+        }
+      ],
+      "events_per_second_median": 1533.8967208164167,
+      "redis_cpu_utilization_median": 0.3782713089909964,
+      "redis_cpu_utilization_range": [
+        0.3702561795739123,
+        0.37949630435304704
+      ]
+    },
+    {
+      "scenario": "dense-balanced",
+      "workers": 2,
+      "runs": [
+        {
+          "run": 0,
+          "events_per_second": 2185.5767778096206,
+          "redis_cpu_utilization": 0.5195181568156803
+        },
+        {
+          "run": 1,
+          "events_per_second": 2225.825794613465,
+          "redis_cpu_utilization": 0.5195700635850319
+        },
+        {
+          "run": 2,
+          "events_per_second": 2253.6502107659876,
+          "redis_cpu_utilization": 0.52496753374604
+        },
+        {
+          "run": 3,
+          "events_per_second": 2226.2959281955805,
+          "redis_cpu_utilization": 0.5215142737716711
+        },
+        {
+          "run": 4,
+          "events_per_second": 2163.0805944902554,
+          "redis_cpu_utilization": 0.5165133628359502
+        }
+      ],
+      "events_per_second_median": 2225.825794613465,
+      "redis_cpu_utilization_median": 0.5195700635850319,
+      "redis_cpu_utilization_range": [
+        0.5165133628359502,
+        0.52496753374604
+      ]
+    },
+    {
+      "scenario": "dense-balanced",
+      "workers": 4,
+      "runs": [
+        {
+          "run": 0,
+          "events_per_second": 2848.554132744862,
+          "redis_cpu_utilization": 0.6922613224479217
+        },
+        {
+          "run": 1,
+          "events_per_second": 2882.7377881973503,
+          "redis_cpu_utilization": 0.6887869534229337
+        },
+        {
+          "run": 2,
+          "events_per_second": 2906.0379840959804,
+          "redis_cpu_utilization": 0.6941769174129432
+        },
+        {
+          "run": 3,
+          "events_per_second": 2853.234602361827,
+          "redis_cpu_utilization": 0.686822073776732
+        },
+        {
+          "run": 4,
+          "events_per_second": 2802.7020357050674,
+          "redis_cpu_utilization": 0.6892685116409473
+        }
+      ],
+      "events_per_second_median": 2853.234602361827,
+      "redis_cpu_utilization_median": 0.6892685116409473,
+      "redis_cpu_utilization_range": [
+        0.686822073776732,
+        0.6941769174129432
+      ]
+    }
+  ]
+}

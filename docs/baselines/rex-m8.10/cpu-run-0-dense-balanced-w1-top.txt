@@ -1,48 +1,48 @@
 File: runtime.test
 Type: cpu
-Time: 2026-09-13 23:15:41 EDT
-Duration: 4.42s, Total samples = 2.88s (65.22%)
-Showing nodes accounting for 2.68s, 93.06% of 2.88s total
-Dropped 80 nodes (cum <= 0.01s)
-Showing top 40 nodes out of 196
+Time: 2026-09-14 11:40:10 EDT
+Duration: 4.41s, Total samples = 2.90s (65.78%)
+Showing nodes accounting for 2.72s, 93.79% of 2.90s total
+Dropped 83 nodes (cum <= 0.01s)
+Showing top 40 nodes out of 182
       flat  flat%   sum%        cum   cum%
-     1.31s 45.49% 45.49%      1.31s 45.49%  syscall.rawsyscalln
-     0.31s 10.76% 56.25%      0.31s 10.76%  runtime.madvise
-     0.23s  7.99% 64.24%      0.23s  7.99%  runtime.kevent
-     0.19s  6.60% 70.83%      0.19s  6.60%  runtime.pthread_cond_signal
-     0.19s  6.60% 77.43%      0.19s  6.60%  runtime.pthread_cond_wait
-     0.16s  5.56% 82.99%      0.16s  5.56%  runtime.memmove
-     0.07s  2.43% 85.42%      0.07s  2.43%  runtime.memclrNoHeapPointers
-     0.06s  2.08% 87.50%      0.06s  2.08%  runtime.usleep
-     0.03s  1.04% 88.54%      0.03s  1.04%  runtime.(*spanInlineMarkBits).init
-     0.03s  1.04% 89.58%      0.03s  1.04%  runtime.pthread_kill
-     0.02s  0.69% 90.28%      0.02s  0.69%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
-     0.02s  0.69% 90.97%      0.02s  0.69%  runtime.tryDeferToSpanScan
-     0.01s  0.35% 91.32%      0.04s  1.39%  encoding/json.mapEncoder.encode
-     0.01s  0.35% 91.67%      0.02s  0.69%  runtime.(*spanSet).push
-     0.01s  0.35% 92.01%      0.17s  5.90%  runtime.gcDrain
-     0.01s  0.35% 92.36%      0.15s  5.21%  runtime.mallocgc
-     0.01s  0.35% 92.71%      0.04s  1.39%  runtime.mallocgcSmallScanHeader
-     0.01s  0.35% 93.06%      0.02s  0.69%  runtime.stealWork
-         0     0% 93.06%      0.10s  3.47%  bufio.(*Reader).Peek
-         0     0% 93.06%      0.02s  0.69%  bufio.(*Reader).Read
-         0     0% 93.06%      0.10s  3.47%  bufio.(*Reader).fill
-         0     0% 93.06%      0.08s  2.78%  bufio.(*Writer).Flush
-         0     0% 93.06%      0.02s  0.69%  bufio.(*Writer).Write
-         0     0% 93.06%      0.05s  1.74%  encoding/json.(*decodeState).object
-         0     0% 93.06%      0.05s  1.74%  encoding/json.(*decodeState).unmarshal
-         0     0% 93.06%      0.05s  1.74%  encoding/json.(*decodeState).value
-         0     0% 93.06%      0.05s  1.74%  encoding/json.(*encodeState).marshal
-         0     0% 93.06%      0.05s  1.74%  encoding/json.(*encodeState).reflectValue
-         0     0% 93.06%      0.07s  2.43%  encoding/json.Marshal
-         0     0% 93.06%      0.05s  1.74%  encoding/json.Unmarshal
-         0     0% 93.06%      0.05s  1.74%  encoding/json.structEncoder.encode
-         0     0% 93.06%      1.34s 46.53%  github.com/redis/go-redis/v9.(*Client).Process
-         0     0% 93.06%      1.19s 41.32%  github.com/redis/go-redis/v9.(*Script).EvalSha
-         0     0% 93.06%      1.19s 41.32%  github.com/redis/go-redis/v9.(*Script).Run
-         0     0% 93.06%      0.02s  0.69%  github.com/redis/go-redis/v9.(*XMessageSliceCmd).readReply
-         0     0% 93.06%      1.13s 39.24%  github.com/redis/go-redis/v9.(*baseClient)._getConn
-         0     0% 93.06%      1.34s 46.53%  github.com/redis/go-redis/v9.(*baseClient)._process
-         0     0% 93.06%      0.21s  7.29%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
-         0     0% 93.06%      0.02s  0.69%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.1
-         0     0% 93.06%      0.12s  4.17%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.3
+     1.42s 48.97% 48.97%      1.42s 48.97%  syscall.rawsyscalln
+     0.32s 11.03% 60.00%      0.32s 11.03%  runtime.kevent
+     0.21s  7.24% 67.24%      0.21s  7.24%  runtime.madvise
+     0.17s  5.86% 73.10%      0.17s  5.86%  runtime.memmove
+     0.12s  4.14% 77.24%      0.12s  4.14%  runtime.pthread_kill
+     0.09s  3.10% 80.34%      0.09s  3.10%  runtime.pthread_cond_wait
+     0.09s  3.10% 83.45%      0.09s  3.10%  runtime.usleep
+     0.08s  2.76% 86.21%      0.08s  2.76%  runtime.memclrNoHeapPointers
+     0.08s  2.76% 88.97%      0.08s  2.76%  runtime.pthread_cond_signal
+     0.03s  1.03% 90.00%      0.03s  1.03%  runtime.(*spanInlineMarkBits).init
+     0.02s  0.69% 90.69%      0.03s  1.03%  crypto/internal/fips140/sha256.(*Digest).Write
+     0.02s  0.69% 91.38%      0.02s  0.69%  runtime.pthread_cond_timedwait_relative_np
+     0.02s  0.69% 92.07%      0.02s  0.69%  runtime.tryDeferToSpanScan
+     0.01s  0.34% 92.41%      0.07s  2.41%  encoding/json.Marshal
+     0.01s  0.34% 92.76%      0.03s  1.03%  runtime.(*sweepLocked).sweep
+     0.01s  0.34% 93.10%      0.03s  1.03%  runtime.mallocgcSmallScanNoHeader
+     0.01s  0.34% 93.45%      0.03s  1.03%  runtime.scanObject
+     0.01s  0.34% 93.79%      0.02s  0.69%  slices.insertionSortCmpFunc[go.shape.struct { encoding/json.v reflect.Value; encoding/json.ks string }] (inline)
+         0     0% 93.79%      0.08s  2.76%  bufio.(*Reader).Peek
+         0     0% 93.79%      0.03s  1.03%  bufio.(*Reader).Read
+         0     0% 93.79%      0.08s  2.76%  bufio.(*Reader).fill
+         0     0% 93.79%      0.06s  2.07%  bufio.(*Writer).Flush
+         0     0% 93.79%      0.03s  1.03%  encoding/json.(*decodeState).literalStore
+         0     0% 93.79%      0.04s  1.38%  encoding/json.(*decodeState).object
+         0     0% 93.79%      0.04s  1.38%  encoding/json.(*decodeState).unmarshal
+         0     0% 93.79%      0.04s  1.38%  encoding/json.(*decodeState).value
+         0     0% 93.79%      0.06s  2.07%  encoding/json.(*encodeState).marshal
+         0     0% 93.79%      0.06s  2.07%  encoding/json.(*encodeState).reflectValue
+         0     0% 93.79%      0.06s  2.07%  encoding/json.Unmarshal
+         0     0% 93.79%      0.04s  1.38%  encoding/json.mapEncoder.encode
+         0     0% 93.79%      0.03s  1.03%  encoding/json.structEncoder.encode
+         0     0% 93.79%      1.43s 49.31%  github.com/redis/go-redis/v9.(*Client).Process
+         0     0% 93.79%      1.26s 43.45%  github.com/redis/go-redis/v9.(*Script).EvalSha
+         0     0% 93.79%      1.26s 43.45%  github.com/redis/go-redis/v9.(*Script).Run
+         0     0% 93.79%      0.03s  1.03%  github.com/redis/go-redis/v9.(*XMessageSliceCmd).readReply
+         0     0% 93.79%      1.26s 43.45%  github.com/redis/go-redis/v9.(*baseClient)._getConn
+         0     0% 93.79%      1.43s 49.31%  github.com/redis/go-redis/v9.(*baseClient)._process
+         0     0% 93.79%      0.17s  5.86%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
+         0     0% 93.79%      0.11s  3.79%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.3
+         0     0% 93.79%      1.26s 43.45%  github.com/redis/go-redis/v9.(*baseClient).getConn

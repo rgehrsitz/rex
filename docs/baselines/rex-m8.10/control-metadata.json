@@ -1,6 +1,6 @@
 {
-  "revision": "0e24a3cbdef3bb5f892a1e497b484a0e49979c1f",
-  "status": "M docs/FOUNDATION_ROADMAP.md\n M pkg/runtime/durable_concurrency_profile_test.go\n M scripts/durable-concurrency/README.md\n M scripts/durable-concurrency/run.py\n?? docs/baselines/rex-m8.10/\n?? docs/decisions/REX-M8-DURABLE-BOTTLENECK-ATTRIBUTION.md",
+  "revision": "a0cf4bb361f1e47aa4d4fcfbb61f22fdf90c889a",
+  "status": "M docs/FOUNDATION_ROADMAP.md\n M docs/baselines/rex-m8.10/README.md\n M docs/baselines/rex-m8.10/attribution.json\n M docs/decisions/REX-M8-DURABLE-BOTTLENECK-ATTRIBUTION.md\n M scripts/durable-concurrency/README.md\n M scripts/durable-concurrency/run.py\n?? docs/baselines/rex-m8.10/d13-topology-input.json",
   "go": "go version go1.26.6 darwin/arm64",
   "platform": "macOS-26.6.2-arm64-arm-64bit",
   "redis": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a",
@@ -33,6 +33,6 @@
   "scope": "processor-loop experiment; no lease renewers, daemon supervisor, reload, routing, migration, or temporal artifacts",
   "sha256": {
     "pkg/runtime/durable_concurrency_profile_test.go": "b33eb6a8812277357fb250fe4b732984514aa602ce9746551e756913e1df6704",
-    "scripts/durable-concurrency/run.py": "d47c1e273a5484630f01631fed2caee64fd079bde9d1a545a1fac04bc788c68f"
+    "scripts/durable-concurrency/run.py": "d8fd5f499b58c9f71a9db3ab22f36bd5e13752029a25567979924677ff390b43"
   }
 }

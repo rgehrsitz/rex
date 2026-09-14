@@ -1,47 +1,47 @@
 File: runtime.test
 Type: cpu
-Time: 2026-09-13 23:15:46 EDT
-Duration: 1.30s, Total samples = 570ms (43.70%)
-Showing nodes accounting for 570ms, 100% of 570ms total
+Time: 2026-09-14 11:40:15 EDT
+Duration: 1.30s, Total samples = 620ms (47.60%)
+Showing nodes accounting for 620ms, 100% of 620ms total
 Showing top 40 nodes out of 129
       flat  flat%   sum%        cum   cum%
-     290ms 50.88% 50.88%      290ms 50.88%  syscall.rawsyscalln
-     140ms 24.56% 75.44%      140ms 24.56%  runtime.kevent
-      50ms  8.77% 84.21%       50ms  8.77%  runtime.pthread_cond_wait
-      40ms  7.02% 91.23%       40ms  7.02%  runtime.madvise
-      20ms  3.51% 94.74%       20ms  3.51%  runtime.pthread_cond_signal
-      10ms  1.75% 96.49%       10ms  1.75%  encoding/json.(*decodeState).rescanLiteral
-      10ms  1.75% 98.25%       10ms  1.75%  runtime.(*spanSet).pop
-      10ms  1.75%   100%       10ms  1.75%  runtime.memclrNoHeapPointers
-         0     0%   100%       60ms 10.53%  bufio.(*Reader).Peek
-         0     0%   100%       60ms 10.53%  bufio.(*Reader).fill
-         0     0%   100%       60ms 10.53%  bufio.(*Writer).Flush
-         0     0%   100%       10ms  1.75%  encoding/json.(*decodeState).object
-         0     0%   100%       10ms  1.75%  encoding/json.(*decodeState).unmarshal
-         0     0%   100%       10ms  1.75%  encoding/json.(*decodeState).value
-         0     0%   100%       10ms  1.75%  encoding/json.Unmarshal
-         0     0%   100%      280ms 49.12%  github.com/redis/go-redis/v9.(*Client).Process
-         0     0%   100%      180ms 31.58%  github.com/redis/go-redis/v9.(*Script).EvalSha
-         0     0%   100%      180ms 31.58%  github.com/redis/go-redis/v9.(*Script).Run
-         0     0%   100%      160ms 28.07%  github.com/redis/go-redis/v9.(*baseClient)._getConn
-         0     0%   100%      280ms 49.12%  github.com/redis/go-redis/v9.(*baseClient)._process
-         0     0%   100%      120ms 21.05%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
-         0     0%   100%       60ms 10.53%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.3
-         0     0%   100%      160ms 28.07%  github.com/redis/go-redis/v9.(*baseClient).getConn
-         0     0%   100%      280ms 49.12%  github.com/redis/go-redis/v9.(*baseClient).process
-         0     0%   100%      280ms 49.12%  github.com/redis/go-redis/v9.(*baseClient).processCommand
-         0     0%   100%       60ms 10.53%  github.com/redis/go-redis/v9.(*baseClient).processPendingPushNotificationWithReader
-         0     0%   100%      280ms 49.12%  github.com/redis/go-redis/v9.(*baseClient).processWithRetry
-         0     0%   100%      280ms 49.12%  github.com/redis/go-redis/v9.(*baseClient).withConn
-         0     0%   100%      280ms 49.12%  github.com/redis/go-redis/v9.(*hooksMixin).processHook (inline)
-         0     0%   100%      180ms 31.58%  github.com/redis/go-redis/v9.cmdable.EvalSha
-         0     0%   100%       20ms  3.51%  github.com/redis/go-redis/v9.cmdable.XAdd
-         0     0%   100%       30ms  5.26%  github.com/redis/go-redis/v9.cmdable.XPending
-         0     0%   100%       50ms  8.77%  github.com/redis/go-redis/v9.cmdable.XReadGroup
-         0     0%   100%      180ms 31.58%  github.com/redis/go-redis/v9.cmdable.eval
-         0     0%   100%       60ms 10.53%  github.com/redis/go-redis/v9/internal/pool.(*Conn).WithReader
-         0     0%   100%       60ms 10.53%  github.com/redis/go-redis/v9/internal/pool.(*Conn).WithWriter
-         0     0%   100%      160ms 28.07%  github.com/redis/go-redis/v9/internal/pool.(*ConnPool).Get
-         0     0%   100%      160ms 28.07%  github.com/redis/go-redis/v9/internal/pool.(*ConnPool).getConn
-         0     0%   100%      160ms 28.07%  github.com/redis/go-redis/v9/internal/pool.(*ConnPool).isHealthyConn
-         0     0%   100%      160ms 28.07%  github.com/redis/go-redis/v9/internal/pool.checkSyscallConn
+     350ms 56.45% 56.45%      350ms 56.45%  syscall.rawsyscalln
+     120ms 19.35% 75.81%      120ms 19.35%  runtime.kevent
+      60ms  9.68% 85.48%       60ms  9.68%  runtime.pthread_cond_wait
+      20ms  3.23% 88.71%       20ms  3.23%  runtime.madvise
+      10ms  1.61% 90.32%       10ms  1.61%  crypto/internal/fips140/sha256.(*Digest).checkSum
+      10ms  1.61% 91.94%       10ms  1.61%  runtime.(*unwinder).symPC
+      10ms  1.61% 93.55%       10ms  1.61%  runtime.pthread_cond_signal
+      10ms  1.61% 95.16%       10ms  1.61%  runtime.pthread_kill
+      10ms  1.61% 96.77%       10ms  1.61%  runtime.stealWork
+      10ms  1.61% 98.39%       10ms  1.61%  runtime.tryDeferToSpanScan
+      10ms  1.61%   100%       10ms  1.61%  sync.(*RWMutex).RUnlock (inline)
+         0     0%   100%       60ms  9.68%  bufio.(*Reader).Peek
+         0     0%   100%       60ms  9.68%  bufio.(*Reader).fill
+         0     0%   100%      110ms 17.74%  bufio.(*Writer).Flush
+         0     0%   100%       10ms  1.61%  crypto/internal/fips140/sha256.(*Digest).Sum
+         0     0%   100%      350ms 56.45%  github.com/redis/go-redis/v9.(*Client).Process
+         0     0%   100%      270ms 43.55%  github.com/redis/go-redis/v9.(*Script).EvalSha
+         0     0%   100%      270ms 43.55%  github.com/redis/go-redis/v9.(*Script).Run
+         0     0%   100%      170ms 27.42%  github.com/redis/go-redis/v9.(*baseClient)._getConn
+         0     0%   100%      340ms 54.84%  github.com/redis/go-redis/v9.(*baseClient)._process
+         0     0%   100%      170ms 27.42%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
+         0     0%   100%       60ms  9.68%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.3
+         0     0%   100%      170ms 27.42%  github.com/redis/go-redis/v9.(*baseClient).getConn
+         0     0%   100%      350ms 56.45%  github.com/redis/go-redis/v9.(*baseClient).process
+         0     0%   100%      340ms 54.84%  github.com/redis/go-redis/v9.(*baseClient).processCommand
+         0     0%   100%       60ms  9.68%  github.com/redis/go-redis/v9.(*baseClient).processPendingPushNotificationWithReader
+         0     0%   100%      340ms 54.84%  github.com/redis/go-redis/v9.(*baseClient).processWithRetry
+         0     0%   100%      340ms 54.84%  github.com/redis/go-redis/v9.(*baseClient).withConn
+         0     0%   100%      350ms 56.45%  github.com/redis/go-redis/v9.(*hooksMixin).processHook (inline)
+         0     0%   100%      270ms 43.55%  github.com/redis/go-redis/v9.cmdable.EvalSha
+         0     0%   100%       20ms  3.23%  github.com/redis/go-redis/v9.cmdable.XAdd
+         0     0%   100%       60ms  9.68%  github.com/redis/go-redis/v9.cmdable.XReadGroup
+         0     0%   100%      270ms 43.55%  github.com/redis/go-redis/v9.cmdable.eval
+         0     0%   100%       10ms  1.61%  github.com/redis/go-redis/v9/internal/otel.GetOperationDurationCallback
+         0     0%   100%       60ms  9.68%  github.com/redis/go-redis/v9/internal/pool.(*Conn).WithReader
+         0     0%   100%      110ms 17.74%  github.com/redis/go-redis/v9/internal/pool.(*Conn).WithWriter
+         0     0%   100%      170ms 27.42%  github.com/redis/go-redis/v9/internal/pool.(*ConnPool).Get
+         0     0%   100%      170ms 27.42%  github.com/redis/go-redis/v9/internal/pool.(*ConnPool).getConn
+         0     0%   100%      170ms 27.42%  github.com/redis/go-redis/v9/internal/pool.(*ConnPool).isHealthyConn
+         0     0%   100%      170ms 27.42%  github.com/redis/go-redis/v9/internal/pool.checkSyscallConn

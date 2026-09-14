@@ -2,8 +2,8 @@
 
 Created: 2026-09-07. Last planning review: 2026-09-13.
 
-Status: REX-M0 through M7 and M8.1–M8.9 are complete. M8.10 attributes the
-remaining durable cost and proposes closing concurrency on one shared Redis.
+Status: REX-M0 through M7 and M8.1–M8.10 are complete. Production concurrency
+on one shared Redis is closed; dense serial allocation is the next target.
 
 ## Purpose and authority
 
@@ -61,7 +61,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.9 are merged. M8.10 measures the shared-Redis concurrency ceiling and selects dense allocation as the next independent target, pending review. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.10 are integrated. Shared-Redis concurrency is closed; dense allocation is the next independent target. |
 | REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
 | REX-M8.2 | Typed fact declarations | M4, M5 | Complete | Merged in PR #41 (`da2b03a`). [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [acceptance evidence](baselines/rex-m8.2/README.md). |
 | REX-M8.3 | Temporal rules | M4, M5, M7 | Complete | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [acceptance evidence](baselines/rex-m8.3/README.md). Merged PR #42 (`cdab686`). |
@@ -71,7 +71,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M8.7 | Representative durable profiling | M8.6 | Complete | Merged in [PR #46](https://github.com/rgehrsitz/rex/pull/46), `5bf6852`; [evidence](baselines/rex-m8.7/README.md). |
 | REX-M8.8 | Concurrent partition experiment | M8.7 | Complete | Merged in [PR #47](https://github.com/rgehrsitz/rex/pull/47), `d01b5ad`; [evidence](baselines/rex-m8.8/README.md) passes throughput but fails latency, so production concurrency stays disabled. |
 | REX-M8.9 | Durable Redis round-trip reduction | M8.8 | Complete | [PR #50](https://github.com/rgehrsitz/rex/pull/50) passes D14; the diagnostic D13 rerun still fails, so production concurrency stays disabled. |
-| REX-M8.10 | Durable bottleneck attribution | M8.9 | In progress | Local [evidence](baselines/rex-m8.10/README.md) attributes the D13 failure to shared-Redis saturation, closes that concurrency line, and justifies a separately gated dense-allocation candidate. Review pending. |
+| REX-M8.10 | Durable bottleneck attribution | M8.9 | Complete | [PR #51](https://github.com/rgehrsitz/rex/pull/51) retains [evidence](baselines/rex-m8.10/README.md), closes shared-Redis concurrency, and justifies a separately gated dense-allocation candidate. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -582,11 +582,11 @@ and dense allocation changes remain outside M8.9. See [D14](decisions/REX-M8-DUR
 - [x] Predeclare acceptance and falsification gates for the independent dense
   allocation candidate.
 - [x] Consult Devin on the scope, measurements, decision, and harness review.
-- [ ] Review and integrate.
+- [x] Review and integrate ([PR #51](https://github.com/rgehrsitz/rex/pull/51)).
 
-Upon integration, production concurrency on one shared Redis is closed. A
-different topology requires a new decision covering routing and operational
-semantics. M8.10 makes no production code change. See
+Production concurrency on one shared Redis is closed. A different topology
+requires a new decision covering routing and operational semantics. M8.10 makes
+no production code change. See
 [D15](decisions/REX-M8-DURABLE-BOTTLENECK-ATTRIBUTION.md).
 
 
@@ -611,7 +611,7 @@ The recommendations are starting positions, not already implemented contracts.
 | D12 | Partition ownership and migration | Exact immutable public/protocol claims, local reads, complete retained-artifact coverage and fenced effects. | Resolved for M8.6 in [ownership decision](decisions/REX-M8-PARTITION-OWNERSHIP.md). |
 | D13 | Concurrent partition experiment | Measure isolated 1/2/4-worker partitions in an opt-in harness before designing production supervision; keep reload and temporal artifacts excluded. | Resolved for M8.8 in [D13](decisions/REX-M8-PARTITION-CONCURRENCY-EXPERIMENT.md). |
 | D14 | Durable Redis transaction mechanism | Use fenced Lua for the five steady-state stages, retain explicit WATCH rollback, and preserve all M7 formats; measure client exchanges separately from Redis command execution. | Resolved for M8.9 in [D14](decisions/REX-M8-DURABLE-ROUND-TRIPS.md). |
-| D15 | Shared-Redis concurrency and residual durable cost | Stop the shared-Redis concurrency line at measured saturation; retain the serial daemon and optimize dense commit allocation independently without changing recovery stages. | Proposed for M8.10 in [D15](decisions/REX-M8-DURABLE-BOTTLENECK-ATTRIBUTION.md); integration pending. |
+| D15 | Shared-Redis concurrency and residual durable cost | Stop the shared-Redis concurrency line at measured saturation; retain the serial daemon and optimize dense commit allocation independently without changing recovery stages. | Resolved for M8.10 in [D15](decisions/REX-M8-DURABLE-BOTTLENECK-ATTRIBUTION.md). |
 
 ## Review, validation, and completion discipline
 
@@ -842,7 +842,7 @@ Next concrete action:
 - Next concrete action: attribute the remaining D13 failure before choosing
   between dense allocation work and stopping shared-Redis concurrency.
 
-### 2026-09-13 — REX-M8.10 local completion; review pending
+### 2026-09-14 — REX-M8.10 complete in PR #51
 
 - Added opt-in client-stage timing and Redis SLOWLOG attribution to the existing
   concurrency harness. Instrumented cases are explicitly non-comparable and a
@@ -851,9 +851,9 @@ Next concrete action:
   sparse and dense CPU reports plus exact allocation, Redis CPU, command, and
   latency counters.
 - The five-run M8.9 evidence consistently puts sparse Redis utilization near
-  0.60, 0.80, and 0.93 at one, two, and four workers. D15 proposes closing
-  production concurrency on that shared-Redis topology because the p99 failure
-  is explained by single-server queueing.
+  0.60, 0.80, and 0.93 at one, two, and four workers. D15 closes production
+  concurrency on that shared-Redis topology because the p99 failure is
+  consistent with single-server queueing.
 - Dense one-worker processing allocates about 453 KB and 4,812 objects per event,
   roughly 21.6x and 13.6x sparse. A separate allocation candidate is justified
   for serial efficiency under strict A/B and byte-compatibility gates.
@@ -861,5 +861,9 @@ Next concrete action:
   as the supported target, and found instrumentation issues that were corrected:
   matched controls, overlapping SLOWLOG accounting, inferred script labels,
   explicit zero stages, and an entry-budget limit.
-- Next concrete action: review and integrate M8.10, then implement only the D15
-  dense-allocation candidate if its paired A/B harness is in place first.
+- Review found no blocking defects. Follow-up retained the per-run D13 topology
+  inputs, completed observer-overhead disclosure, distinguished sparse
+  saturation from dense speedup failure, and clarified inference and SLOWLOG
+  limits.
+- Next concrete action: implement only the D15 dense-allocation candidate after
+  its paired A/B harness is in place.
