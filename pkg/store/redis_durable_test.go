@@ -490,7 +490,7 @@ func (h *lostTransactionReplyHook) ProcessPipelineHook(next redis.ProcessPipelin
 	}
 }
 
-func TestRealRedisDurableResolvesLostCommitReply(t *testing.T) {
+func TestRealRedisWatchResolvesLostCommitReply(t *testing.T) {
 	address := realRedisAddress(t)
 	ctx := context.Background()
 	client := redis.NewClient(&redis.Options{Addr: address, MaxRetries: -1})
@@ -498,6 +498,7 @@ func TestRealRedisDurableResolvesLostCommitReply(t *testing.T) {
 	redisStore := &RedisStore{client: client}
 	defer redisStore.Close()
 	options := durableTestOptions(t)
+	options.TransactionMode = durableTransactionWatch
 	defer client.Del(ctx, options.Stream, options.OutputStream, options.DeadLetter, "durable-real-output")
 	durable, err := redisStore.OpenDurable(ctx, options)
 	require.NoError(t, err)

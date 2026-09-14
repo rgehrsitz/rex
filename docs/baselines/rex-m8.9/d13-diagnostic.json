@@ -103,5 +103,5 @@
     "status": "fail"
   },
   "full_summary_sha256": "c8efacb0a07fe145ac3b007e0e7cd903ef54860726a8b6c40f8ed9b9f12817f7",
-  "retention": "aggregate diagnostic retained; full temporary case output validated locally"
+  "retention": "aggregate gate and full validated summary retained; per-case raw files remain temporary"
 }

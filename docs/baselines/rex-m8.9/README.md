@@ -45,12 +45,13 @@ only by WATCH mode and was not separately executed in this local evidence.
 
 The unchanged five-run 1/2/4-worker D13 matrix again processed 75,000 events.
 The runner asserted order, ownership, recovery, deduplication, cleanup, and exact
-command behavior during every case; the retained artifact contains the aggregate
-gate and a digest of the validated temporary summary. Its overall performance gate still fails: sparse two-worker
+command behavior during every case. The retained artifacts contain the aggregate
+gate and the full validated summary. Its overall performance gate still fails: sparse two-worker
 speedup passes at 1.52x but its worst p99 exceeds one worker; dense p99 passes but
 speedup is 1.43x, below the 1.50x threshold. Production concurrency remains
 disabled. [d13-diagnostic.json](d13-diagnostic.json) retains the gate, environment,
-source hashes, and full temporary summary digest.
+source hashes, and summary digest; [d13-summary.json](d13-summary.json) retains the
+complete 75-case summary.
 
 ## Limits
 

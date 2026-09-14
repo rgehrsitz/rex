@@ -2,7 +2,7 @@
 
 Created: 2026-09-07. Last planning review: 2026-09-13.
 
-Status: REX-M0 through M7 and M8.1–M8.8 are complete. M8.9 reduces the durable
+Status: REX-M0 through M7 and M8.1–M8.9 are complete. M8.9 reduces the durable
 Redis round trips exposed by M8.8; production concurrency remains gated.
 
 ## Purpose and authority
@@ -70,7 +70,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M8.6 | Enforced exact partition ownership | M8.5 | Complete | Merged in [PR #45](https://github.com/rgehrsitz/rex/pull/45), `48cd367`; [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [evidence](baselines/rex-m8.6/README.md). |
 | REX-M8.7 | Representative durable profiling | M8.6 | Complete | Merged in [PR #46](https://github.com/rgehrsitz/rex/pull/46), `5bf6852`; [evidence](baselines/rex-m8.7/README.md). |
 | REX-M8.8 | Concurrent partition experiment | M8.7 | Complete | Merged in [PR #47](https://github.com/rgehrsitz/rex/pull/47), `d01b5ad`; [evidence](baselines/rex-m8.8/README.md) passes throughput but fails latency, so production concurrency stays disabled. |
-| REX-M8.9 | Durable Redis round-trip reduction | M8.8 | In progress | Local [evidence](baselines/rex-m8.9/README.md) passes D14; the diagnostic D13 rerun still fails, so production concurrency stays disabled. Review pending. |
+| REX-M8.9 | Durable Redis round-trip reduction | M8.8 | Complete | [PR #50](https://github.com/rgehrsitz/rex/pull/50) passes D14; the diagnostic D13 rerun still fails, so production concurrency stays disabled. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -565,7 +565,7 @@ supervision remain outside M8.8. See [D13](decisions/REX-M8-PARTITION-CONCURRENC
 - [x] Retain paired sparse/dense exchange, throughput, latency, allocation, and
   Redis CPU evidence; rerun D13 diagnostically.
 - [x] Consult Claude on the implementation and retained evidence.
-- [ ] Review and integrate.
+- [x] Review and integrate ([PR #50](https://github.com/rgehrsitz/rex/pull/50)).
 
 Supervisor, routing, dynamic workers, Redis Cluster support, cold-path scripts,
 and dense allocation changes remain outside M8.9. See [D14](decisions/REX-M8-DURABLE-ROUND-TRIPS.md).
@@ -795,7 +795,7 @@ Next concrete action:
   action: review and integrate M8.8, then prioritize round-trip/transaction cost
   reduction before repeating the production-concurrency gate.
 
-### 2026-09-13 — REX-M8.9 local completion; review pending
+### 2026-09-13 — REX-M8.9 complete in PR #50
 
 - Starting revision: `d01b5ad30af29983d42290506d61157f9d22ad6b`, merged
   M8.8 [PR #47](https://github.com/rgehrsitz/rex/pull/47).
@@ -817,6 +817,7 @@ Next concrete action:
 - Claude's implementation review found and drove fixes for marker recovery after
   ownership loss, ACL-related partial writes, Redis version claims, rollback
   coverage, evidence limits, and documentation accuracy.
-- Next concrete action: review and integrate M8.9. After integration, use the
-  remaining D13 failure to decide whether M8.10 should target dense allocation/
+- Review found no blocking defects; follow-up retained the complete D13 summary
+  and clarified the profiling and WATCH lost-reply tests.
+- Next concrete action: use the remaining D13 failure to decide whether M8.10 should target dense allocation/
   Redis execution or stop the production-concurrency line on this topology.

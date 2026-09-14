@@ -277,8 +277,8 @@ func TestDurableProfile(t *testing.T) {
 			goruntime.ReadMemStats(&after)
 			result.AllocBytes = after.TotalAlloc - before.TotalAlloc
 			result.AllocObjects = after.Mallocs - before.Mallocs
-			// The start INFO increments the total after producing its response, so
-			// that measurement command appears in the second observation.
+			// The two starting INFO calls increment the total after producing their
+			// responses, so both appear in the ending command observation.
 			result.RedisCommands = commands() - commandStart - 2
 			result.RedisCPU = redisCPU() - cpuStart
 			for p, part := range parts {
