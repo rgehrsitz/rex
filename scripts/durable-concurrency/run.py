@@ -65,14 +65,17 @@ def percentiles(values):
             for p in (50, 95, 99)}
 
 
-def start_redis(server, cli, output, stem):
+def start_redis(server, cli, output, stem, stage_profile=False):
     directory = tempfile.TemporaryDirectory(prefix="rex-m88-")
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
     log = (output/f"redis-{stem}.log").open("w")
-    proc = subprocess.Popen([str(server), "--bind", "127.0.0.1", "--port", str(port),
-        "--save", "", "--appendonly", "no", "--dir", directory.name], stdout=log, stderr=log)
+    server_args = [str(server), "--bind", "127.0.0.1", "--port", str(port),
+        "--save", "", "--appendonly", "no", "--dir", directory.name]
+    if stage_profile:
+        server_args.extend(["--slowlog-log-slower-than", "0", "--slowlog-max-len", "100000"])
+    proc = subprocess.Popen(server_args, stdout=log, stderr=log)
 
     def redis(*words):
         return command([str(cli), "-h", "127.0.0.1", "-p", str(port), *words],
@@ -109,6 +112,66 @@ def stop_redis(directory, log, proc):
         proc.wait()
     log.close()
     directory.cleanup()
+
+
+def slowlog_script_profile(cli, port, event_count):
+    try:
+        raw = command([str(cli), "--json", "-h", "127.0.0.1", "-p", str(port),
+                       "SLOWLOG", "GET", "100000"], stderr=subprocess.DEVNULL)
+        entries = json.loads(raw)
+    except (subprocess.CalledProcessError, json.JSONDecodeError) as err:
+        raise RuntimeError(
+            "stage profiling requires redis-cli with --json and SLOWLOG support") from err
+    scripts = []
+    commands = {}
+    for entry in reversed(entries):
+        argv = entry[3]
+        if not argv:
+            continue
+        command_name = str(argv[0]).lower()
+        commands.setdefault(command_name, []).append(int(entry[2]))
+        if command_name not in ("eval", "evalsha"):
+            continue
+        identity = str(argv[1])
+        if command_name == "eval":
+            identity = hashlib.sha1(identity.encode()).hexdigest()
+        scripts.append((identity, int(entry[2])))
+    counts = {}
+    for identity, _ in scripts:
+        counts[identity] = counts.get(identity, 0) + 1
+    candidates = {identity for identity, count in counts.items() if count == event_count}
+    phases = ("begin", "apply_input", "commit", "complete")
+    if len(candidates) != len(phases):
+        raise RuntimeError(
+            f"expected {len(phases)} steady-state scripts with {event_count} calls, got {counts}")
+    ordered = []
+    for identity, _ in scripts:
+        if identity in candidates and identity not in ordered:
+            ordered.append(identity)
+        if len(ordered) == len(phases):
+            break
+    if len(ordered) != len(phases):
+        raise RuntimeError(f"cannot identify durable script order: {ordered}")
+    results = {}
+    for phase, identity in zip(phases, ordered):
+        durations = sorted(duration for script, duration in scripts if script == identity)
+        results[phase] = {
+            "sha1": identity,
+            "count": len(durations),
+            "total_us": sum(durations),
+            "p50_us": durations[max(0, math.ceil(len(durations) * .50) - 1)],
+            "p95_us": durations[max(0, math.ceil(len(durations) * .95) - 1)],
+            "p99_us": durations[max(0, math.ceil(len(durations) * .99) - 1)],
+        }
+    command_results = {}
+    for name, durations in commands.items():
+        durations.sort()
+        command_results[name] = {
+            "count": len(durations),
+            "total_us": sum(durations),
+            "p99_us": durations[max(0, math.ceil(len(durations) * .99) - 1)],
+        }
+    return results, command_results
 
 
 def summarize(result, run, comparable, load_average):
@@ -244,6 +307,8 @@ def main():
     parser.add_argument("--scenarios", default=",".join(ALL_SCENARIOS))
     parser.add_argument("--race", action="store_true", help="correctness run; timing is not comparable")
     parser.add_argument("--cpu-profile", action="store_true", help="retain Go CPU profiles")
+    parser.add_argument("--stage-profile", action="store_true",
+                        help="record intrusive per-stage client and Redis script timings")
     parser.add_argument("--seed", type=int, default=8808, help="saved deterministic case-order seed")
     parser.add_argument("--allow-m89-candidate", action="store_true",
                         help="allow and hash the bounded M8.9 production source set")
@@ -257,6 +322,12 @@ def main():
         cli = executable_path(args.redis_cli or server.with_name("redis-cli"), "redis-cli")
     except ValueError as err:
         parser.error(str(err))
+    if args.stage_profile:
+        if any(scenario not in PERFORMANCE_SCENARIOS[:2] for scenario in scenarios):
+            parser.error("stage profiling supports sparse-balanced and dense-balanced only")
+        commands_per_event = 150 if "dense-balanced" in scenarios else 51
+        if args.events * commands_per_event > 80000:
+            parser.error("stage-profile cases may use at most 80,000 estimated SLOWLOG entries")
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
 
@@ -275,7 +346,7 @@ def main():
             raise ValueError
     except ValueError:
         parser.error("GOMAXPROCS must be an integer at least as large as the largest worker count")
-    comparable = not args.race and not args.cpu_profile
+    comparable = not args.race and not args.cpu_profile and not args.stage_profile
     metadata = {
         "revision": command(["git", "rev-parse", "HEAD"]),
         "status": command(["git", "status", "--short"]),
@@ -291,6 +362,7 @@ def main():
         "scenarios": scenarios,
         "race": args.race,
         "cpu_profile": args.cpu_profile,
+        "stage_profile": args.stage_profile,
         "comparable": comparable,
         "case_order_seed": args.seed,
         "m89_candidate": args.allow_m89_candidate,
@@ -315,7 +387,10 @@ def main():
         for scenario, worker_count in cases:
             stem = f"run-{run}-{scenario}-w{worker_count}"
             load_average = os.getloadavg()
-            directory, log, proc, port, redis = start_redis(server, cli, args.output, stem)
+            directory, log, proc, port, redis = start_redis(
+                server, cli, args.output, stem, args.stage_profile)
+            redis_scripts = None
+            redis_commands = None
             try:
                 token = secrets.token_hex(24)
                 if redis("SET", "rex-concurrency-token", token) != "OK":
@@ -324,7 +399,8 @@ def main():
                 env = dict(os.environ, GOMAXPROCS=gomaxprocs, LOG_LEVEL="error",
                     REX_CONCURRENCY_ADDR=f"127.0.0.1:{port}", REX_CONCURRENCY_TOKEN=token,
                     REX_CONCURRENCY_EVENTS=str(args.events), REX_CONCURRENCY_WORKERS=str(worker_count),
-                    REX_CONCURRENCY_SCENARIO=scenario, REX_CONCURRENCY_OUTPUT=str(output))
+                    REX_CONCURRENCY_SCENARIO=scenario, REX_CONCURRENCY_OUTPUT=str(output),
+                    REX_CONCURRENCY_STAGE_PROFILE="1" if args.stage_profile else "0")
                 invocation = [str(binary), "-test.run=^TestDurableConcurrencyProfile$",
                               "-test.count=1", "-test.timeout=6m"]
                 if args.cpu_profile:
@@ -332,6 +408,9 @@ def main():
                 with (args.output/f"test-{stem}.log").open("w") as testlog:
                     subprocess.run(invocation, cwd=ROOT, env=env, stdout=testlog,
                                    stderr=subprocess.STDOUT, check=True, timeout=370)
+                if args.stage_profile:
+                    redis_scripts, redis_commands = slowlog_script_profile(
+                        cli, port, args.events)
                 (args.output/f"redis-info-{stem}.txt").write_text(redis("INFO"))
             finally:
                 stop_redis(directory, log, proc)
@@ -339,6 +418,12 @@ def main():
             if len(results) != 1 or results[0]["name"] != scenario or results[0]["workers"] != worker_count:
                 raise RuntimeError(f"unexpected result for {scenario}/w{worker_count}: {results}")
             row = summarize(results[0], run, comparable, load_average)
+            if redis_scripts is not None:
+                row["redis_scripts"] = redis_scripts
+                row["redis_slowlog"] = {
+                    "accounting": "EVALSHA entries include nested command entries; post-drain verification is also present; do not sum entries as exclusive time",
+                    "entries_by_command": redis_commands,
+                }
             if sum(results[0]["partition_events"]) != args.events:
                 raise RuntimeError(f"configured {args.events} but drained a different event count")
             summary.append(row)

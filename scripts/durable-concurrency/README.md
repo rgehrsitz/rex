@@ -35,6 +35,17 @@ stale-owner fencing, and, for multi-worker owner loss, successor recovery with
 post-fault sibling progress.
 Use `--race` for correctness only; race timings are not comparable. Use
 `--cpu-profile` with a narrow worker/scenario selection to retain Go profiles.
+Use `--stage-profile` only for diagnostic sparse- or dense-balanced runs. It
+resets and reads Redis SLOWLOG, records client latency around every durable
+stage, and infers the four steady-state Lua script labels from their causal
+execution order while retaining their SHA-1 identities. The runner limits each
+case to at most 80,000 estimated SLOWLOG entries. Stage profiling adds timing
+and Redis observability overhead, so the runner marks those results
+non-comparable and excludes them from D13 gates. SLOWLOG reports each `EVALSHA`
+duration and its nested commands; those entries overlap and must not be summed.
+The command-name totals also include post-drain correctness verification. Stage
+profiling requires a `redis-cli` version that supports `--json` and SLOWLOG; the
+runner reports that requirement directly if either capability is unavailable.
 
 The runner computes the D13 gate. One-worker throughput must first have a
 coefficient of variation at or below 20%; otherwise the decision is
