@@ -70,8 +70,8 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M8.6 | Enforced exact partition ownership | M8.5 | Complete | Merged in [PR #45](https://github.com/rgehrsitz/rex/pull/45), `48cd367`; [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [evidence](baselines/rex-m8.6/README.md). |
 | REX-M8.7 | Representative durable profiling | M8.6 | Complete | Merged in [PR #46](https://github.com/rgehrsitz/rex/pull/46), `5bf6852`; [evidence](baselines/rex-m8.7/README.md). |
 | REX-M8.8 | Concurrent partition experiment | M8.7 | Complete | Merged in [PR #47](https://github.com/rgehrsitz/rex/pull/47), `d01b5ad`; [evidence](baselines/rex-m8.8/README.md) passes throughput but fails latency, so production concurrency stays disabled. |
-| REX-M8.9 | Durable Redis round-trip reduction | M8.8 | Complete | [PR #50](https://github.com/rgehrsitz/rex/pull/50) passes D14; the diagnostic D13 rerun still fails, so production concurrency stays disabled. |
-| REX-M8.10 | Durable bottleneck attribution | M8.9 | Complete | [PR #51](https://github.com/rgehrsitz/rex/pull/51) retains [evidence](baselines/rex-m8.10/README.md), closes shared-Redis concurrency, and justifies a separately gated dense-allocation candidate. |
+| REX-M8.9 | Durable Redis round-trip reduction | M8.8 | Complete | [PR #50](https://github.com/rgehrsitz/rex/pull/50), `0e24a3c`, passes D14; the diagnostic D13 rerun still fails, so production concurrency stays disabled. |
+| REX-M8.10 | Durable bottleneck attribution | M8.9 | Complete | [PR #51](https://github.com/rgehrsitz/rex/pull/51), `c323ddb`, retains [evidence](baselines/rex-m8.10/README.md), closes shared-Redis concurrency, and justifies a separately gated dense-allocation candidate. |
 | REX-M9 | Reduce dense durable commit allocation | M8.10 | Planned | Implement only after the paired D15 A/B harness is in place; retain byte-identical durable formats and revert unless allocation, throughput, latency, sparse-regression, and Redis-CPU gates all pass. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after

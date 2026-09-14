@@ -11,13 +11,13 @@ SHA-256 manifest, and publishes a GitHub release with generated notes.
 1. Merge the intended changes to `main` and make sure CI is green.
 2. Prepare and review `docs/RELEASE_NOTES_<tag>.md`. State supported
    compiler/runtime and artifact versions, operator-visible changes, and any
-   upgrade warnings. Use it when reviewing the generated GitHub release.
+   upgrade warnings. The release workflow requires this file and prepends it to
+   GitHub's generated change notes.
 3. Choose the semantic version and create an annotated tag from the reviewed
    commit, for example `git tag -a v0.1.0 -m "REX v0.1.0"`.
 4. Push the tag with `git push origin v0.1.0`.
 5. Review the GitHub release: confirm every archive and `checksums.txt` is
-   attached, then edit the generated notes if the release needs operator
-   instructions or an upgrade warning.
+   attached and the reviewed operator notes precede the generated change notes.
 
 The workflow never publishes from a branch or an unversioned commit. Deleting
 and recreating a release tag is discouraged; prepare a corrected patch release
