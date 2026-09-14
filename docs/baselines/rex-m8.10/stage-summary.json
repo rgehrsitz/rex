@@ -1,0 +1,1138 @@
+[
+  {
+    "name": "sparse-balanced",
+    "workers": 1,
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      500
+    ],
+    "elapsed_ns": 149498666,
+    "producer_ns": 9103833,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 10530296,
+    "drain_alloc_objects": 176612,
+    "drain_redis_commands": 25500,
+    "drain_redis_cpu_seconds": 0.09365499999999999,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 19166,
+        "last_finish_ns": 149494458
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "client_stages": {
+      "acknowledge": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "apply_input": {
+        "count": 500,
+        "total_ns": 26919396,
+        "p50_ms": 0.05275,
+        "p95_ms": 0.069042,
+        "p99_ms": 0.079084
+      },
+      "begin": {
+        "count": 500,
+        "total_ns": 27016038,
+        "p50_ms": 0.0535,
+        "p95_ms": 0.061208,
+        "p99_ms": 0.079917
+      },
+      "commit": {
+        "count": 500,
+        "total_ns": 31502954,
+        "p50_ms": 0.062541,
+        "p95_ms": 0.071625,
+        "p99_ms": 0.078666
+      },
+      "complete": {
+        "count": 500,
+        "total_ns": 26568094,
+        "p50_ms": 0.0515,
+        "p95_ms": 0.06925,
+        "p99_ms": 0.079125
+      },
+      "dead_letter": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "next": {
+        "count": 500,
+        "total_ns": 31511552,
+        "p50_ms": 0.061917,
+        "p95_ms": 0.072125,
+        "p99_ms": 0.08975
+      },
+      "snapshot": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      }
+    },
+    "run": 0,
+    "comparable": false,
+    "host_load_average": [
+      1.9677734375,
+      2.33349609375,
+      3.09228515625
+    ],
+    "events_per_second": 3344.511448684097,
+    "redis_cpu_utilization": 0.6264604394530182,
+    "service": {
+      "p50_ms": 0.295083,
+      "p95_ms": 0.329792,
+      "p99_ms": 0.375875
+    },
+    "backlog_completion": {
+      "p50_ms": 80.571542,
+      "p95_ms": 143.876959,
+      "p99_ms": 149.500792
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 500,
+        "events_per_second_over_full_drain": 3344.511448684097,
+        "service_events_per_second": 3346.7742016454217,
+        "service": {
+          "p50_ms": 0.295083,
+          "p95_ms": 0.329792,
+          "p99_ms": 0.375875
+        },
+        "backlog_completion": {
+          "p50_ms": 80.571542,
+          "p95_ms": 143.876959,
+          "p99_ms": 149.500792
+        }
+      }
+    ],
+    "redis_scripts": {
+      "begin": {
+        "sha1": "9a01d68b76a9adae9fa1ed6caf5d871404128585",
+        "count": 500,
+        "total_us": 15252,
+        "p50_us": 31,
+        "p95_us": 35,
+        "p99_us": 38
+      },
+      "apply_input": {
+        "sha1": "bcc5425e599a3163982818e1ae00b7cb9decfe7d",
+        "count": 500,
+        "total_us": 14687,
+        "p50_us": 29,
+        "p95_us": 33,
+        "p99_us": 56
+      },
+      "commit": {
+        "sha1": "bbe4da70a964676439c47c279f7e8584b7bc8324",
+        "count": 500,
+        "total_us": 16765,
+        "p50_us": 34,
+        "p95_us": 38,
+        "p99_us": 42
+      },
+      "complete": {
+        "sha1": "c0243001b109ed3485b3661ba9ae11a873e1bd48",
+        "count": 500,
+        "total_us": 14820,
+        "p50_us": 29,
+        "p95_us": 35,
+        "p99_us": 55
+      }
+    },
+    "redis_slowlog": {
+      "accounting": "EVALSHA entries include the nested command entries; do not sum both",
+      "entries_by_command": {
+        "slowlog": {
+          "count": 1,
+          "total_us": 1050,
+          "p99_us": 1050
+        },
+        "info": {
+          "count": 4,
+          "total_us": 47,
+          "p99_us": 18
+        },
+        "xreadgroup": {
+          "count": 1000,
+          "total_us": 2064,
+          "p99_us": 5
+        },
+        "xpending": {
+          "count": 500,
+          "total_us": 139,
+          "p99_us": 1
+        },
+        "type": {
+          "count": 7000,
+          "total_us": 607,
+          "p99_us": 1
+        },
+        "get": {
+          "count": 2003,
+          "total_us": 169,
+          "p99_us": 1
+        },
+        "hget": {
+          "count": 5500,
+          "total_us": 888,
+          "p99_us": 1
+        },
+        "hincrby": {
+          "count": 500,
+          "total_us": 270,
+          "p99_us": 1
+        },
+        "hsetnx": {
+          "count": 1000,
+          "total_us": 382,
+          "p99_us": 2
+        },
+        "pexpire": {
+          "count": 2000,
+          "total_us": 591,
+          "p99_us": 1
+        },
+        "evalsha": {
+          "count": 2000,
+          "total_us": 61524,
+          "p99_us": 53
+        },
+        "set": {
+          "count": 1500,
+          "total_us": 391,
+          "p99_us": 1
+        },
+        "hset": {
+          "count": 1500,
+          "total_us": 406,
+          "p99_us": 1
+        },
+        "xadd": {
+          "count": 500,
+          "total_us": 617,
+          "p99_us": 4
+        },
+        "xack": {
+          "count": 500,
+          "total_us": 157,
+          "p99_us": 1
+        },
+        "xinfo": {
+          "count": 1,
+          "total_us": 2,
+          "p99_us": 2
+        },
+        "xlen": {
+          "count": 1,
+          "total_us": 0,
+          "p99_us": 0
+        },
+        "xrange": {
+          "count": 1,
+          "total_us": 359,
+          "p99_us": 359
+        },
+        "watch": {
+          "count": 1,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "multi": {
+          "count": 1,
+          "total_us": 0,
+          "p99_us": 0
+        },
+        "del": {
+          "count": 1,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "exists": {
+          "count": 1,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "hello": {
+          "count": 1,
+          "total_us": 2,
+          "p99_us": 2
+        }
+      }
+    }
+  },
+  {
+    "name": "dense-balanced",
+    "workers": 1,
+    "rules_per_partition": 100,
+    "affected_rules": 100,
+    "partition_events": [
+      500
+    ],
+    "elapsed_ns": 402938458,
+    "producer_ns": 23570917,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 224372104,
+    "drain_alloc_objects": 2405162,
+    "drain_redis_commands": 75000,
+    "drain_redis_cpu_seconds": 0.14920099999999997,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 15708,
+        "last_finish_ns": 402933708
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "client_stages": {
+      "acknowledge": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "apply_input": {
+        "count": 500,
+        "total_ns": 34417212,
+        "p50_ms": 0.071292,
+        "p95_ms": 0.080208,
+        "p99_ms": 0.099625
+      },
+      "begin": {
+        "count": 500,
+        "total_ns": 33474631,
+        "p50_ms": 0.067458,
+        "p95_ms": 0.076334,
+        "p99_ms": 0.081
+      },
+      "commit": {
+        "count": 500,
+        "total_ns": 167919543,
+        "p50_ms": 0.323208,
+        "p95_ms": 0.446583,
+        "p99_ms": 0.496875
+      },
+      "complete": {
+        "count": 500,
+        "total_ns": 36019749,
+        "p50_ms": 0.073708,
+        "p95_ms": 0.081542,
+        "p99_ms": 0.102334
+      },
+      "dead_letter": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "next": {
+        "count": 500,
+        "total_ns": 60081204,
+        "p50_ms": 0.122333,
+        "p95_ms": 0.134625,
+        "p99_ms": 0.152042
+      },
+      "snapshot": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      }
+    },
+    "run": 0,
+    "comparable": false,
+    "host_load_average": [
+      1.9677734375,
+      2.33349609375,
+      3.09228515625
+    ],
+    "events_per_second": 1240.8842841206288,
+    "redis_cpu_utilization": 0.37028235215016375,
+    "service": {
+      "p50_ms": 0.790083,
+      "p95_ms": 0.960125,
+      "p99_ms": 1.023
+    },
+    "backlog_completion": {
+      "p50_ms": 212.035166,
+      "p95_ms": 385.662333,
+      "p99_ms": 401.302334
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 500,
+        "events_per_second_over_full_drain": 1240.8842841206288,
+        "service_events_per_second": 1241.101725704043,
+        "service": {
+          "p50_ms": 0.790083,
+          "p95_ms": 0.960125,
+          "p99_ms": 1.023
+        },
+        "backlog_completion": {
+          "p50_ms": 212.035166,
+          "p95_ms": 385.662333,
+          "p99_ms": 401.302334
+        }
+      }
+    ],
+    "redis_scripts": {
+      "begin": {
+        "sha1": "9a01d68b76a9adae9fa1ed6caf5d871404128585",
+        "count": 500,
+        "total_us": 10496,
+        "p50_us": 20,
+        "p95_us": 24,
+        "p99_us": 27
+      },
+      "apply_input": {
+        "sha1": "bcc5425e599a3163982818e1ae00b7cb9decfe7d",
+        "count": 500,
+        "total_us": 10211,
+        "p50_us": 20,
+        "p95_us": 24,
+        "p99_us": 43
+      },
+      "commit": {
+        "sha1": "bbe4da70a964676439c47c279f7e8584b7bc8324",
+        "count": 500,
+        "total_us": 63640,
+        "p50_us": 125,
+        "p95_us": 146,
+        "p99_us": 168
+      },
+      "complete": {
+        "sha1": "c0243001b109ed3485b3661ba9ae11a873e1bd48",
+        "count": 500,
+        "total_us": 10164,
+        "p50_us": 20,
+        "p95_us": 22,
+        "p99_us": 45
+      }
+    },
+    "redis_slowlog": {
+      "accounting": "EVALSHA entries include the nested command entries; do not sum both",
+      "entries_by_command": {
+        "slowlog": {
+          "count": 1,
+          "total_us": 2168,
+          "p99_us": 2168
+        },
+        "info": {
+          "count": 4,
+          "total_us": 46,
+          "p99_us": 18
+        },
+        "xreadgroup": {
+          "count": 1000,
+          "total_us": 1944,
+          "p99_us": 4
+        },
+        "xpending": {
+          "count": 500,
+          "total_us": 121,
+          "p99_us": 1
+        },
+        "type": {
+          "count": 7000,
+          "total_us": 498,
+          "p99_us": 1
+        },
+        "get": {
+          "count": 2102,
+          "total_us": 188,
+          "p99_us": 1
+        },
+        "hget": {
+          "count": 5500,
+          "total_us": 733,
+          "p99_us": 1
+        },
+        "hincrby": {
+          "count": 500,
+          "total_us": 274,
+          "p99_us": 1
+        },
+        "hsetnx": {
+          "count": 1000,
+          "total_us": 397,
+          "p99_us": 2
+        },
+        "pexpire": {
+          "count": 2000,
+          "total_us": 631,
+          "p99_us": 1
+        },
+        "evalsha": {
+          "count": 2000,
+          "total_us": 94511,
+          "p99_us": 147
+        },
+        "set": {
+          "count": 51000,
+          "total_us": 6470,
+          "p99_us": 1
+        },
+        "hset": {
+          "count": 1500,
+          "total_us": 615,
+          "p99_us": 2
+        },
+        "xadd": {
+          "count": 500,
+          "total_us": 1862,
+          "p99_us": 13
+        },
+        "xack": {
+          "count": 500,
+          "total_us": 167,
+          "p99_us": 1
+        },
+        "xinfo": {
+          "count": 1,
+          "total_us": 2,
+          "p99_us": 2
+        },
+        "xlen": {
+          "count": 1,
+          "total_us": 0,
+          "p99_us": 0
+        },
+        "xrange": {
+          "count": 1,
+          "total_us": 1696,
+          "p99_us": 1696
+        },
+        "watch": {
+          "count": 1,
+          "total_us": 2,
+          "p99_us": 2
+        },
+        "multi": {
+          "count": 1,
+          "total_us": 0,
+          "p99_us": 0
+        },
+        "del": {
+          "count": 1,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "exists": {
+          "count": 1,
+          "total_us": 0,
+          "p99_us": 0
+        },
+        "hello": {
+          "count": 1,
+          "total_us": 2,
+          "p99_us": 2
+        }
+      }
+    }
+  },
+  {
+    "name": "sparse-balanced",
+    "workers": 2,
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250
+    ],
+    "elapsed_ns": 99426917,
+    "producer_ns": 9652542,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 10532672,
+    "drain_alloc_objects": 176651,
+    "drain_redis_commands": 25500,
+    "drain_redis_cpu_seconds": 0.083021,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 26084,
+        "last_finish_ns": 99424209
+      },
+      {
+        "partition": 1,
+        "start_ns": 12167,
+        "last_finish_ns": 99275417
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "client_stages": {
+      "acknowledge": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "apply_input": {
+        "count": 500,
+        "total_ns": 31204629,
+        "p50_ms": 0.060334,
+        "p95_ms": 0.08975,
+        "p99_ms": 0.1165
+      },
+      "begin": {
+        "count": 500,
+        "total_ns": 35100123,
+        "p50_ms": 0.067292,
+        "p95_ms": 0.100667,
+        "p99_ms": 0.130042
+      },
+      "commit": {
+        "count": 500,
+        "total_ns": 36032833,
+        "p50_ms": 0.068208,
+        "p95_ms": 0.106792,
+        "p99_ms": 0.15625
+      },
+      "complete": {
+        "count": 500,
+        "total_ns": 30081613,
+        "p50_ms": 0.057625,
+        "p95_ms": 0.085833,
+        "p99_ms": 0.125208
+      },
+      "dead_letter": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "next": {
+        "count": 500,
+        "total_ns": 60197583,
+        "p50_ms": 0.118792,
+        "p95_ms": 0.176125,
+        "p99_ms": 0.225667
+      },
+      "snapshot": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      }
+    },
+    "run": 0,
+    "comparable": false,
+    "host_load_average": [
+      1.9677734375,
+      2.33349609375,
+      3.09228515625
+    ],
+    "events_per_second": 5028.819308558063,
+    "redis_cpu_utilization": 0.834995215631598,
+    "service": {
+      "p50_ms": 0.388,
+      "p95_ms": 0.505875,
+      "p99_ms": 0.648417
+    },
+    "backlog_completion": {
+      "p50_ms": 54.138542,
+      "p95_ms": 97.039041,
+      "p99_ms": 100.645542
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 2514.4096542790317,
+        "service_events_per_second": 2516.053427287465,
+        "service": {
+          "p50_ms": 0.386167,
+          "p95_ms": 0.505875,
+          "p99_ms": 0.637
+        },
+        "backlog_completion": {
+          "p50_ms": 54.138542,
+          "p95_ms": 97.159834,
+          "p99_ms": 100.84225
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 2514.4096542790317,
+        "service_events_per_second": 2519.5612943905508,
+        "service": {
+          "p50_ms": 0.3905,
+          "p95_ms": 0.515,
+          "p99_ms": 0.649916
+        },
+        "backlog_completion": {
+          "p50_ms": 53.862917,
+          "p95_ms": 97.039041,
+          "p99_ms": 100.645542
+        }
+      }
+    ],
+    "redis_scripts": {
+      "begin": {
+        "sha1": "9a01d68b76a9adae9fa1ed6caf5d871404128585",
+        "count": 500,
+        "total_us": 15042,
+        "p50_us": 29,
+        "p95_us": 40,
+        "p99_us": 62
+      },
+      "apply_input": {
+        "sha1": "bcc5425e599a3163982818e1ae00b7cb9decfe7d",
+        "count": 500,
+        "total_us": 13430,
+        "p50_us": 26,
+        "p95_us": 32,
+        "p99_us": 49
+      },
+      "commit": {
+        "sha1": "bbe4da70a964676439c47c279f7e8584b7bc8324",
+        "count": 500,
+        "total_us": 16103,
+        "p50_us": 30,
+        "p95_us": 41,
+        "p99_us": 64
+      },
+      "complete": {
+        "sha1": "c0243001b109ed3485b3661ba9ae11a873e1bd48",
+        "count": 500,
+        "total_us": 13140,
+        "p50_us": 25,
+        "p95_us": 31,
+        "p99_us": 52
+      }
+    },
+    "redis_slowlog": {
+      "accounting": "EVALSHA entries include the nested command entries; do not sum both",
+      "entries_by_command": {
+        "slowlog": {
+          "count": 1,
+          "total_us": 1808,
+          "p99_us": 1808
+        },
+        "info": {
+          "count": 4,
+          "total_us": 39,
+          "p99_us": 13
+        },
+        "xreadgroup": {
+          "count": 1000,
+          "total_us": 1914,
+          "p99_us": 4
+        },
+        "xpending": {
+          "count": 500,
+          "total_us": 125,
+          "p99_us": 1
+        },
+        "type": {
+          "count": 7000,
+          "total_us": 552,
+          "p99_us": 1
+        },
+        "get": {
+          "count": 2006,
+          "total_us": 179,
+          "p99_us": 1
+        },
+        "hget": {
+          "count": 5500,
+          "total_us": 835,
+          "p99_us": 1
+        },
+        "hincrby": {
+          "count": 500,
+          "total_us": 275,
+          "p99_us": 3
+        },
+        "hsetnx": {
+          "count": 1000,
+          "total_us": 366,
+          "p99_us": 2
+        },
+        "pexpire": {
+          "count": 2000,
+          "total_us": 596,
+          "p99_us": 1
+        },
+        "evalsha": {
+          "count": 2000,
+          "total_us": 57715,
+          "p99_us": 58
+        },
+        "set": {
+          "count": 1500,
+          "total_us": 400,
+          "p99_us": 1
+        },
+        "hset": {
+          "count": 1500,
+          "total_us": 368,
+          "p99_us": 1
+        },
+        "xadd": {
+          "count": 500,
+          "total_us": 623,
+          "p99_us": 5
+        },
+        "xack": {
+          "count": 500,
+          "total_us": 162,
+          "p99_us": 1
+        },
+        "xinfo": {
+          "count": 2,
+          "total_us": 5,
+          "p99_us": 3
+        },
+        "xlen": {
+          "count": 2,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "xrange": {
+          "count": 2,
+          "total_us": 455,
+          "p99_us": 247
+        },
+        "watch": {
+          "count": 2,
+          "total_us": 2,
+          "p99_us": 1
+        },
+        "multi": {
+          "count": 2,
+          "total_us": 0,
+          "p99_us": 0
+        },
+        "del": {
+          "count": 2,
+          "total_us": 4,
+          "p99_us": 3
+        },
+        "exists": {
+          "count": 2,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "hello": {
+          "count": 1,
+          "total_us": 3,
+          "p99_us": 3
+        }
+      }
+    }
+  },
+  {
+    "name": "dense-balanced",
+    "workers": 2,
+    "rules_per_partition": 100,
+    "affected_rules": 100,
+    "partition_events": [
+      250,
+      250
+    ],
+    "elapsed_ns": 255880334,
+    "producer_ns": 24757167,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 229695008,
+    "drain_alloc_objects": 2407207,
+    "drain_redis_commands": 75000,
+    "drain_redis_cpu_seconds": 0.139824,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 11750,
+        "last_finish_ns": 255878000
+      },
+      {
+        "partition": 1,
+        "start_ns": 11459,
+        "last_finish_ns": 255840000
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "client_stages": {
+      "acknowledge": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "apply_input": {
+        "count": 500,
+        "total_ns": 49750089,
+        "p50_ms": 0.067583,
+        "p95_ms": 0.255583,
+        "p99_ms": 0.284708
+      },
+      "begin": {
+        "count": 500,
+        "total_ns": 41316122,
+        "p50_ms": 0.066792,
+        "p95_ms": 0.249708,
+        "p99_ms": 0.283
+      },
+      "commit": {
+        "count": 500,
+        "total_ns": 190215252,
+        "p50_ms": 0.352042,
+        "p95_ms": 0.53825,
+        "p99_ms": 0.618667
+      },
+      "complete": {
+        "count": 500,
+        "total_ns": 57528878,
+        "p50_ms": 0.08025,
+        "p95_ms": 0.226917,
+        "p99_ms": 0.263333
+      },
+      "dead_letter": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      },
+      "next": {
+        "count": 500,
+        "total_ns": 82482691,
+        "p50_ms": 0.146875,
+        "p95_ms": 0.418375,
+        "p99_ms": 0.481208
+      },
+      "snapshot": {
+        "count": 0,
+        "total_ns": 0,
+        "p50_ms": 0,
+        "p95_ms": 0,
+        "p99_ms": 0
+      }
+    },
+    "run": 0,
+    "comparable": false,
+    "host_load_average": [
+      1.9677734375,
+      2.33349609375,
+      3.09228515625
+    ],
+    "events_per_second": 1954.0384060933734,
+    "redis_cpu_utilization": 0.5464429321871997,
+    "service": {
+      "p50_ms": 1.006292,
+      "p95_ms": 1.328083,
+      "p99_ms": 1.576958
+    },
+    "backlog_completion": {
+      "p50_ms": 148.831667,
+      "p95_ms": 249.430166,
+      "p99_ms": 258.713208
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 977.0192030466867,
+        "service_events_per_second": 977.1994775547619,
+        "service": {
+          "p50_ms": 1.005334,
+          "p95_ms": 1.304,
+          "p99_ms": 1.576875
+        },
+        "backlog_completion": {
+          "p50_ms": 150.136542,
+          "p95_ms": 250.256375,
+          "p99_ms": 258.797625
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 977.0192030466867,
+        "service_events_per_second": 977.3475353189258,
+        "service": {
+          "p50_ms": 1.006708,
+          "p95_ms": 1.35425,
+          "p99_ms": 1.613042
+        },
+        "backlog_completion": {
+          "p50_ms": 147.661958,
+          "p95_ms": 249.38025,
+          "p99_ms": 258.713208
+        }
+      }
+    ],
+    "redis_scripts": {
+      "begin": {
+        "sha1": "9a01d68b76a9adae9fa1ed6caf5d871404128585",
+        "count": 500,
+        "total_us": 11270,
+        "p50_us": 22,
+        "p95_us": 31,
+        "p99_us": 52
+      },
+      "apply_input": {
+        "sha1": "bcc5425e599a3163982818e1ae00b7cb9decfe7d",
+        "count": 500,
+        "total_us": 9600,
+        "p50_us": 18,
+        "p95_us": 23,
+        "p99_us": 43
+      },
+      "commit": {
+        "sha1": "bbe4da70a964676439c47c279f7e8584b7bc8324",
+        "count": 500,
+        "total_us": 69212,
+        "p50_us": 135,
+        "p95_us": 163,
+        "p99_us": 189
+      },
+      "complete": {
+        "sha1": "c0243001b109ed3485b3661ba9ae11a873e1bd48",
+        "count": 500,
+        "total_us": 9439,
+        "p50_us": 19,
+        "p95_us": 22,
+        "p99_us": 40
+      }
+    },
+    "redis_slowlog": {
+      "accounting": "EVALSHA entries include the nested command entries; do not sum both",
+      "entries_by_command": {
+        "slowlog": {
+          "count": 1,
+          "total_us": 4096,
+          "p99_us": 4096
+        },
+        "info": {
+          "count": 4,
+          "total_us": 43,
+          "p99_us": 15
+        },
+        "xreadgroup": {
+          "count": 1000,
+          "total_us": 2157,
+          "p99_us": 8
+        },
+        "xpending": {
+          "count": 500,
+          "total_us": 133,
+          "p99_us": 1
+        },
+        "type": {
+          "count": 7000,
+          "total_us": 597,
+          "p99_us": 1
+        },
+        "get": {
+          "count": 2204,
+          "total_us": 236,
+          "p99_us": 1
+        },
+        "hget": {
+          "count": 5500,
+          "total_us": 747,
+          "p99_us": 1
+        },
+        "hincrby": {
+          "count": 500,
+          "total_us": 275,
+          "p99_us": 1
+        },
+        "hsetnx": {
+          "count": 1000,
+          "total_us": 355,
+          "p99_us": 1
+        },
+        "pexpire": {
+          "count": 2000,
+          "total_us": 574,
+          "p99_us": 1
+        },
+        "evalsha": {
+          "count": 2000,
+          "total_us": 99521,
+          "p99_us": 166
+        },
+        "set": {
+          "count": 51000,
+          "total_us": 7423,
+          "p99_us": 1
+        },
+        "hset": {
+          "count": 1500,
+          "total_us": 656,
+          "p99_us": 2
+        },
+        "xadd": {
+          "count": 500,
+          "total_us": 2148,
+          "p99_us": 20
+        },
+        "xack": {
+          "count": 500,
+          "total_us": 162,
+          "p99_us": 1
+        },
+        "xinfo": {
+          "count": 2,
+          "total_us": 3,
+          "p99_us": 2
+        },
+        "xlen": {
+          "count": 2,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "xrange": {
+          "count": 2,
+          "total_us": 1776,
+          "p99_us": 1055
+        },
+        "watch": {
+          "count": 2,
+          "total_us": 3,
+          "p99_us": 2
+        },
+        "multi": {
+          "count": 2,
+          "total_us": 0,
+          "p99_us": 0
+        },
+        "del": {
+          "count": 2,
+          "total_us": 5,
+          "p99_us": 3
+        },
+        "exists": {
+          "count": 2,
+          "total_us": 1,
+          "p99_us": 1
+        },
+        "hello": {
+          "count": 1,
+          "total_us": 3,
+          "p99_us": 3
+        }
+      }
+    }
+  }
+]

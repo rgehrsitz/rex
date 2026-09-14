@@ -1,0 +1,48 @@
+File: runtime.test
+Type: cpu
+Time: 2026-09-13 23:15:48 EDT
+Duration: 3.22s, Total samples = 3.11s (96.72%)
+Showing nodes accounting for 2.94s, 94.53% of 3.11s total
+Dropped 75 nodes (cum <= 0.02s)
+Showing top 40 nodes out of 219
+      flat  flat%   sum%        cum   cum%
+     1.25s 40.19% 40.19%      1.25s 40.19%  syscall.rawsyscalln
+     0.25s  8.04% 48.23%      0.25s  8.04%  runtime.madvise
+     0.23s  7.40% 55.63%      0.23s  7.40%  runtime.kevent
+     0.20s  6.43% 62.06%      0.20s  6.43%  runtime.usleep
+     0.19s  6.11% 68.17%      0.19s  6.11%  runtime.pthread_cond_wait
+     0.15s  4.82% 72.99%      0.15s  4.82%  runtime.pthread_cond_signal
+     0.11s  3.54% 76.53%      0.11s  3.54%  runtime.pthread_kill
+     0.09s  2.89% 79.42%      0.09s  2.89%  encoding/json.stateInString
+     0.05s  1.61% 81.03%      0.06s  1.93%  runtime.tryDeferToSpanScan
+     0.04s  1.29% 82.32%      0.04s  1.29%  runtime.memmove
+     0.03s  0.96% 83.28%      0.11s  3.54%  encoding/json.checkValid
+     0.03s  0.96% 84.24%      0.03s  0.96%  runtime.memclrNoHeapPointers
+     0.03s  0.96% 85.21%      0.03s  0.96%  runtime.procyieldAsm
+     0.03s  0.96% 86.17%      0.07s  2.25%  runtime.scanObject
+     0.02s  0.64% 86.82%      0.02s  0.64%  crypto/internal/fips140/sha256.blockSHA2
+     0.02s  0.64% 87.46%      0.02s  0.64%  encoding/json.appendString[go.shape.string]
+     0.02s  0.64% 88.10%      0.02s  0.64%  encoding/json.stateEndValue
+     0.02s  0.64% 88.75%      0.02s  0.64%  encoding/json.unquoteBytes
+     0.02s  0.64% 89.39%      0.04s  1.29%  internal/runtime/maps.(*Iter).Next
+     0.02s  0.64% 90.03%      0.02s  0.64%  runtime.(*mspan).writeHeapBitsSmall
+     0.02s  0.64% 90.68%      0.09s  2.89%  runtime.mallocgc
+     0.02s  0.64% 91.32%      0.02s  0.64%  runtime.mmap
+     0.02s  0.64% 91.96%      0.07s  2.25%  runtime.wbBufFlush1
+     0.01s  0.32% 92.28%      0.03s  0.96%  crypto/internal/fips140/sha256.(*Digest).Write
+     0.01s  0.32% 92.60%      0.04s  1.29%  encoding/json.(*decodeState).skip
+     0.01s  0.32% 92.93%      0.14s  4.50%  encoding/json.mapEncoder.encode
+     0.01s  0.32% 93.25%      0.02s  0.64%  reflect.unsafe_New
+     0.01s  0.32% 93.57%      0.86s 27.65%  rgehrsitz/rex/pkg/store.(*RedisDurable).commit
+     0.01s  0.32% 93.89%      0.04s  1.29%  runtime.stealWork
+     0.01s  0.32% 94.21%      0.02s  0.64%  runtime.typePointers.next
+     0.01s  0.32% 94.53%      0.02s  0.64%  runtime.typedmemmove
+         0     0% 94.53%      0.06s  1.93%  bufio.(*Reader).Peek
+         0     0% 94.53%      0.02s  0.64%  bufio.(*Reader).Read
+         0     0% 94.53%      0.06s  1.93%  bufio.(*Reader).fill
+         0     0% 94.53%      0.14s  4.50%  bufio.(*Writer).Flush
+         0     0% 94.53%      0.06s  1.93%  bufio.(*Writer).Write
+         0     0% 94.53%      0.02s  0.64%  crypto/internal/fips140/sha256.block
+         0     0% 94.53%      0.02s  0.64%  encoding/json.(*decodeState).literalStore
+         0     0% 94.53%      0.10s  3.22%  encoding/json.(*decodeState).object
+         0     0% 94.53%      0.10s  3.22%  encoding/json.(*decodeState).unmarshal

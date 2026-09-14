@@ -1,0 +1,298 @@
+[
+  {
+    "name": "sparse-balanced",
+    "workers": 1,
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      500
+    ],
+    "elapsed_ns": 140117125,
+    "producer_ns": 8993292,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 10492584,
+    "drain_alloc_objects": 176556,
+    "drain_redis_commands": 25500,
+    "drain_redis_cpu_seconds": 0.084342,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 19167,
+        "last_finish_ns": 140113708
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "run": 0,
+    "comparable": true,
+    "host_load_average": [
+      1.89013671875,
+      2.31103515625,
+      3.07958984375
+    ],
+    "events_per_second": 3568.4431863699742,
+    "redis_cpu_utilization": 0.6019392704496327,
+    "service": {
+      "p50_ms": 0.2765,
+      "p95_ms": 0.309583,
+      "p99_ms": 0.342667
+    },
+    "backlog_completion": {
+      "p50_ms": 74.795333,
+      "p95_ms": 134.048375,
+      "p99_ms": 139.215625
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 500,
+        "events_per_second_over_full_drain": 3568.4431863699742,
+        "service_events_per_second": 3571.4530869029754,
+        "service": {
+          "p50_ms": 0.2765,
+          "p95_ms": 0.309583,
+          "p99_ms": 0.342667
+        },
+        "backlog_completion": {
+          "p50_ms": 74.795333,
+          "p95_ms": 134.048375,
+          "p99_ms": 139.215625
+        }
+      }
+    ],
+    "speedup_vs_one": 1.0,
+    "parallel_efficiency": 1.0
+  },
+  {
+    "name": "dense-balanced",
+    "workers": 1,
+    "rules_per_partition": 100,
+    "affected_rules": 100,
+    "partition_events": [
+      500
+    ],
+    "elapsed_ns": 326668625,
+    "producer_ns": 14143709,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 224662336,
+    "drain_alloc_objects": 2405236,
+    "drain_redis_commands": 75000,
+    "drain_redis_cpu_seconds": 0.122128,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 6541,
+        "last_finish_ns": 326666083
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "run": 0,
+    "comparable": true,
+    "host_load_average": [
+      1.89013671875,
+      2.31103515625,
+      3.07958984375
+    ],
+    "events_per_second": 1530.603069088744,
+    "redis_cpu_utilization": 0.37385898324334027,
+    "service": {
+      "p50_ms": 0.619,
+      "p95_ms": 0.832,
+      "p99_ms": 0.907334
+    },
+    "backlog_completion": {
+      "p50_ms": 158.390916,
+      "p95_ms": 308.652334,
+      "p99_ms": 323.276167
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 500,
+        "events_per_second_over_full_drain": 1530.603069088744,
+        "service_events_per_second": 1530.9515990662383,
+        "service": {
+          "p50_ms": 0.619,
+          "p95_ms": 0.832,
+          "p99_ms": 0.907334
+        },
+        "backlog_completion": {
+          "p50_ms": 158.390916,
+          "p95_ms": 308.652334,
+          "p99_ms": 323.276167
+        }
+      }
+    ],
+    "speedup_vs_one": 1.0,
+    "parallel_efficiency": 1.0
+  },
+  {
+    "name": "sparse-balanced",
+    "workers": 2,
+    "rules_per_partition": 100,
+    "affected_rules": 1,
+    "partition_events": [
+      250,
+      250
+    ],
+    "elapsed_ns": 95335250,
+    "producer_ns": 9703625,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 10490400,
+    "drain_alloc_objects": 176557,
+    "drain_redis_commands": 25500,
+    "drain_redis_cpu_seconds": 0.076502,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 10833,
+        "last_finish_ns": 95332708
+      },
+      {
+        "partition": 1,
+        "start_ns": 9167,
+        "last_finish_ns": 95093208
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "run": 0,
+    "comparable": true,
+    "host_load_average": [
+      1.89013671875,
+      2.31103515625,
+      3.07958984375
+    ],
+    "events_per_second": 5244.649801621122,
+    "redis_cpu_utilization": 0.802452398247238,
+    "service": {
+      "p50_ms": 0.372459,
+      "p95_ms": 0.452792,
+      "p99_ms": 0.527209
+    },
+    "backlog_completion": {
+      "p50_ms": 53.122291,
+      "p95_ms": 91.269541,
+      "p99_ms": 94.766167
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 2622.324900810561,
+        "service_events_per_second": 2623.6688619253855,
+        "service": {
+          "p50_ms": 0.373042,
+          "p95_ms": 0.452792,
+          "p99_ms": 0.527209
+        },
+        "backlog_completion": {
+          "p50_ms": 53.122291,
+          "p95_ms": 91.378667,
+          "p99_ms": 95.027875
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 2622.324900810561,
+        "service_events_per_second": 2630.4861049937695,
+        "service": {
+          "p50_ms": 0.371791,
+          "p95_ms": 0.457375,
+          "p99_ms": 0.533125
+        },
+        "backlog_completion": {
+          "p50_ms": 52.872417,
+          "p95_ms": 91.269541,
+          "p99_ms": 94.766167
+        }
+      }
+    ],
+    "speedup_vs_one": 1.469730503669944,
+    "parallel_efficiency": 0.734865251834972
+  },
+  {
+    "name": "dense-balanced",
+    "workers": 2,
+    "rules_per_partition": 100,
+    "affected_rules": 100,
+    "partition_events": [
+      250,
+      250
+    ],
+    "elapsed_ns": 235200792,
+    "producer_ns": 24317334,
+    "fault_path_ns": 0,
+    "drain_alloc_bytes": 230460520,
+    "drain_alloc_objects": 2407432,
+    "drain_redis_commands": 75000,
+    "drain_redis_cpu_seconds": 0.120418,
+    "partition_windows": [
+      {
+        "partition": 0,
+        "start_ns": 9958,
+        "last_finish_ns": 235196500
+      },
+      {
+        "partition": 1,
+        "start_ns": 8333,
+        "last_finish_ns": 234146750
+      }
+    ],
+    "fault_sibling_completions": 0,
+    "run": 0,
+    "comparable": true,
+    "host_load_average": [
+      1.89013671875,
+      2.31103515625,
+      3.07958984375
+    ],
+    "events_per_second": 2125.8431816845246,
+    "redis_cpu_utilization": 0.5119795685041741,
+    "service": {
+      "p50_ms": 0.927458,
+      "p95_ms": 1.213208,
+      "p99_ms": 1.330708
+    },
+    "backlog_completion": {
+      "p50_ms": 135.372542,
+      "p95_ms": 225.418208,
+      "p99_ms": 233.703333
+    },
+    "partitions": [
+      {
+        "partition": 0,
+        "events": 250,
+        "events_per_second_over_full_drain": 1062.9215908422623,
+        "service_events_per_second": 1063.1178240131594,
+        "service": {
+          "p50_ms": 0.927417,
+          "p95_ms": 1.235917,
+          "p99_ms": 1.3255
+        },
+        "backlog_completion": {
+          "p50_ms": 136.068416,
+          "p95_ms": 226.00225,
+          "p99_ms": 234.535792
+        }
+      },
+      {
+        "partition": 1,
+        "events": 250,
+        "events_per_second_over_full_drain": 1062.9215908422623,
+        "service_events_per_second": 1067.9090498427454,
+        "service": {
+          "p50_ms": 0.927458,
+          "p95_ms": 1.189083,
+          "p99_ms": 1.338959
+        },
+        "backlog_completion": {
+          "p50_ms": 134.445125,
+          "p95_ms": 225.189333,
+          "p99_ms": 232.90275
+        }
+      }
+    ],
+    "speedup_vs_one": 1.3888925382530177,
+    "parallel_efficiency": 0.6944462691265089
+  }
+]

@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	goruntime "runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -34,21 +35,154 @@ type concurrencySample struct {
 }
 
 type concurrencyResult struct {
-	Name          string              `json:"name"`
-	Workers       int                 `json:"workers"`
-	Rules         int                 `json:"rules_per_partition"`
-	Affected      int                 `json:"affected_rules"`
-	Counts        []int               `json:"partition_events"`
-	ElapsedNS     int64               `json:"elapsed_ns"`
-	ProducerNS    int64               `json:"producer_ns"`
-	FaultPathNS   int64               `json:"fault_path_ns"`
-	AllocBytes    uint64              `json:"drain_alloc_bytes"`
-	AllocObjects  uint64              `json:"drain_alloc_objects"`
-	RedisCommands int64               `json:"drain_redis_commands"`
-	RedisCPU      float64             `json:"drain_redis_cpu_seconds"`
-	Windows       []concurrencyWindow `json:"partition_windows"`
-	FaultSiblings int64               `json:"fault_sibling_completions"`
-	Samples       []concurrencySample `json:"samples"`
+	Name          string                            `json:"name"`
+	Workers       int                               `json:"workers"`
+	Rules         int                               `json:"rules_per_partition"`
+	Affected      int                               `json:"affected_rules"`
+	Counts        []int                             `json:"partition_events"`
+	ElapsedNS     int64                             `json:"elapsed_ns"`
+	ProducerNS    int64                             `json:"producer_ns"`
+	FaultPathNS   int64                             `json:"fault_path_ns"`
+	AllocBytes    uint64                            `json:"drain_alloc_bytes"`
+	AllocObjects  uint64                            `json:"drain_alloc_objects"`
+	RedisCommands int64                             `json:"drain_redis_commands"`
+	RedisCPU      float64                           `json:"drain_redis_cpu_seconds"`
+	Windows       []concurrencyWindow               `json:"partition_windows"`
+	FaultSiblings int64                             `json:"fault_sibling_completions"`
+	Stages        map[string]concurrencyStageResult `json:"client_stages,omitempty"`
+	Samples       []concurrencySample               `json:"samples"`
+}
+
+type concurrencyStageResult struct {
+	Count   int     `json:"count"`
+	TotalNS int64   `json:"total_ns"`
+	P50MS   float64 `json:"p50_ms"`
+	P95MS   float64 `json:"p95_ms"`
+	P99MS   float64 `json:"p99_ms"`
+}
+
+type concurrencyStageTimer struct {
+	active atomic.Bool
+	mu     sync.Mutex
+	values map[string][]int64
+}
+
+func (t *concurrencyStageTimer) reset() {
+	t.mu.Lock()
+	t.values = make(map[string][]int64)
+	t.mu.Unlock()
+	t.active.Store(true)
+}
+
+func (t *concurrencyStageTimer) start() time.Time {
+	if !t.active.Load() {
+		return time.Time{}
+	}
+	return time.Now()
+}
+
+func (t *concurrencyStageTimer) record(name string, start time.Time) {
+	if start.IsZero() {
+		return
+	}
+	elapsed := time.Since(start).Nanoseconds()
+	t.mu.Lock()
+	t.values[name] = append(t.values[name], elapsed)
+	t.mu.Unlock()
+}
+
+func stageResults(timers []*concurrencyStageTimer) map[string]concurrencyStageResult {
+	combined := make(map[string][]int64)
+	for _, timer := range timers {
+		timer.mu.Lock()
+		for name, values := range timer.values {
+			combined[name] = append(combined[name], values...)
+		}
+		timer.mu.Unlock()
+	}
+	results := make(map[string]concurrencyStageResult, 8)
+	for _, name := range []string{"next", "begin", "apply_input", "snapshot", "commit", "complete", "acknowledge", "dead_letter"} {
+		values := combined[name]
+		if len(values) == 0 {
+			results[name] = concurrencyStageResult{}
+			continue
+		}
+		sort.Slice(values, func(i, j int) bool { return values[i] < values[j] })
+		var total int64
+		for _, value := range values {
+			total += value
+		}
+		percentile := func(percent int) float64 {
+			index := (len(values)*percent + 99) / 100
+			if index < 1 {
+				index = 1
+			}
+			return float64(values[index-1]) / float64(time.Millisecond)
+		}
+		results[name] = concurrencyStageResult{
+			Count: len(values), TotalNS: total,
+			P50MS: percentile(50), P95MS: percentile(95), P99MS: percentile(99),
+		}
+	}
+	return results
+}
+
+type concurrencyTimedStore struct {
+	*store.RedisStore
+	timer *concurrencyStageTimer
+}
+
+func (s *concurrencyTimedStore) ReadSnapshot(ctx context.Context, keys []string) (map[string]store.Fact, error) {
+	start := s.timer.start()
+	defer s.timer.record("snapshot", start)
+	return s.RedisStore.ReadSnapshot(ctx, keys)
+}
+
+func (s *concurrencyTimedStore) Commit(ctx context.Context, request store.CommitRequest) (store.CommitResult, error) {
+	start := s.timer.start()
+	defer s.timer.record("commit", start)
+	return s.RedisStore.Commit(ctx, request)
+}
+
+type concurrencyTimedQueue struct {
+	*store.RedisDurable
+	timer *concurrencyStageTimer
+}
+
+func (q *concurrencyTimedQueue) Next(ctx context.Context) (store.DurableEvent, error) {
+	start := q.timer.start()
+	defer q.timer.record("next", start)
+	return q.RedisDurable.Next(ctx)
+}
+
+func (q *concurrencyTimedQueue) Begin(ctx context.Context, event store.DurableEvent, programID string) (store.JournalStatus, error) {
+	start := q.timer.start()
+	defer q.timer.record("begin", start)
+	return q.RedisDurable.Begin(ctx, event, programID)
+}
+
+func (q *concurrencyTimedQueue) ApplyInput(ctx context.Context, eventID, programID string, facts map[string]interface{}) error {
+	start := q.timer.start()
+	defer q.timer.record("apply_input", start)
+	return q.RedisDurable.ApplyInput(ctx, eventID, programID, facts)
+}
+
+func (q *concurrencyTimedQueue) Acknowledge(ctx context.Context, eventID string) error {
+	start := q.timer.start()
+	defer q.timer.record("acknowledge", start)
+	return q.RedisDurable.Acknowledge(ctx, eventID)
+}
+
+func (q *concurrencyTimedQueue) Complete(ctx context.Context, eventID string) error {
+	start := q.timer.start()
+	defer q.timer.record("complete", start)
+	return q.RedisDurable.Complete(ctx, eventID)
+}
+
+func (q *concurrencyTimedQueue) DeadLetterEvent(ctx context.Context, event store.DurableEvent, programID string, attempts int64, processErr error) error {
+	start := q.timer.start()
+	defer q.timer.record("dead_letter", start)
+	return q.RedisDurable.DeadLetterEvent(ctx, event, programID, attempts, processErr)
 }
 
 type concurrencyWindow struct {
@@ -61,6 +195,8 @@ type concurrencyPartition struct {
 	index       int
 	engine      *Engine
 	queue       *store.RedisDurable
+	processor   DurableQueue
+	timer       *concurrencyStageTimer
 	replacement *store.RedisStore
 	options     store.DurableOptions
 	artifact    []byte
@@ -96,6 +232,7 @@ func TestDurableConcurrencyProfile(t *testing.T) {
 	require.Contains(t, []int{1, 2, 4}, workers)
 	scenario := os.Getenv("REX_CONCURRENCY_SCENARIO")
 	require.Contains(t, []string{"sparse-balanced", "dense-balanced", "sparse-skew", "completion-retry", "owner-loss"}, scenario)
+	stageProfile := os.Getenv("REX_CONCURRENCY_STAGE_PROFILE") == "1"
 
 	result := concurrencyResult{Name: scenario, Workers: workers, Rules: 100, Affected: 1, Counts: make([]int, workers)}
 	if scenario == "dense-balanced" {
@@ -136,11 +273,22 @@ func TestDurableConcurrencyProfile(t *testing.T) {
 		queue, err := backend.OpenDurable(ctx, options)
 		require.NoError(t, err)
 		require.NoError(t, queue.AcquireOwnership(ctx))
-		engine, err := NewEngineFromBytes(artifact, backend, 0)
+		var timer *concurrencyStageTimer
+		var engineBackend store.ContextStore = backend
+		var processor DurableQueue = queue
+		if stageProfile {
+			timer = &concurrencyStageTimer{}
+			engineBackend = &concurrencyTimedStore{RedisStore: backend, timer: timer}
+			processor = &concurrencyTimedQueue{RedisDurable: queue, timer: timer}
+		}
+		engine, err := NewEngineFromBytes(artifact, engineBackend, 0)
 		require.NoError(t, err)
 		engine.SetConditionTracing(false)
 		require.NoError(t, engine.ValidateFactOwnership(options.OwnedFacts))
-		parts[p] = &concurrencyPartition{index: p, engine: engine, queue: queue, options: options, artifact: artifact}
+		parts[p] = &concurrencyPartition{
+			index: p, engine: engine, queue: queue, processor: processor, timer: timer,
+			options: options, artifact: artifact,
+		}
 	}
 	defer func() {
 		for _, part := range parts {
@@ -157,7 +305,7 @@ func TestDurableConcurrencyProfile(t *testing.T) {
 			require.NoError(t, err)
 			id, err := client.XAdd(ctx, &redis.XAddArgs{Stream: part.options.Stream, Values: map[string]interface{}{"payload": string(payload)}}).Result()
 			require.NoError(t, err)
-			got, err := part.engine.ProcessNextDurable(ctx, part.queue)
+			got, err := part.engine.ProcessNextDurable(ctx, part.processor)
 			require.NoError(t, err)
 			require.True(t, got.Processed)
 			require.Equal(t, id, got.EventID)
@@ -189,6 +337,12 @@ func TestDurableConcurrencyProfile(t *testing.T) {
 		result.Counts[p]++
 	}
 	result.ProducerNS = time.Since(producerStart).Nanoseconds()
+	if stageProfile {
+		for _, part := range parts {
+			part.timer.reset()
+		}
+		require.NoError(t, client.Do(ctx, "SLOWLOG", "RESET").Err())
+	}
 
 	commands := func() int64 {
 		info, err := client.Info(ctx, "stats").Result()
@@ -257,6 +411,13 @@ func TestDurableConcurrencyProfile(t *testing.T) {
 	// The starting command-count INFO and ending CPU INFO increment the total
 	// after producing their responses, so both appear in the final observation.
 	result.RedisCommands = commands() - commandStart - 2
+	if stageProfile {
+		timers := make([]*concurrencyStageTimer, 0, len(parts))
+		for _, part := range parts {
+			timers = append(timers, part.timer)
+		}
+		result.Stages = stageResults(timers)
+	}
 	for p, runErr := range errorsByPartition {
 		require.NoErrorf(t, runErr, "partition %d", p)
 		result.Samples = append(result.Samples, partitionResults[p].samples...)
@@ -382,7 +543,13 @@ func runConcurrencyPartition(ctx context.Context, client *redis.Client, part *co
 					_ = replacement.Close()
 					return result, fmt.Errorf("stale owner was not fenced: result=%+v err=%v", staleResult, staleErr)
 				}
-				engine, openErr := NewEngineFromBytes(part.artifact, replacement, 0)
+				var replacementBackend store.ContextStore = replacement
+				var replacementProcessor DurableQueue = successor
+				if part.timer != nil {
+					replacementBackend = &concurrencyTimedStore{RedisStore: replacement, timer: part.timer}
+					replacementProcessor = &concurrencyTimedQueue{RedisDurable: successor, timer: part.timer}
+				}
+				engine, openErr := NewEngineFromBytes(part.artifact, replacementBackend, 0)
 				if openErr != nil {
 					_ = replacement.Close()
 					return result, openErr
@@ -393,8 +560,9 @@ func runConcurrencyPartition(ctx context.Context, client *redis.Client, part *co
 					return result, openErr
 				}
 				part.queue, part.engine, part.replacement = successor, engine, replacement
+				part.processor = replacementProcessor
 			}
-			got, err = part.engine.ProcessNextDurable(ctx, part.queue)
+			got, err = part.engine.ProcessNextDurable(ctx, part.processor)
 			result.faultPathNS = time.Since(faultStart).Nanoseconds()
 			for p := range completed {
 				if p != part.index {
@@ -406,7 +574,7 @@ func runConcurrencyPartition(ctx context.Context, client *redis.Client, part *co
 				return result, fmt.Errorf("fault recovery failed: result=%+v err=%v", got, err)
 			}
 		} else {
-			got, err = part.engine.ProcessNextDurable(ctx, part.queue)
+			got, err = part.engine.ProcessNextDurable(ctx, part.processor)
 			if err != nil || !got.Processed || got.Attempts != 1 || got.Recovered {
 				return result, fmt.Errorf("ordinary processing failed: result=%+v err=%v", got, err)
 			}

@@ -1,0 +1,48 @@
+File: runtime.test
+Type: cpu
+Time: 2026-09-13 23:15:41 EDT
+Duration: 4.42s, Total samples = 2.88s (65.22%)
+Showing nodes accounting for 2.68s, 93.06% of 2.88s total
+Dropped 80 nodes (cum <= 0.01s)
+Showing top 40 nodes out of 196
+      flat  flat%   sum%        cum   cum%
+     1.31s 45.49% 45.49%      1.31s 45.49%  syscall.rawsyscalln
+     0.31s 10.76% 56.25%      0.31s 10.76%  runtime.madvise
+     0.23s  7.99% 64.24%      0.23s  7.99%  runtime.kevent
+     0.19s  6.60% 70.83%      0.19s  6.60%  runtime.pthread_cond_signal
+     0.19s  6.60% 77.43%      0.19s  6.60%  runtime.pthread_cond_wait
+     0.16s  5.56% 82.99%      0.16s  5.56%  runtime.memmove
+     0.07s  2.43% 85.42%      0.07s  2.43%  runtime.memclrNoHeapPointers
+     0.06s  2.08% 87.50%      0.06s  2.08%  runtime.usleep
+     0.03s  1.04% 88.54%      0.03s  1.04%  runtime.(*spanInlineMarkBits).init
+     0.03s  1.04% 89.58%      0.03s  1.04%  runtime.pthread_kill
+     0.02s  0.69% 90.28%      0.02s  0.69%  internal/runtime/atomic.(*UnsafePointer).Load (inline)
+     0.02s  0.69% 90.97%      0.02s  0.69%  runtime.tryDeferToSpanScan
+     0.01s  0.35% 91.32%      0.04s  1.39%  encoding/json.mapEncoder.encode
+     0.01s  0.35% 91.67%      0.02s  0.69%  runtime.(*spanSet).push
+     0.01s  0.35% 92.01%      0.17s  5.90%  runtime.gcDrain
+     0.01s  0.35% 92.36%      0.15s  5.21%  runtime.mallocgc
+     0.01s  0.35% 92.71%      0.04s  1.39%  runtime.mallocgcSmallScanHeader
+     0.01s  0.35% 93.06%      0.02s  0.69%  runtime.stealWork
+         0     0% 93.06%      0.10s  3.47%  bufio.(*Reader).Peek
+         0     0% 93.06%      0.02s  0.69%  bufio.(*Reader).Read
+         0     0% 93.06%      0.10s  3.47%  bufio.(*Reader).fill
+         0     0% 93.06%      0.08s  2.78%  bufio.(*Writer).Flush
+         0     0% 93.06%      0.02s  0.69%  bufio.(*Writer).Write
+         0     0% 93.06%      0.05s  1.74%  encoding/json.(*decodeState).object
+         0     0% 93.06%      0.05s  1.74%  encoding/json.(*decodeState).unmarshal
+         0     0% 93.06%      0.05s  1.74%  encoding/json.(*decodeState).value
+         0     0% 93.06%      0.05s  1.74%  encoding/json.(*encodeState).marshal
+         0     0% 93.06%      0.05s  1.74%  encoding/json.(*encodeState).reflectValue
+         0     0% 93.06%      0.07s  2.43%  encoding/json.Marshal
+         0     0% 93.06%      0.05s  1.74%  encoding/json.Unmarshal
+         0     0% 93.06%      0.05s  1.74%  encoding/json.structEncoder.encode
+         0     0% 93.06%      1.34s 46.53%  github.com/redis/go-redis/v9.(*Client).Process
+         0     0% 93.06%      1.19s 41.32%  github.com/redis/go-redis/v9.(*Script).EvalSha
+         0     0% 93.06%      1.19s 41.32%  github.com/redis/go-redis/v9.(*Script).Run
+         0     0% 93.06%      0.02s  0.69%  github.com/redis/go-redis/v9.(*XMessageSliceCmd).readReply
+         0     0% 93.06%      1.13s 39.24%  github.com/redis/go-redis/v9.(*baseClient)._getConn
+         0     0% 93.06%      1.34s 46.53%  github.com/redis/go-redis/v9.(*baseClient)._process
+         0     0% 93.06%      0.21s  7.29%  github.com/redis/go-redis/v9.(*baseClient)._process.func1
+         0     0% 93.06%      0.02s  0.69%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.1
+         0     0% 93.06%      0.12s  4.17%  github.com/redis/go-redis/v9.(*baseClient)._process.func1.3

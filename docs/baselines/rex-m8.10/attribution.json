@@ -1,0 +1,179 @@
+{
+  "measurement_status": "diagnostic_only",
+  "instrumentation_note": "Stage timing and SLOWLOG are intrusive; matched 500-event controls quantify their overhead. EVALSHA durations contain nested SLOWLOG command durations and must not be summed with them.",
+  "stage_profiles": [
+    {
+      "scenario": "dense-balanced",
+      "workers": 1,
+      "coverage_denominator": "sum of service_ns across all retained-in-run event samples",
+      "sampled_service_total_ns": 402867863,
+      "client_stage_total_ns": 331912339,
+      "client_stage_coverage_percent": 82.38739534307307,
+      "instrumented_to_control_throughput_ratio": 0.8107159257555903,
+      "instrumented_to_control_redis_cpu_per_event_ratio": 1.221677256648762,
+      "client_stage_average_us": {
+        "acknowledge": 0.0,
+        "apply_input": 68.834424,
+        "begin": 66.949262,
+        "commit": 335.839086,
+        "complete": 72.03949800000001,
+        "dead_letter": 0.0,
+        "next": 120.162408,
+        "snapshot": 0.0
+      },
+      "redis_script_average_us": {
+        "begin": 20.992,
+        "apply_input": 20.422,
+        "commit": 127.28,
+        "complete": 20.328
+      }
+    },
+    {
+      "scenario": "dense-balanced",
+      "workers": 2,
+      "coverage_denominator": "sum of service_ns across all retained-in-run event samples",
+      "sampled_service_total_ns": 511627502,
+      "client_stage_total_ns": 421293032,
+      "client_stage_coverage_percent": 82.34370325151129,
+      "instrumented_to_control_throughput_ratio": 0.919182761423158,
+      "instrumented_to_control_redis_cpu_per_event_ratio": 1.1611553090069593,
+      "client_stage_average_us": {
+        "acknowledge": 0.0,
+        "apply_input": 99.500178,
+        "begin": 82.632244,
+        "commit": 380.43050400000004,
+        "complete": 115.057756,
+        "dead_letter": 0.0,
+        "next": 164.965382,
+        "snapshot": 0.0
+      },
+      "redis_script_average_us": {
+        "begin": 22.54,
+        "apply_input": 19.2,
+        "commit": 138.424,
+        "complete": 18.878
+      }
+    },
+    {
+      "scenario": "sparse-balanced",
+      "workers": 1,
+      "coverage_denominator": "sum of service_ns across all retained-in-run event samples",
+      "sampled_service_total_ns": 149397590,
+      "client_stage_total_ns": 143518034,
+      "client_stage_coverage_percent": 96.06449073241409,
+      "instrumented_to_control_throughput_ratio": 0.9372466574384015,
+      "instrumented_to_control_redis_cpu_per_event_ratio": 1.1104194825828173,
+      "client_stage_average_us": {
+        "acknowledge": 0.0,
+        "apply_input": 53.838792,
+        "begin": 54.032076,
+        "commit": 63.005908000000005,
+        "complete": 53.136188000000004,
+        "dead_letter": 0.0,
+        "next": 63.023104,
+        "snapshot": 0.0
+      },
+      "redis_script_average_us": {
+        "begin": 30.504,
+        "apply_input": 29.374,
+        "commit": 33.53,
+        "complete": 29.64
+      }
+    },
+    {
+      "scenario": "sparse-balanced",
+      "workers": 2,
+      "coverage_denominator": "sum of service_ns across all retained-in-run event samples",
+      "sampled_service_total_ns": 198585583,
+      "client_stage_total_ns": 192616781,
+      "client_stage_coverage_percent": 96.9943427363506,
+      "instrumented_to_control_throughput_ratio": 0.9588474919724201,
+      "instrumented_to_control_redis_cpu_per_event_ratio": 1.085213458471674,
+      "client_stage_average_us": {
+        "acknowledge": 0.0,
+        "apply_input": 62.409258,
+        "begin": 70.20024599999999,
+        "commit": 72.065666,
+        "complete": 60.163226,
+        "dead_letter": 0.0,
+        "next": 120.395166,
+        "snapshot": 0.0
+      },
+      "redis_script_average_us": {
+        "begin": 30.084,
+        "apply_input": 26.86,
+        "commit": 32.206,
+        "complete": 26.28
+      }
+    }
+  ],
+  "five_run_d13_topology": {
+    "sparse-balanced": {
+      "w1": {
+        "redis_cpu_utilization_median": 0.6007813731381304,
+        "redis_cpu_utilization_range": [
+          0.5964227765355335,
+          0.6034990597421019
+        ],
+        "events_per_second_median": 3566.737152882956
+      },
+      "w2": {
+        "redis_cpu_utilization_median": 0.8000706901122205,
+        "redis_cpu_utilization_range": [
+          0.7959495122958795,
+          0.8035216187676114
+        ],
+        "events_per_second_median": 5437.70094004255
+      },
+      "w4": {
+        "redis_cpu_utilization_median": 0.9325999535403793,
+        "redis_cpu_utilization_range": [
+          0.9293884017734685,
+          0.9344054958751755
+        ],
+        "events_per_second_median": 6655.343354221705
+      }
+    },
+    "dense-balanced": {
+      "w1": {
+        "redis_cpu_utilization_median": 0.3782713089909964,
+        "redis_cpu_utilization_range": [
+          0.3702561795739123,
+          0.37949630435304704
+        ],
+        "events_per_second_median": 1533.8967208164167
+      },
+      "w2": {
+        "redis_cpu_utilization_median": 0.5195700635850319,
+        "redis_cpu_utilization_range": [
+          0.5165133628359502,
+          0.52496753374604
+        ],
+        "events_per_second_median": 2225.825794613465
+      },
+      "w4": {
+        "redis_cpu_utilization_median": 0.6892685116409473,
+        "redis_cpu_utilization_range": [
+          0.686822073776732,
+          0.6941769174129432
+        ],
+        "events_per_second_median": 2853.234602361827
+      }
+    }
+  },
+  "dense_single_worker": {
+    "sample_count": 1,
+    "events": 5000,
+    "alloc_bytes_per_event": 452716.9632,
+    "alloc_objects_per_event": 4811.7952,
+    "sparse_alloc_bytes_per_event": 20981.4848,
+    "sparse_alloc_objects_per_event": 353.1232,
+    "dense_to_sparse_alloc_bytes_ratio": 21.576974533279934,
+    "dense_to_sparse_alloc_objects_ratio": 13.626392148689183
+  },
+  "decision": {
+    "production_concurrency_on_one_redis": "stop_on_integration",
+    "reason": "Sparse Redis CPU utilization is consistently about 0.80 at two workers and 0.93 at four; the unchanged D13 p99 gate fails from single-server queueing.",
+    "next_candidate": "Reduce dense commit-path allocations for single-worker efficiency without changing durable stages, formats, or recovery semantics."
+  }
+}
