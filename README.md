@@ -3,7 +3,9 @@
 [![License](https://img.shields.io/badge/License-MIT-blue)](#license)
 
 REX is a rules engine designed to process complex conditions and actions using a structured JSON format for rule definitions. It allows for defining rules, conditions, and actions that are compiled into bytecode by the REX Compiler, then executed by the REX Engine.
-REX currently uses Redis as its fact store and event transport: it receives fact updates, evaluates applicable rules, and publishes resulting updates.
+REX currently uses Redis as its fact store and event transport. Pub/Sub provides
+the default best-effort path; Redis Streams provides retained, ordered durable
+processing with recovery.
 
 The default v4 execution contract evaluates each affected rule once per batch,
 against the same snapshot. Outputs are staged, conflicts reject the round, and
@@ -48,13 +50,18 @@ For platform, toolchain, and runtime expectations, see the
 - Logical and control flow instructions
 - Action execution based on rules
 - Offline explain, lint, scenario-test, replay, and comparison tools
+- Durable event processing, recovery, and exact partition ownership
+- Safe ruleset reload and rollback with retained artifact history
+- Optional typed facts, temporal conditions, and change-only emission
 
 ## Getting Started
 
 ### Prerequisites
 
 - Go 1.26.6 or higher
-- Redis server running on localhost:6379 (for default configuration)
+- A standalone Redis server reachable at localhost:6379 for the default
+  configuration. Durable scripted transactions require Redis 7.0 or later;
+  durable WATCH mode supports Redis 6.2 or later. Redis Cluster is unsupported.
 
 ### Installation
 
@@ -72,7 +79,8 @@ cd rex
 
 ### Running the Executables
 
-The REX repository includes four main executables: rexc, rexd, redis_setup, and rule_gen. Below are the details on how to build, run, and understand the purpose of each executable.
+The REX repository includes five command-line programs: `rexc`, `rexd`,
+`redis_setup`, `rex_stressor`, and `rule_gen`. Release archives contain all five.
 
 ### 1. Compiler (rexc)
 
@@ -128,7 +136,9 @@ Command-line options:
 - `-config`: (Optional) Path to the configuration file. If not specified, rexd will look for a file named `rex_config.json` in the current directory, `$HOME/.rex`, and `/etc/rex`.
 
 Configuration File (rex_config.json):
-The configuration file is in JSON format and supports the following options:
+The configuration file is JSON. This is a minimal Pub/Sub example; see the
+[complete example](cmd/rexd/rex_config.json) for durable, batch-bound, and
+compatibility settings.
 
 ```json
 {
@@ -147,6 +157,7 @@ The configuration file is in JSON format and supports the following options:
     "connect_timeout": "5s",
     "health_check_interval": "1s",
     "health_check_timeout": "500ms",
+    "event_mode": "pubsub",
     "tls": {
       "enabled": false,
       "server_name": "",
@@ -177,6 +188,16 @@ routing, limits, and metrics. Redis Pub/Sub remains the default event mode.
 For retained delivery and restart recovery, set `redis.event_mode` to `streams`,
 configure `redis.durable.stream`, `group`, and `consumer`, and follow the
 [M7 durable processing runbook](docs/M7_DURABLE_PROCESSING.md).
+Production durable mode uses one serial processor per daemon and a standalone
+Redis commit domain. The default scripted transaction mode requires Redis 7.0
+or later; set `redis.durable.transaction_mode` to `watch` for Redis 6.2 or later.
+Concurrent workers sharing one Redis process and Redis Cluster are unsupported.
+
+Optional ruleset reload validates and archives a candidate before switching at
+an event boundary. Configure `engine.reload` and preserve its history directory
+as described in the [reload runbook](docs/M8_RULESET_RELOAD.md). Managed
+partitions must pass the [ownership rollout](docs/M8_PARTITION_OWNERSHIP.md)
+before production use.
 
 `scripts_enabled` remains only as an M6 migration tripwire: `false` is accepted,
 while `true` fails startup. See the [M6 migration guide](docs/M6_SCRIPT_REMOVAL.md).
@@ -305,6 +326,17 @@ Example:
 ./rule_gen -rules 1000 -output generated_ruleset.json
 ```
 
+### 5. Pub/Sub Stressor (rex_stressor)
+
+`rex_stressor` generates random weather fact updates for local Pub/Sub load
+testing. It writes directly to Redis and is outside the durable Streams
+contract.
+
+```bash
+go build ./tools/rex_stressor
+./rex_stressor -redis localhost:6379 -rate 10
+```
+
 ## Usage
 
 ### Workflow
@@ -319,10 +351,11 @@ For a self-contained compiler -> Redis -> runtime smoke test, see the [Docker Co
 
 ## Releases
 
-Pushing an annotated `vX.Y.Z` tag from a reviewed `main` commit publishes
-versioned archives for Linux, macOS, and Windows, together with a SHA-256
-manifest and GitHub-generated release notes. See the [release guide](docs/RELEASING.md)
-for the tag and verification procedure.
+Pushing an annotated semantic-version tag such as `v0.2.0` or
+`v0.2.0-alpha` from a reviewed `main` commit publishes versioned archives for
+Linux, macOS, and Windows, together with a SHA-256 manifest. Reviewed operator
+notes are prepended to GitHub-generated change notes. See the
+[release guide](docs/RELEASING.md) for the tag and verification procedure.
 
 ## Development
 
@@ -335,6 +368,7 @@ for the tag and verification procedure.
 - `pkg/store`: Contains the Redis store implementation
 - `pkg/logging`: Contains logging utilities
 - `tools/redis_setup`: Redis setup and CLI tool
+- `tools/rex_stressor`: Local Pub/Sub load generator
 - `tools/rule_gen`: Random rule generation tool
 
 ### Defining Rules
@@ -366,9 +400,10 @@ Rules are defined in a JSON format. Each rule consists of conditions and actions
 
 ### JSON Structure
 
-The rules are defined in a JSON file with the following structure:
+Rules are defined in a JSON object with:
 
-- rules: an array of rule objects
+- `rules`: a required non-empty array of rule objects.
+- `facts`: an optional closed map of v5 typed fact declarations.
 
 ### Rule Object
 
@@ -377,39 +412,41 @@ A rule object has the following properties:
 - name: a unique string identifying the rule
 - priority: optional non-negative integer indicating execution priority. Lower
   numbers execute first; omitted priorities default to 10.
-- conditions: an object containing a single property:
-- ANY or ALL: an array of condition groups
-- actions: an array of action objects
+- `conditions`: an object containing exactly one lowercase `all` or `any` array.
+- `actions`: a non-empty array of action objects.
+- `emit`: optional `"on_change"` behavior; omission retains repeated emission.
 
 ### Condition Group
 
-A condition group is an object containing:
-
-- conditions: an array of condition objects.
-- operator: a string indicating the logical operator (ANY or ALL).
+A condition group contains exactly one non-empty lowercase `all` or `any` array.
+Each array entry is either a condition object or another condition group.
 
 ### Condition Object
 
 A condition object has the following properties:
 
-- fact: a string identifying the fact to evaluate. Based on the way Redis works, the recommendation is 'channel
-  ' for the naming of facts.
-- operator: a string indicating the comparison operator (EQ, NEQ, LT, LTE, GT, GTE, CONTAINS, NOT_CONTAINS).
-- value: the value to compare against.
+- `fact`: the fact name to evaluate.
+- `operator`: `EQ`, `NEQ`, `LT`, `LTE`, `GT`, `GTE`, `CONTAINS`, or
+  `NOT_CONTAINS`.
+- `value`: the scalar value to compare against.
+- `for`: an optional v6 processing-time duration.
 
-  \*\*All condition objects not part of a grouping MUST be defined prior to any nested condition groups.
+Condition leaves and nested groups may appear in either order; the compiler
+canonicalizes them deterministically.
 
-  \*\*The characters in a string must NOT include a colon ':' due to how Redis parses channels/keys.
+Fact names may contain colons, as shown throughout the examples. Durable mode
+reserves its configured stream names, names beginning with `rex:durable:`, and
+the private temporal-state prefix; see the ownership guide before assigning a
+managed partition.
 
 ### Action Object
 
 An action object has the following properties:
 
-- type: the supported action type, `updateStore`. Unsupported action types are
+- `type`: the supported action type, `updateStore`. Unsupported action types are
   rejected during compilation.
-- target: a string identifying the fact to update. Based on the way Redis works, the recommendation is 'channel
-  ' for the naming of facts.
-- value: the value to update.
+- `target`: the fact to update.
+- `value`: the scalar value to write.
 
 ### Removed scripting capability
 
@@ -433,7 +470,7 @@ name to one of those scalar types and may explicitly permit null.
 
 Candidate rules execute in ascending priority order, so lower numbers run
 first. Rules with the same priority execute in their original ruleset order.
-Rule evaluation is sequential for each fact update.
+Rule evaluation is sequential for each event batch.
 
 ## Testing
 

@@ -1,0 +1,48 @@
+File: runtime.test
+Type: cpu
+Time: 2026-09-14 11:40:17 EDT
+Duration: 3.21s, Total samples = 3.10s (96.65%)
+Showing nodes accounting for 2.92s, 94.19% of 3.10s total
+Dropped 77 nodes (cum <= 0.02s)
+Showing top 40 nodes out of 200
+      flat  flat%   sum%        cum   cum%
+     1.24s 40.00% 40.00%      1.24s 40.00%  syscall.rawsyscalln
+     0.40s 12.90% 52.90%      0.40s 12.90%  runtime.kevent
+     0.37s 11.94% 64.84%      0.37s 11.94%  runtime.madvise
+     0.20s  6.45% 71.29%      0.20s  6.45%  runtime.usleep
+     0.17s  5.48% 76.77%      0.17s  5.48%  runtime.pthread_cond_signal
+     0.08s  2.58% 79.35%      0.08s  2.58%  runtime.pthread_cond_wait
+     0.06s  1.94% 81.29%      0.06s  1.94%  runtime.memclrNoHeapPointers
+     0.05s  1.61% 82.90%      0.07s  2.26%  encoding/json.checkValid
+     0.05s  1.61% 84.52%      0.05s  1.61%  encoding/json.stateInString
+     0.04s  1.29% 85.81%      0.04s  1.29%  runtime.pthread_kill
+     0.03s  0.97% 86.77%      0.04s  1.29%  runtime.findObject
+     0.03s  0.97% 87.74%      0.03s  0.97%  runtime.memmove
+     0.03s  0.97% 88.71%      0.03s  0.97%  runtime.pthread_cond_timedwait_relative_np
+     0.03s  0.97% 89.68%      0.03s  0.97%  runtime.tryDeferToSpanScan
+     0.02s  0.65% 90.32%      0.02s  0.65%  encoding/json.unquoteBytes
+     0.02s  0.65% 90.97%      0.02s  0.65%  runtime.procyieldAsm
+     0.02s  0.65% 91.61%      0.02s  0.65%  runtime.scanObject
+     0.02s  0.65% 92.26%      0.02s  0.65%  slices.insertionSortCmpFunc[go.shape.struct { encoding/json.v reflect.Value; encoding/json.ks string }] (inline)
+     0.01s  0.32% 92.58%      0.10s  3.23%  encoding/json.Marshal
+     0.01s  0.32% 92.90%      0.05s  1.61%  rgehrsitz/rex/pkg/runtime.(*Program).EvaluateAt
+     0.01s  0.32% 93.23%      0.03s  0.97%  runtime.mallocgcSmallNoscan
+     0.01s  0.32% 93.55%      0.05s  1.61%  runtime.markroot
+     0.01s  0.32% 93.87%      0.02s  0.65%  runtime.scanblock
+     0.01s  0.32% 94.19%      0.02s  0.65%  slices.partitionCmpFunc[go.shape.struct { encoding/json.v reflect.Value; encoding/json.ks string }]
+         0     0% 94.19%      0.06s  1.94%  bufio.(*Reader).Peek
+         0     0% 94.19%      0.06s  1.94%  bufio.(*Reader).fill
+         0     0% 94.19%      0.12s  3.87%  bufio.(*Writer).Flush
+         0     0% 94.19%      0.02s  0.65%  bufio.(*Writer).Write
+         0     0% 94.19%      0.04s  1.29%  encoding/json.(*decodeState).literalStore
+         0     0% 94.19%      0.10s  3.23%  encoding/json.(*decodeState).object
+         0     0% 94.19%      0.03s  0.97%  encoding/json.(*decodeState).skip
+         0     0% 94.19%      0.10s  3.23%  encoding/json.(*decodeState).unmarshal
+         0     0% 94.19%      0.10s  3.23%  encoding/json.(*decodeState).value
+         0     0% 94.19%      0.09s  2.90%  encoding/json.(*encodeState).marshal
+         0     0% 94.19%      0.09s  2.90%  encoding/json.(*encodeState).reflectValue
+         0     0% 94.19%      0.17s  5.48%  encoding/json.Unmarshal
+         0     0% 94.19%      0.09s  2.90%  encoding/json.mapEncoder.encode
+         0     0% 94.19%      0.05s  1.61%  encoding/json.structEncoder.encode
+         0     0% 94.19%      0.03s  0.97%  gcWriteBarrier
+         0     0% 94.19%      1.25s 40.32%  github.com/redis/go-redis/v9.(*Client).Process

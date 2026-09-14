@@ -8,7 +8,8 @@ best-effort mode.
 
 ## Supported deployment
 
-Use Redis 6.2 or newer with a standalone primary commit domain. Enable AOF and
+Use Redis 7.0 or newer with the daemon's default scripted transactions, or Redis
+6.2+ with explicit WATCH mode, on a standalone primary commit domain. Enable AOF and
 choose `appendfsync everysec` or `always` for the required host-loss budget.
 Replication and `WAIT` can reduce data loss during failover, but this release
 does not coordinate Redis Cluster, Active-Active Redis, or concurrent workers
@@ -56,6 +57,7 @@ Configure one producer and one consumer together:
       "claim_idle": "30s",
       "block": "1s",
       "journal_ttl": "168h",
+      "transaction_mode": "script",
       "max_attempts": 5,
       "output_max_len": 100000,
       "dead_letter_max_len": 10000,
@@ -65,6 +67,15 @@ Configure one producer and one consumer together:
   }
 }
 ```
+
+`rexd` defaults `transaction_mode` to `script`, which requires Redis 7.0 or newer
+and scripting plus command/key ACLs. Library callers that leave the option empty
+retain the Redis 6.2-compatible WATCH path. Script mode
+reduces the steady-state durable stages to one server exchange each (three
+including the fact read around a previously unseen historical snapshot). Set it to `watch` to roll back
+without changing journals or draining pending work. REX verifies script loading
+when the adapter opens and never falls back between modes automatically. Redis
+Cluster remains unsupported because a durable commit spans arbitrary keys.
 
 Run a dry-run comparison against representative events before cutover. Record
 the artifact digest, input stream tail ID, output stream tail ID, and current

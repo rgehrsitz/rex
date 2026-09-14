@@ -113,7 +113,9 @@ use as stream names. This prevents collision with registry/journal state.
 initial adoption, stop older binaries, Pub/Sub engines, and direct writers in
 that domain. They do not participate in this protocol and cannot be fenced by
 these claims. This is application ownership, not Redis ACL isolation. The
-supported Redis boundary remains standalone Redis 6.2+; Cluster is unsupported.
+The daemon's scripted transaction default requires standalone Redis 7.0+.
+Explicit `redis.durable.transaction_mode: "watch"` remains supported on
+standalone Redis 6.2+; Cluster is unsupported.
 
 For a migration or decommission, stop every writer/owner in the domain and
 wait for leases to expire. Preserve a backup of claims, facts, streams, journals

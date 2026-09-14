@@ -1,6 +1,7 @@
 # Releasing Rex
 
-Rex releases are created from annotated version tags in the form `vX.Y.Z`.
+Rex releases are created from annotated semantic-version tags in the form
+`vX.Y.Z`, optionally followed by a prerelease suffix such as `-alpha`.
 Pushing a matching tag runs the release workflow, which cross-compiles the
 project's five command-line programs, packages the release files, creates a
 SHA-256 manifest, and publishes a GitHub release with generated notes.
@@ -8,12 +9,15 @@ SHA-256 manifest, and publishes a GitHub release with generated notes.
 ## Release procedure
 
 1. Merge the intended changes to `main` and make sure CI is green.
-2. Choose the semantic version and create an annotated tag from the reviewed
+2. Prepare and review `docs/RELEASE_NOTES_<tag>.md`. State supported
+   compiler/runtime and artifact versions, operator-visible changes, and any
+   upgrade warnings. The release workflow requires this file and prepends it to
+   GitHub's generated change notes.
+3. Choose the semantic version and create an annotated tag from the reviewed
    commit, for example `git tag -a v0.1.0 -m "REX v0.1.0"`.
-3. Push the tag with `git push origin v0.1.0`.
-4. Review the GitHub release: confirm every archive and `checksums.txt` is
-   attached, then edit the generated notes if the release needs operator
-   instructions or an upgrade warning.
+4. Push the tag with `git push origin v0.1.0`.
+5. Review the GitHub release: confirm every archive and `checksums.txt` is
+   attached and the reviewed operator notes precede the generated change notes.
 
 The workflow never publishes from a branch or an unversioned commit. Deleting
 and recreating a release tag is discouraged; prepare a corrected patch release

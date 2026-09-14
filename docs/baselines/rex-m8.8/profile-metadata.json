@@ -1,0 +1,34 @@
+{
+  "revision": "5bf6852a196b25c5e3bf70f292a37cd83128b963",
+  "status": "M  docs/FOUNDATION_ROADMAP.md\nA  docs/baselines/rex-m8.8/README.md\nA  docs/baselines/rex-m8.8/gates.json\nA  docs/baselines/rex-m8.8/metadata.json\nA  docs/baselines/rex-m8.8/profile-metadata.json\nA  docs/baselines/rex-m8.8/profile-top.txt\nA  docs/baselines/rex-m8.8/race-metadata.json\nA  docs/baselines/rex-m8.8/race-summary.json\nA  docs/baselines/rex-m8.8/summary.json\nA  docs/decisions/REX-M8-PARTITION-CONCURRENCY-EXPERIMENT.md\nAM pkg/runtime/durable_concurrency_profile_test.go\nA  scripts/durable-concurrency/README.md\nAM scripts/durable-concurrency/run.py",
+  "go": "go version go1.26.6 darwin/arm64",
+  "platform": "macOS-26.6.2-arm64-arm-64bit",
+  "redis": "Redis server v=7.4.2 sha=00000000:1 malloc=libc bits=64 build=f5a32bc60e111576",
+  "redis_cli": "redis-cli 7.4.2",
+  "gomaxprocs": "4",
+  "host_cpu": {
+    "logical_cpus": 10,
+    "performance_cores": 4,
+    "efficiency_cores": 6
+  },
+  "events_per_scenario": 1000,
+  "runs": 1,
+  "workers": [
+    4
+  ],
+  "scenarios": [
+    "sparse-balanced"
+  ],
+  "race": false,
+  "cpu_profile": true,
+  "comparable": false,
+  "case_order_seed": 8808,
+  "persistence": "disabled: save empty, appendonly no",
+  "network": "loopback TCP; one Redis process shared by all partitions in a case",
+  "scheduler": "one serial goroutine and distinct store, engine, queue, and lease per partition",
+  "scope": "processor-loop experiment; no lease renewers, daemon supervisor, reload, routing, migration, or temporal artifacts",
+  "sha256": {
+    "pkg/runtime/durable_concurrency_profile_test.go": "a96a3ca8353e98e67cceeffd0221a137f12d7608fe6b693df83d8a88dd64a8f0",
+    "scripts/durable-concurrency/run.py": "dcf497b1fabc93b334ad0f50fa5e28aa19f7807a62a93527ebaf0fdab5ed6ffa"
+  }
+}

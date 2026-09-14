@@ -1,0 +1,107 @@
+{
+  "metadata": {
+    "revision": "d01b5ad30af29983d42290506d61157f9d22ad6b",
+    "status": "M cmd/rexd/main.go\n M cmd/rexd/rex_config.json\n M docs/FOUNDATION_ROADMAP.md\n M docs/M7_DURABLE_PROCESSING.md\n M pkg/runtime/durable_concurrency_profile_test.go\n M pkg/runtime/durable_profile_test.go\n M pkg/store/ownership_test.go\n M pkg/store/redis_durable.go\n M pkg/store/redis_durable_test.go\n M scripts/durable-concurrency/run.py\n?? docs/baselines/rex-m8.9/\n?? docs/decisions/REX-M8-DURABLE-ROUND-TRIPS.md\n?? pkg/store/redis_durable_scripts.go\n?? scripts/durable-roundtrip/",
+    "go": "go version go1.26.6 darwin/arm64",
+    "platform": "macOS-26.6.2-arm64-arm-64bit",
+    "redis": "Redis server v=8.10.1 sha=00000000:1 malloc=libc bits=64 build=81870544b30d700a",
+    "redis_cli": "redis-cli 8.10.1",
+    "gomaxprocs": "4",
+    "host_cpu": {
+      "logical_cpus": 10,
+      "performance_cores": 4,
+      "efficiency_cores": 6
+    },
+    "events_per_scenario": 1000,
+    "runs": 5,
+    "workers": [
+      1,
+      2,
+      4
+    ],
+    "scenarios": [
+      "sparse-balanced",
+      "dense-balanced",
+      "sparse-skew",
+      "completion-retry",
+      "owner-loss"
+    ],
+    "race": false,
+    "cpu_profile": false,
+    "comparable": true,
+    "case_order_seed": 8808,
+    "m89_candidate": true,
+    "persistence": "disabled: save empty, appendonly no",
+    "network": "loopback TCP; one Redis process shared by all partitions in a case",
+    "scheduler": "one serial goroutine and distinct store, engine, queue, and lease per partition",
+    "scope": "processor-loop experiment; no lease renewers, daemon supervisor, reload, routing, migration, or temporal artifacts",
+    "sha256": {
+      "pkg/runtime/durable_concurrency_profile_test.go": "77945470cfb2bab8e1babda00aaa2d07c893da406527a601b88bdb249167dd57",
+      "scripts/durable-concurrency/run.py": "fd762b267db652d8d39e0fdd712e5d51f4014be01c5a31b7d37eac002a9b0c55",
+      "cmd/rexd/main.go": "8f18fe406918fc3ce89f74d8c7db1457c01ddafe07b5b966479905beb91de8d8",
+      "pkg/store/redis_durable.go": "eec66d8ea9ac3d828f25461a5a53cc8823e85cef745131985631da14b5f77848",
+      "pkg/store/redis_durable_scripts.go": "192c54ca2e18a4d008a370ebce36a20fa44e512a1a1892659e952dbdec66aec1",
+      "pkg/store/redis_durable_test.go": "fce0290d03e429e4c2e8fe9851033639c68dc15ebb1901dfb04af06ec2c9cfb5",
+      "pkg/store/ownership_test.go": "ccdb656cf6acf0155a34cc825cb934e1b255b953d52cae93f10e49fc3aa229cc",
+      "pkg/runtime/durable_profile_test.go": "4dc7ad1272470919e8df6c184877f427affe9d5dc160c52fae3c597d825d958e"
+    }
+  },
+  "gates": {
+    "definition": {
+      "baseline_max_throughput_cv": 0.2,
+      "minimum_two_worker_median_paired_speedup": 1.5,
+      "latency_limit": "two-worker service p99 maximum must not exceed one-worker maximum",
+      "skew_limit": "two-worker hot-partition service p99 maximum must not exceed one-worker maximum",
+      "commands": "non-fault commands per event must exactly match the one-worker case"
+    },
+    "balanced": {
+      "sparse-balanced": {
+        "baseline_throughput_cv": 0.009286744548371972,
+        "stable": true,
+        "two_worker_median_paired_speedup": 1.5179166235921107,
+        "speedup_pass": true,
+        "one_worker_service_p99_max_ms": 0.444833,
+        "two_worker_service_p99_max_ms": 0.908042,
+        "latency_pass": false
+      },
+      "dense-balanced": {
+        "baseline_throughput_cv": 0.03123245011561411,
+        "stable": true,
+        "two_worker_median_paired_speedup": 1.4274081429470857,
+        "speedup_pass": false,
+        "one_worker_service_p99_max_ms": 1.89025,
+        "two_worker_service_p99_max_ms": 1.668708,
+        "latency_pass": true
+      }
+    },
+    "skew": {
+      "one_worker_hot_service_p99_max_ms": 0.548375,
+      "two_worker_hot_service_p99_max_ms": 0.471125,
+      "latency_pass": true,
+      "expected_speedup_ceiling": 1.1111111111111112
+    },
+    "commands": {
+      "sparse-balanced": {
+        "commands_per_event": [
+          51.0
+        ],
+        "pass": true
+      },
+      "dense-balanced": {
+        "commands_per_event": [
+          150.0
+        ],
+        "pass": true
+      },
+      "sparse-skew": {
+        "commands_per_event": [
+          51.0
+        ],
+        "pass": true
+      }
+    },
+    "status": "fail"
+  },
+  "full_summary_sha256": "c8efacb0a07fe145ac3b007e0e7cd903ef54860726a8b6c40f8ed9b9f12817f7",
+  "retention": "aggregate gate and full validated summary retained; per-case raw files remain temporary"
+}

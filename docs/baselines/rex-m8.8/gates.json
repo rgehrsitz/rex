@@ -1,0 +1,56 @@
+{
+  "definition": {
+    "baseline_max_throughput_cv": 0.2,
+    "minimum_two_worker_median_paired_speedup": 1.5,
+    "latency_limit": "two-worker service p99 maximum must not exceed one-worker maximum",
+    "skew_limit": "two-worker hot-partition service p99 maximum must not exceed one-worker maximum",
+    "commands": "non-fault commands per event must exactly match the one-worker case"
+  },
+  "balanced": {
+    "sparse-balanced": {
+      "baseline_throughput_cv": 0.004162077617003319,
+      "stable": true,
+      "two_worker_median_paired_speedup": 1.6517750843777095,
+      "speedup_pass": true,
+      "one_worker_service_p99_max_ms": 0.604625,
+      "two_worker_service_p99_max_ms": 25.411167,
+      "latency_pass": false
+    },
+    "dense-balanced": {
+      "baseline_throughput_cv": 0.005344885436741962,
+      "stable": true,
+      "two_worker_median_paired_speedup": 1.5638935035165016,
+      "speedup_pass": true,
+      "one_worker_service_p99_max_ms": 1.001084,
+      "two_worker_service_p99_max_ms": 2.893083,
+      "latency_pass": false
+    }
+  },
+  "skew": {
+    "one_worker_hot_service_p99_max_ms": 15.819375,
+    "two_worker_hot_service_p99_max_ms": 0.691416,
+    "latency_pass": true,
+    "expected_speedup_ceiling": 1.1111111111111112
+  },
+  "commands": {
+    "sparse-balanced": {
+      "commands_per_event": [
+        44.0
+      ],
+      "pass": true
+    },
+    "dense-balanced": {
+      "commands_per_event": [
+        143.0
+      ],
+      "pass": true
+    },
+    "sparse-skew": {
+      "commands_per_event": [
+        44.0
+      ],
+      "pass": true
+    }
+  },
+  "status": "fail"
+}
