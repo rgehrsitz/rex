@@ -1,0 +1,13 @@
+{
+  "redis": "Redis server v=8.10.1",
+  "test": "TestDurableScriptPathCutsSteadyStateExchanges",
+  "watch": 33,
+  "script": 7,
+  "reduction_ratio": 4.714285714285714,
+  "assertions": {
+    "script_max": 9,
+    "watch_min": 25,
+    "script_less_than_half_watch": true
+  },
+  "source_sha256": "fce0290d03e429e4c2e8fe9851033639c68dc15ebb1901dfb04af06ec2c9cfb5"
+}

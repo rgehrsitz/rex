@@ -28,6 +28,9 @@ var errDurablePreflight = errors.New("durable transaction preflight failed")
 // bounds. One active processor may own a Stream/Group pair.
 type DurableOptions struct {
 	OwnedFacts []string
+	// TransactionMode selects the durable mutation implementation. Empty retains
+	// the Redis 6.2-compatible WATCH path; rexd explicitly defaults to "script".
+	TransactionMode string
 
 	Stream       string
 	Group        string
@@ -45,6 +48,9 @@ type DurableOptions struct {
 }
 
 func (o DurableOptions) withDefaults() DurableOptions {
+	if o.TransactionMode == "" {
+		o.TransactionMode = durableTransactionWatch
+	}
 	if o.OutputStream == "" {
 		o.OutputStream = "rex_results_stream"
 	}
@@ -79,6 +85,9 @@ func (o DurableOptions) withDefaults() DurableOptions {
 }
 
 func (o DurableOptions) validate() error {
+	if o.TransactionMode != durableTransactionScript && o.TransactionMode != durableTransactionWatch {
+		return fmt.Errorf("durable transaction mode must be script or watch")
+	}
 	if o.Stream == "" || o.Group == "" || o.Consumer == "" {
 		return fmt.Errorf("durable stream, group, and consumer are required")
 	}
@@ -217,6 +226,11 @@ func (s *RedisStore) OpenDurable(ctx context.Context, options DurableOptions) (*
 	}
 	durable := &RedisDurable{store: s, client: s.batchWriter(), options: options, ownership: policy, ownerID: hex.EncodeToString(ownerBytes)}
 	durable.claimJSON = durable.encodeClaim()
+	if options.TransactionMode == durableTransactionScript {
+		if err := durable.loadScripts(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if err := durable.reserveFactOwnership(ctx, false); err != nil {
 		return nil, err
 	}
@@ -389,6 +403,9 @@ func durableEvent(message redis.XMessage) (DurableEvent, error) {
 // Begin records and verifies immutable event identity, pins the program, and
 // increments the bounded poison-attempt counter.
 func (d *RedisDurable) Begin(ctx context.Context, event DurableEvent, programID string) (JournalStatus, error) {
+	if d.options.TransactionMode == durableTransactionScript {
+		return d.beginScript(ctx, event, programID)
+	}
 	key := d.journalKey(event.ID)
 	status := JournalStatus{}
 	for attempt := 0; attempt < 3; attempt++ {
@@ -463,6 +480,9 @@ func (d *RedisDurable) Acknowledge(ctx context.Context, eventID string) error {
 
 // Complete atomically records terminal success and acknowledges the input.
 func (d *RedisDurable) Complete(ctx context.Context, eventID string) error {
+	if d.options.TransactionMode == durableTransactionScript {
+		return d.completeScript(ctx, eventID)
+	}
 	key := d.journalKey(eventID)
 	err := d.watchOwnership(ctx, func(tx *redis.Tx) error {
 		if err := d.checkOwnershipFence(ctx, tx); err != nil {
@@ -579,6 +599,9 @@ func (d *RedisDurable) ApplyInput(ctx context.Context, eventID, programID string
 		encoded[key] = valueBytes
 	}
 	marker := stableDurableID("input", d.options.Namespace, eventID, programID)
+	if d.options.TransactionMode == durableTransactionScript {
+		return d.applyInputScript(ctx, journal, marker, encoded)
+	}
 	for attempt := 0; attempt < 3; attempt++ {
 		err := d.client.Watch(ctx, func(tx *redis.Tx) error {
 			if err := d.checkOwnershipFence(ctx, tx); err != nil {
@@ -624,6 +647,9 @@ func (d *RedisDurable) readSnapshot(ctx context.Context, metadata durableEventCo
 				return nil, infrastructureFailure("snapshot ownership", err)
 			}
 		}
+	}
+	if d.options.TransactionMode == durableTransactionScript {
+		return d.readSnapshotScript(ctx, metadata, keys)
 	}
 	if d.ownership != nil {
 		if err := d.watchOwnership(ctx, func(tx *redis.Tx) error { return d.checkOwnershipFence(ctx, tx) }, d.ownershipWatchKeys()...); err != nil {
@@ -706,14 +732,16 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 	}
 	journal := d.journalKey(metadata.EventID)
 	field := "commit:" + strconv.Itoa(request.Round)
-	if existing, err := d.client.HGet(ctx, journal, field).Bytes(); err == nil {
-		var result CommitResult
-		if err := json.Unmarshal(existing, &result); err != nil {
-			return CommitResult{Outcome: Unknown}, fmt.Errorf("%w: decode durable commit marker: %w", ErrDurableReconciliation, err)
+	if d.options.TransactionMode == durableTransactionWatch {
+		if existing, err := d.client.HGet(ctx, journal, field).Bytes(); err == nil {
+			var result CommitResult
+			if err := json.Unmarshal(existing, &result); err != nil {
+				return CommitResult{Outcome: Unknown}, fmt.Errorf("%w: decode durable commit marker: %w", ErrDurableReconciliation, err)
+			}
+			return result, nil
+		} else if err != redis.Nil {
+			return CommitResult{Outcome: Unknown}, infrastructureFailure("read commit marker", err)
 		}
-		return result, nil
-	} else if err != redis.Nil {
-		return CommitResult{Outcome: Unknown}, infrastructureFailure("read commit marker", err)
 	}
 
 	encoded := make([][]byte, len(request.Writes))
@@ -765,6 +793,9 @@ func (d *RedisDurable) commit(ctx context.Context, metadata durableEventContext,
 	marker, err := json.Marshal(result)
 	if err != nil {
 		return failed, err
+	}
+	if d.options.TransactionMode == durableTransactionScript {
+		return d.commitScript(ctx, metadata, request, journal, field, encoded, marker, notification, outputID, len(facts) > 0, result)
 	}
 
 	watchKeys := d.ownershipWatchKeys(journal)

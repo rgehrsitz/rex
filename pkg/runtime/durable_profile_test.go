@@ -31,6 +31,7 @@ type profileResult struct {
 	AllocBytes    uint64          `json:"drain_alloc_bytes"`
 	AllocObjects  uint64          `json:"drain_alloc_objects"`
 	RedisCommands int64           `json:"drain_redis_commands"`
+	RedisCPU      float64         `json:"drain_redis_cpu_seconds"`
 	Name          string          `json:"name"`
 	Rules         int             `json:"rules_per_partition"`
 	Affected      int             `json:"affected_rules"`
@@ -117,7 +118,7 @@ func TestDurableProfile(t *testing.T) {
 				require.NoError(t, err)
 				program, err := LoadProgram(artifact)
 				require.NoError(t, err)
-				options := store.DurableOptions{Namespace: prefix, Stream: prefix + ":in", Group: "profile", Consumer: "first", OutputStream: prefix + ":out", DeadLetter: prefix + ":dead", OwnedFacts: append(program.OwnershipFacts(), prefix+".seq"), LockTTL: 10 * time.Minute, ClaimIdle: time.Millisecond, Block: time.Millisecond, JournalTTL: time.Hour, MaxAttempts: 3, OutputMaxLen: 100000}
+				options := store.DurableOptions{Namespace: prefix, Stream: prefix + ":in", Group: "profile", Consumer: "first", OutputStream: prefix + ":out", DeadLetter: prefix + ":dead", OwnedFacts: append(program.OwnershipFacts(), prefix+".seq"), TransactionMode: os.Getenv("REX_PROFILE_TRANSACTION_MODE"), LockTTL: 10 * time.Minute, ClaimIdle: time.Millisecond, Block: time.Millisecond, JournalTTL: time.Hour, MaxAttempts: 3, OutputMaxLen: 100000}
 
 				rs, err := store.NewRedisStore(ctx, store.RedisOptions{Addr: addr})
 				require.NoError(t, err)
@@ -184,7 +185,23 @@ func TestDurableProfile(t *testing.T) {
 				t.Fatal("Redis command count unavailable")
 				return 0
 			}
+			redisCPU := func() float64 {
+				info, err := client.Info(ctx, "cpu").Result()
+				require.NoError(t, err)
+				total := 0.0
+				for _, line := range strings.Split(info, "\n") {
+					for _, field := range []string{"used_cpu_sys:", "used_cpu_user:"} {
+						if strings.HasPrefix(line, field) {
+							value, err := strconv.ParseFloat(strings.TrimSpace(strings.TrimPrefix(line, field)), 64)
+							require.NoError(t, err)
+							total += value
+						}
+					}
+				}
+				return total
+			}
 			commandStart := commands()
+			cpuStart := redisCPU()
 			var before, after goruntime.MemStats
 			goruntime.GC()
 			goruntime.ReadMemStats(&before)
@@ -260,9 +277,10 @@ func TestDurableProfile(t *testing.T) {
 			goruntime.ReadMemStats(&after)
 			result.AllocBytes = after.TotalAlloc - before.TotalAlloc
 			result.AllocObjects = after.Mallocs - before.Mallocs
-			// The start INFO increments the total after producing its response, so
-			// that measurement command appears in the second observation.
-			result.RedisCommands = commands() - commandStart - 1
+			// The two starting INFO calls increment the total after producing their
+			// responses, so both appear in the ending command observation.
+			result.RedisCommands = commands() - commandStart - 2
+			result.RedisCPU = redisCPU() - cpuStart
 			for p, part := range parts {
 				stats, err := part.queue.Stats(ctx)
 				require.NoError(t, err)

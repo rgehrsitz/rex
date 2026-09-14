@@ -128,6 +128,7 @@ func TestDurableConcurrencyProfile(t *testing.T) {
 			OwnedFacts: append(program.OwnershipFacts(), prefix+".seq"), LockTTL: 10 * time.Minute,
 			ClaimIdle: time.Millisecond, Block: time.Millisecond, JournalTTL: time.Hour,
 			MaxAttempts: 3, OutputMaxLen: 100000,
+			TransactionMode: "script",
 		}
 		backend, err := store.NewRedisStore(ctx, store.RedisOptions{Addr: addr})
 		require.NoError(t, err)

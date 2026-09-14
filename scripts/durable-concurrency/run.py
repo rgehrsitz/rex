@@ -25,6 +25,14 @@ MEASUREMENT_SOURCES = (
     ROOT / "pkg/runtime/durable_concurrency_profile_test.go",
     Path(__file__).resolve(),
 )
+CANDIDATE_SOURCES = (
+    ROOT / "cmd/rexd/main.go",
+    ROOT / "pkg/store/redis_durable.go",
+    ROOT / "pkg/store/redis_durable_scripts.go",
+    ROOT / "pkg/store/redis_durable_test.go",
+    ROOT / "pkg/store/ownership_test.go",
+    ROOT / "pkg/runtime/durable_profile_test.go",
+)
 
 
 def command(args, **kwargs):
@@ -237,6 +245,8 @@ def main():
     parser.add_argument("--race", action="store_true", help="correctness run; timing is not comparable")
     parser.add_argument("--cpu-profile", action="store_true", help="retain Go CPU profiles")
     parser.add_argument("--seed", type=int, default=8808, help="saved deterministic case-order seed")
+    parser.add_argument("--allow-m89-candidate", action="store_true",
+                        help="allow and hash the bounded M8.9 production source set")
     args = parser.parse_args()
     if not 1 <= args.runs <= 10 or not 100 <= args.events <= 10000 or args.events % 100:
         parser.error("runs must be 1..10; events must be 100..10000 and a multiple of 100")
@@ -253,6 +263,8 @@ def main():
     changed = set(command(["git", "diff", "--name-only", "HEAD", "--", "*.go", "go.mod", "go.sum"]).splitlines())
     untracked = set(command(["git", "ls-files", "--others", "--exclude-standard", "--", "*.go"]).splitlines())
     allowed = {str(path.relative_to(ROOT)) for path in MEASUREMENT_SOURCES if path.suffix == ".go"}
+    if args.allow_m89_candidate:
+        allowed |= {str(path.relative_to(ROOT)) for path in CANDIDATE_SOURCES}
     unexpected = (changed | untracked) - allowed
     if unexpected:
         raise RuntimeError(f"production Go/module sources must match HEAD; changed: {sorted(unexpected)}")
@@ -281,12 +293,13 @@ def main():
         "cpu_profile": args.cpu_profile,
         "comparable": comparable,
         "case_order_seed": args.seed,
+        "m89_candidate": args.allow_m89_candidate,
         "persistence": "disabled: save empty, appendonly no",
         "network": "loopback TCP; one Redis process shared by all partitions in a case",
         "scheduler": "one serial goroutine and distinct store, engine, queue, and lease per partition",
         "scope": "processor-loop experiment; no lease renewers, daemon supervisor, reload, routing, migration, or temporal artifacts",
         "sha256": {str(path.relative_to(ROOT)): hashlib.sha256(path.read_bytes()).hexdigest()
-                   for path in MEASUREMENT_SOURCES},
+                   for path in MEASUREMENT_SOURCES + (CANDIDATE_SOURCES if args.allow_m89_candidate else ())},
     }
     (args.output/"metadata.json").write_text(json.dumps(metadata, indent=2)+"\n")
     binary = args.output/"runtime.test"

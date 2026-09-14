@@ -158,8 +158,18 @@ type ownershipLossHook struct {
 	fired  bool
 }
 
-func (h *ownershipLossHook) DialHook(next redis.DialHook) redis.DialHook          { return next }
-func (h *ownershipLossHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook { return next }
+func (h *ownershipLossHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+func (h *ownershipLossHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, command redis.Cmder) error {
+		if !h.fired && (command.Name() == "evalsha" || command.Name() == "eval") {
+			h.fired = true
+			if err := h.client.Del(ctx, h.key).Err(); err != nil {
+				return err
+			}
+		}
+		return next(ctx, command)
+	}
+}
 func (h *ownershipLossHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
 	return func(ctx context.Context, cmds []redis.Cmder) error {
 		if !h.fired {
@@ -184,6 +194,7 @@ func TestRealRedisManagedOwnershipRecovery(t *testing.T) {
 	s := &RedisStore{client: client}
 	defer s.Close()
 	options := durableTestOptions(t)
+	options.TransactionMode = durableTransactionScript
 	input := "input:" + options.Namespace
 	output := "output:" + options.Namespace
 	options.OwnedFacts = []string{input, output}
@@ -220,11 +231,16 @@ func TestRealRedisManagedOwnershipRecovery(t *testing.T) {
 	result, err = second.Commit(eventCtx, request)
 	require.Error(t, err)
 	require.Equal(t, Unknown, result.Outcome)
+	// A stored marker resolves the unknown outcome even after this owner loses
+	// its lease; reading an already committed result has no side effect.
+	require.NoError(t, client.Del(ctx, successor.ownerKey()).Err())
 	result, err = second.Commit(eventCtx, request)
 	require.NoError(t, err)
 	require.Equal(t, Committed, result.Outcome)
 	require.Equal(t, int64(1), client.XLen(ctx, options.OutputStream).Val())
-	// Renewal and terminal completion must retry benign watched-key changes.
+	require.NoError(t, successor.AcquireOwnership(ctx))
+	// Renewal retries benign WATCH conflicts; scripted terminal completion
+	// rechecks the fence atomically after the injected lease refresh.
 	registryRefresh := &beforeOwnershipExecHook{once: true, before: func(ctx context.Context) error {
 		return client.HSet(ctx, ownershipRegistry, options.Namespace, successor.claim()).Err()
 	}}
@@ -416,8 +432,18 @@ type beforeOwnershipExecHook struct {
 	once   bool
 }
 
-func (h *beforeOwnershipExecHook) DialHook(next redis.DialHook) redis.DialHook          { return next }
-func (h *beforeOwnershipExecHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook { return next }
+func (h *beforeOwnershipExecHook) DialHook(next redis.DialHook) redis.DialHook { return next }
+func (h *beforeOwnershipExecHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook {
+	return func(ctx context.Context, command redis.Cmder) error {
+		if (command.Name() == "evalsha" || command.Name() == "eval") && (!h.once || h.calls == 0) {
+			h.calls++
+			if err := h.before(ctx); err != nil {
+				return err
+			}
+		}
+		return next(ctx, command)
+	}
+}
 func (h *beforeOwnershipExecHook) ProcessPipelineHook(next redis.ProcessPipelineHook) redis.ProcessPipelineHook {
 	return func(ctx context.Context, cmds []redis.Cmder) error {
 		for _, cmd := range cmds {
