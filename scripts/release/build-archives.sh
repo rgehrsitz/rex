@@ -7,6 +7,11 @@ set -euo pipefail
 
 : "${VERSION:?VERSION must be set to the release tag, for example v0.1.0}"
 
+if [[ ! "$VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z][0-9A-Za-z.-]*)?(\+[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+  echo "VERSION must be a semantic-version tag such as v0.2.0 or v0.2.0-alpha" >&2
+  exit 2
+fi
+
 DIST_DIR="${DIST_DIR:-dist}"
 TARGETS=(
   "darwin/amd64"
