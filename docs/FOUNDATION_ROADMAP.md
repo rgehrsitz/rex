@@ -61,7 +61,7 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M5 | Deliver explanation, simulation, and rule-development tools | M4 | Complete | [PR #36](https://github.com/rgehrsitz/rex/pull/36), `039f5c6`; [M5 tooling contract](decisions/REX-M5.md). |
 | REX-M6 | Constrain script execution | M0; integrate with M4 | Complete | [PR #37](https://github.com/rgehrsitz/rex/pull/37), [D6 removal decision](decisions/REX-M6.md), and [migration guide](M6_SCRIPT_REMOVAL.md). |
 | REX-M7 | Deliver durable event processing | M3, M4, M5 | Complete | [PR #39](https://github.com/rgehrsitz/rex/pull/39), `f1298b1`; [recovery protocol](decisions/REX-M7.md), [operator runbook](M7_DURABLE_PROCESSING.md), and [acceptance evidence](baselines/rex-m7/README.md). |
-| REX-M8 | Extend the proven foundation | Capability-specific gates below | In progress | M8.1–M8.10 are integrated. Shared-Redis concurrency is closed; dense allocation is the next independent target. |
+| REX-M8 | Extend the proven foundation | Capability-specific gates below | Complete | M8.1–M8.10 are integrated. Shared-Redis concurrency is closed by D15; further performance work is independently gated as M9. |
 | REX-M8.1 | Safe ruleset reload and rollback | M4, M5, M7 | Complete | [PR #40](https://github.com/rgehrsitz/rex/pull/40), `a001349`; [reload contract](decisions/REX-M8-RULESET-RELOAD.md), [operator runbook](M8_RULESET_RELOAD.md), and [acceptance evidence](baselines/rex-m8.1/README.md). |
 | REX-M8.2 | Typed fact declarations | M4, M5 | Complete | Merged in PR #41 (`da2b03a`). [Typed fact contract](decisions/REX-M8-TYPED-FACTS.md), [migration guide](M8_TYPED_FACTS.md), and [acceptance evidence](baselines/rex-m8.2/README.md). |
 | REX-M8.3 | Temporal rules | M4, M5, M7 | Complete | [Temporal contract](decisions/REX-M8-TEMPORAL-RULES.md), [operator guide](M8_TEMPORAL_RULES.md), and [acceptance evidence](baselines/rex-m8.3/README.md). Merged PR #42 (`cdab686`). |
@@ -70,8 +70,9 @@ complete only when its acceptance criteria and linked evidence are present.
 | REX-M8.6 | Enforced exact partition ownership | M8.5 | Complete | Merged in [PR #45](https://github.com/rgehrsitz/rex/pull/45), `48cd367`; [D12](decisions/REX-M8-PARTITION-OWNERSHIP.md), [operator guide](M8_PARTITION_OWNERSHIP.md), [evidence](baselines/rex-m8.6/README.md). |
 | REX-M8.7 | Representative durable profiling | M8.6 | Complete | Merged in [PR #46](https://github.com/rgehrsitz/rex/pull/46), `5bf6852`; [evidence](baselines/rex-m8.7/README.md). |
 | REX-M8.8 | Concurrent partition experiment | M8.7 | Complete | Merged in [PR #47](https://github.com/rgehrsitz/rex/pull/47), `d01b5ad`; [evidence](baselines/rex-m8.8/README.md) passes throughput but fails latency, so production concurrency stays disabled. |
-| REX-M8.9 | Durable Redis round-trip reduction | M8.8 | Complete | [PR #50](https://github.com/rgehrsitz/rex/pull/50) passes D14; the diagnostic D13 rerun still fails, so production concurrency stays disabled. |
-| REX-M8.10 | Durable bottleneck attribution | M8.9 | Complete | [PR #51](https://github.com/rgehrsitz/rex/pull/51) retains [evidence](baselines/rex-m8.10/README.md), closes shared-Redis concurrency, and justifies a separately gated dense-allocation candidate. |
+| REX-M8.9 | Durable Redis round-trip reduction | M8.8 | Complete | [PR #50](https://github.com/rgehrsitz/rex/pull/50), `0e24a3c`, passes D14; the diagnostic D13 rerun still fails, so production concurrency stays disabled. |
+| REX-M8.10 | Durable bottleneck attribution | M8.9 | Complete | [PR #51](https://github.com/rgehrsitz/rex/pull/51), `c323ddb`, retains [evidence](baselines/rex-m8.10/README.md), closes shared-Redis concurrency, and justifies a separately gated dense-allocation candidate. |
+| REX-M9 | Reduce dense durable commit allocation | M8.10 | Planned | Implement only after the paired D15 A/B harness is in place; retain byte-identical durable formats and revert unless allocation, throughput, latency, sparse-regression, and Redis-CPU gates all pass. |
 
 Default sequence: M0 -> M1 -> M2 -> M4 -> M5 -> M6 -> M7 -> M8. M3 can run after
 M0, independently of the core refactor. M6 can start after M0 and must move
@@ -589,6 +590,29 @@ requires a new decision covering routing and operational semantics. M8.10 makes
 no production code change. See
 [D15](decisions/REX-M8-DURABLE-BOTTLENECK-ATTRIBUTION.md).
 
+### REX-M9 — Reduce dense durable commit allocation
+
+**Outcome:** improve single-worker dense durable efficiency without changing
+the durable protocol, persisted bytes, recovery behavior, or supported topology.
+
+- [ ] Add the predeclared paired five-run A/B harness for the same 5,000-event,
+  one-worker sparse and dense fixtures used by D15.
+- [ ] Require a stable control: throughput coefficient of variation at or below
+  20% and p95 maximum divided by p95 minimum at or below 1.20.
+- [ ] Reduce dense allocation to at most 150 KB and 1,500 objects per event.
+- [ ] Improve dense median throughput by at least 1.10x and reduce median p50
+  and p95 to at most 0.90x control.
+- [ ] Preserve sparse throughput at or above 0.98x control and sparse allocation
+  at or below 1.02x control.
+- [ ] Keep Redis CPU per event within five percent for sparse and dense cases.
+- [ ] Prove byte-identical durable formats and pass existing ordering, fencing,
+  recovery, lost-reply, deduplication, and race checks.
+- [ ] Revert the candidate if allocation improves without meeting the throughput
+  and latency gates; do not rerun D13 or reopen shared-Redis concurrency.
+
+See [D15](decisions/REX-M8-DURABLE-BOTTLENECK-ATTRIBUTION.md) for the complete
+measurement rationale and falsification rules.
+
 
 ## Decisions to record before dependent implementation
 
@@ -866,4 +890,5 @@ Next concrete action:
   saturation from dense speedup failure, and clarified inference and SLOWLOG
   limits.
 - Next concrete action: implement only the D15 dense-allocation candidate after
-  its paired A/B harness is in place.
+  its paired A/B harness is in place as REX-M9. REX-M8 is complete and the
+  current serial durable system is eligible for a foundation release before M9.
